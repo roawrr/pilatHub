@@ -11984,6 +11984,6 @@ StartMainLoops()
 Window:Notify({
   Title = "Pilat Hub",
   Content = "Pilat Hub Load",
-  Image = "rbxassetid://72511686829950"
+  Image = "rbxassetid://72511686829950",
   Duration = 5
 })
