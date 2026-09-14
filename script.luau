@@ -981,7 +981,7 @@ end
 spawn(function()
   while task.wait() do
     pcall(function()
-      if _G.SailBoat_Hydra or _G.WardenBoss or _G.AutoFactory or _G.HighestMirage or _G.HCM or _G.PGB or _G.Leviathan1 or _G.UPGDrago or _G.Complete_Trials or _G.TpDrago_Prehis or _G.BuyDrago or _G.AutoFireFlowers or _G.DT_Uzoth or _G.AutoBerry or _G.Prefully or _G.Prehis_Find or _G.Prehis_Skills or _G.Prehis_DB or _G.Prehis_DE or _G.FarmBlazeEM or _G.Dojoo or _G.CollectPresent or _G.AutoLawKak or _G.TpLab or _G.AutoPhoenixF or _G.AutoFarmChest or _G.AutoHytHallow or _G.LongsWord or _G.BlackSpikey or _G.AutoHolyTorch or _G.TrainDrago  or _G.AutoSaber or _G.FarmMastery_Dev or _G.CitizenQuest or _G.AutoEctoplasm or _G.KeysRen or _G.Auto_Rainbow_Haki or _G.obsFarm or _G.AutoBigmom or _G.Doughv2 or _G.AuraBoss or _G.Raiding or _G.Auto_Cavender or _G.TpPly or _G.Bartilo_Quest or _G.Level or _G.FarmEliteHunt or _G.AutoZou or _G.AutoFarm_Bone or getgenv().AutoMaterial or _G.CraftVM or _G.FrozenTP or _G.TPDoor or _G.AcientOne or _G.AutoFarmNear or _G.AutoRaidCastle or _G.DarkBladev3 or _G.AutoFarmRaid or _G.Auto_Cake_Prince or _G.Addealer or _G.TPNpc or _G.TwinHook or _G.FindMirage or _G.FarmChestM or _G.Shark or _G.TerrorShark or _G.Piranha or _G.MobCrew or _G.SeaBeast1 or _G.FishBoat or _G.AutoPole or _G.AutoPoleV2 or _G.Auto_SuperHuman or _G.AutoDeathStep or _G.Auto_SharkMan_Karate or _G.Auto_Electric_Claw or _G.AutoDragonTalon or _G.Auto_Def_DarkCoat or _G.Auto_God_Human or _G.Auto_Tushita or _G.AutoMatSoul or _G.AutoKenVTWO or _G.AutoSerpentBow or _G.AutoFMon or _G.Auto_Soul_Guitar or _G.TPGEAR or _G.AutoSaw or _G.AutoTridentW2 or _G.AutoEvoRace or _G.AutoGetQuestBounty or _G.MarinesCoat or _G.TravelDres or _G.Defeating or _G.DummyMan or _G.Auto_Yama or _G.Auto_SwanGG or _G.SwanCoat or _G.AutoEcBoss or _G.Auto_Mink or _G.Auto_Human or _G.Auto_Skypiea or _G.Auto_Fish or _G.CDK_TS or _G.CDK_YM or _G.CDK or _G.AutoFarmGodChalice or _G.AutoFistDarkness or _G.AutoMiror or _G.Teleport or _G.AutoKilo or _G.AutoGetUsoap or _G.Praying or _G.TryLucky or _G.AutoColShad or _G.AutoUnHaki or _G.Auto_DonAcces or _G.AutoRipIngay or _G.DragoV3 or _G.DragoV1 or _G.SailBoats or NextIs or _G.FarmGodChalice or _G.IceBossRen or senth or senth2 or _G.Lvthan or _G.beasthunter or _G.DangerLV or _G.Relic123 or _G.tweenKitsune or _G.Collect_Ember or _G.AutofindKitIs or _G.snaguine or _G.TwFruits or _G.tweenKitShrine or _G.Tp_LgS or _G.Tp_MasterA or _G.tweenShrine or _G.FarmMastery_G or _G.FarmMastery_S or _G.FarmBoss or _G.AutoFarmAllBoss or _G.AutoFishSlap or _G.FarmTyrant or _G.FarmPhaBinh or _G.AutoSpawnCP or _G.AutoBerryH or _G.AutoChestBP or _G.FarmEliteHop or _G.AutoHop_Dough or _G.AutoDoughKing or _G.AutoAttackDoughKing or _G.AutoChipFruit or _G.AutoChipBeli or _G.StartEvent or _G.AutoMysticIsland or _G.AutoPlayerHunter or _G.SafeMode or _G.AutoKillMob or _G.AutoStartPrehistoric or _G.AutoUnHaki or _G.AutoAttackRipIndra or _G.AutoFarmIsland or _G.AutoFarmDungeon or _G.AutoFarmCandy or _G.AutoTP_Gift or _G.AutoTPGift or _G.AutoTPAndCollect or _G.MasterAutoLevel or _G.MasterAutoCandy or _G.TPFloor1 or _G.TPFloor2 or _G.TPFloor3 or _G.TPFloor4 then
+      if _G.SailBoat_Hydra or _G.WardenBoss or _G.AutoFactory or _G.HighestMirage or _G.HCM or _G.PGB or _G.Leviathan1 or _G.UPGDrago or _G.Complete_Trials or _G.TpDrago_Prehis or _G.BuyDrago or _G.AutoFireFlowers or _G.DT_Uzoth or _G.AutoBerry or _G.Prefully or _G.Prehis_Find or _G.Prehis_Skills or _G.Prehis_DB or _G.Prehis_DE or _G.FarmBlazeEM or _G.Dojoo or _G.CollectPresent or _G.AutoLawKak or _G.TpLab or _G.AutoPhoenixF or _G.AutoFarmChest or _G.AutoHytHallow or _G.LongsWord or _G.BlackSpikey or _G.AutoHolyTorch or _G.TrainDrago  or _G.AutoSaber or _G.FarmMastery_Dev or _G.CitizenQuest or _G.AutoEctoplasm or _G.KeysRen or _G.Auto_Rainbow_Haki or _G.obsFarm or _G.AutoBigmom or _G.Doughv2 or _G.AuraBoss or _G.Raiding or _G.Auto_Cavender or _G.TpPly or _G.Bartilo_Quest or _G.Level or _G.AutoMagnetEvent or _G.FarmEliteHunt or _G.AutoZou or _G.AutoFarm_Bone or getgenv().AutoMaterial or _G.CraftVM or _G.FrozenTP or _G.TPDoor or _G.AcientOne or _G.AutoFarmNear or _G.AutoRaidCastle or _G.DarkBladev3 or _G.AutoFarmRaid or _G.Auto_Cake_Prince or _G.Addealer or _G.TPNpc or _G.TwinHook or _G.FindMirage or _G.FarmChestM or _G.Shark or _G.TerrorShark or _G.Piranha or _G.MobCrew or _G.SeaBeast1 or _G.FishBoat or _G.AutoPole or _G.AutoPoleV2 or _G.Auto_SuperHuman or _G.AutoDeathStep or _G.Auto_SharkMan_Karate or _G.Auto_Electric_Claw or _G.AutoDragonTalon or _G.Auto_Def_DarkCoat or _G.Auto_God_Human or _G.Auto_Tushita or _G.AutoMatSoul or _G.AutoKenVTWO or _G.AutoSerpentBow or _G.AutoFMon or _G.Auto_Soul_Guitar or _G.TPGEAR or _G.AutoSaw or _G.AutoTridentW2 or _G.AutoEvoRace or _G.AutoGetQuestBounty or _G.MarinesCoat or _G.TravelDres or _G.Defeating or _G.DummyMan or _G.Auto_Yama or _G.Auto_SwanGG or _G.SwanCoat or _G.AutoEcBoss or _G.Auto_Mink or _G.Auto_Human or _G.Auto_Skypiea or _G.Auto_Fish or _G.CDK_TS or _G.CDK_YM or _G.CDK or _G.AutoFarmGodChalice or _G.AutoFistDarkness or _G.AutoMiror or _G.Teleport or _G.AutoKilo or _G.AutoGetUsoap or _G.Praying or _G.TryLucky or _G.AutoColShad or _G.AutoUnHaki or _G.Auto_DonAcces or _G.AutoRipIngay or _G.DragoV3 or _G.DragoV1 or _G.SailBoats or NextIs or _G.FarmGodChalice or _G.IceBossRen or senth or senth2 or _G.Lvthan or _G.beasthunter or _G.DangerLV or _G.Relic123 or _G.tweenKitsune or _G.Collect_Ember or _G.AutofindKitIs or _G.snaguine or _G.TwFruits or _G.tweenKitShrine or _G.Tp_LgS or _G.Tp_MasterA or _G.tweenShrine or _G.FarmMastery_G or _G.FarmMastery_S or _G.FarmBoss or _G.AutoFarmAllBoss or _G.AutoFishSlap or _G.FarmTyrant or _G.FarmPhaBinh or _G.AutoSpawnCP or _G.AutoBerryH or _G.AutoChestBP or _G.FarmEliteHop or _G.AutoHop_Dough or _G.AutoDoughKing or _G.AutoAttackDoughKing or _G.AutoChipFruit or _G.AutoChipBeli or _G.StartEvent or _G.AutoMysticIsland or _G.AutoPlayerHunter or _G.SafeMode or _G.AutoKillMob or _G.AutoStartPrehistoric or _G.AutoUnHaki or _G.AutoAttackRipIndra or _G.AutoFarmIsland or _G.AutoFarmDungeon or _G.AutoFarmCandy or _G.AutoTP_Gift or _G.AutoTPGift or _G.AutoTPAndCollect or _G.MasterAutoLevel or _G.MasterAutoCandy or _G.TPFloor1 or _G.TPFloor2 or _G.TPFloor3 or _G.TPFloor4 then
         shouldTween = true
         if not plr.Character.HumanoidRootPart:FindFirstChild("BodyClip") then
           local Noclip = Instance.new("BodyVelocity")
@@ -2654,7 +2654,7 @@ Tabs.Main:AddToggle({
 })
 
 --=============================================================
---  PATROL ROUND-ROBIN (FIXED)
+--  PATROL ROUND-ROBIN — Pakai Logic Farm Level
 --=============================================================
 task.spawn(function()
     local islandOrder = nil
@@ -2672,7 +2672,6 @@ task.spawn(function()
     end
 
     while task.wait(0.3) do
-        -- === Kondisi stop / pause ===
         if not _G.AutoMagnetEvent then
             if islandOrder then
                 MagnetPatrolStatus:SetDesc("Idle (toggle off)")
@@ -2680,6 +2679,7 @@ task.spawn(function()
             currentIndex = 1
             islandOrder = nil
             wasEventActive = false
+            shouldTween = false
             continue
         end
 
@@ -2688,20 +2688,20 @@ task.spawn(function()
             continue
         end
 
+        -- ✅ Ambil Root DINAMIS (sama seperti Farm Level)
         local char = plr.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then
             MagnetPatrolStatus:SetDesc("⏳ Menunggu karakter...")
             continue
         end
+        local Root = char.HumanoidRootPart
 
-        -- === Build order sekali ===
         if not islandOrder then
             BuildIslandOrder()
             MagnetPatrolStatus:SetDesc("🚀 Patroli dimulai ("..#islandOrder.." pulau)")
             task.wait(0.5)
         end
 
-        -- === Deteksi event reset ===
         local eventActive = IsMagnetEventActive()
         if eventActive and not wasEventActive then
             currentIndex = 1
@@ -2710,7 +2710,6 @@ task.spawn(function()
         end
         wasEventActive = eventActive
 
-        -- === Ambil pulau target ===
         if currentIndex > #islandOrder then
             currentIndex = 1
             MagnetPatrolStatus:SetDesc("🔁 Putaran selesai, ulang dari awal...")
@@ -2726,10 +2725,9 @@ task.spawn(function()
         local islandPos = island.Data.CFrame
         local searchRadius = _G.MagnetSearchRadius or 1500
 
-        -- Update status saat MULAI pulau ini
         MagnetPatrolStatus:SetDesc("➡️ ["..currentIndex.."/"..#islandOrder.."] "..island.Name.." — tween...")
 
-        -- === Aktifkan mode tween & bring ===
+        -- ✅ AKTIFKAN TWEEN MODE
         _B = true
         shouldTween = true
         pcall(function()
@@ -2738,104 +2736,103 @@ task.spawn(function()
             end
         end)
 
-        -- === STEP 1: Tween ke pulau (di-pcall terpisah) ===
-        pcall(function()
-            local tpStart = tick()
-            repeat
-                task.wait(0.1)
-                if not _G.AutoMagnetEvent then return end
-                local c = plr.Character
-                if c and c:FindFirstChild("HumanoidRootPart") then
-                    if (c.HumanoidRootPart.Position - islandPos.Position).Magnitude <= 100 then
-                        return
-                    end
-                end
-                _tp(islandPos)
-            until (tick() - tpStart) > 10
-        end)
+        --=========================================================
+        --  STEP 1: TWEEN KE PULAU (logic Farm Level)
+        --=========================================================
+        local tpAttempts = 0
+        repeat
+            task.wait(Sec)
+            _tp(islandPos)
+            tpAttempts = tpAttempts + 1
+            -- Refresh Root setiap loop
+            Root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        until not _G.AutoMagnetEvent
+            or not Root
+            or (Root.Position - islandPos.Position).Magnitude <= 30
+            or tpAttempts > 30
 
         if not _G.AutoMagnetEvent then
             currentIndex = currentIndex + 1
             continue
         end
 
-        -- === STEP 2: Scan & kill (setiap operasi di-pcall kecil) ===
+        task.wait(0.3)
+
+        --=========================================================
+        --  STEP 2: SCAN + KILL (logic Farm Level)
+        --=========================================================
         local foundCount = 0
-        local maxWait = eventActive and 12 or (_G.MagnetPatrolDelay or 3)
+        local maxWait = eventActive and 15 or (_G.MagnetPatrolDelay or 3)
+        local startT = tick()
 
-        pcall(function()
-            local startT = tick()
-            while _G.AutoMagnetEvent and (tick() - startT) < maxWait do
-                local targets = {}
+        while _G.AutoMagnetEvent and (tick() - startT) < maxWait do
+            local targets = {}
 
-                -- Scan workspace.Enemies
-                local enemies = {}
-                pcall(function() enemies = workspace.Enemies:GetChildren() end)
-                for _, v in pairs(enemies) do
-                    if not _G.AutoMagnetEvent then break end
-                    pcall(function()
-                        if v and v.Parent and Attack.Alive(v) and IsMagnetizedEnemy(v) then
-                            local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
-                            if dist <= searchRadius then
-                                table.insert(targets, v)
-                            end
+            -- Scan workspace.Enemies
+            local enemies = {}
+            pcall(function() enemies = workspace.Enemies:GetChildren() end)
+            for _, v in pairs(enemies) do
+                if not _G.AutoMagnetEvent then break end
+                pcall(function()
+                    if v and v.Parent and Attack.Alive(v) and IsMagnetizedEnemy(v) then
+                        local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
+                        if dist <= searchRadius then
+                            table.insert(targets, v)
                         end
-                    end)
-                end
-
-                -- Scan replicated
-                local reps = {}
-                pcall(function() reps = replicated:GetChildren() end)
-                for _, v in pairs(reps) do
-                    if not _G.AutoMagnetEvent then break end
-                    pcall(function()
-                        if v and v:IsA("Model") and v.Parent
-                            and v:FindFirstChild("HumanoidRootPart")
-                            and Attack.Alive(v) and IsMagnetizedEnemy(v) then
-                            local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
-                            if dist <= searchRadius then
-                                table.insert(targets, v)
-                            end
-                        end
-                    end)
-                end
-
-                if #targets == 0 then break end
-
-                foundCount = foundCount + #targets
-                MagnetFound:SetDesc(tostring(#targets))
-
-                for _, v in ipairs(targets) do
-                    if not _G.AutoMagnetEvent then break end
-                    if v.Parent and v:FindFirstChild("HumanoidRootPart") and Attack.Alive(v) then
-                        local killStart = tick()
-                        repeat
-                            task.wait()
-                            if not _G.AutoMagnetEvent then break end
-                            pcall(function()
-                                _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0))
-                                Attack.Kill(v, true)
-                            end)
-                        until not _G.AutoMagnetEvent
-                            or not v.Parent
-                            or not v:FindFirstChild("Humanoid")
-                            or v.Humanoid.Health <= 0
-                            or (tick() - killStart) > 15  -- safety timeout per mob
                     end
-                end
-
-                task.wait(0.2)
+                end)
             end
-        end)
 
-        -- === Update status akhir pulau ===
+            -- Scan replicated
+            local reps = {}
+            pcall(function() reps = replicated:GetChildren() end)
+            for _, v in pairs(reps) do
+                if not _G.AutoMagnetEvent then break end
+                pcall(function()
+                    if v and v:IsA("Model") and v.Parent
+                        and v:FindFirstChild("HumanoidRootPart")
+                        and Attack.Alive(v) and IsMagnetizedEnemy(v) then
+                        local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
+                        if dist <= searchRadius then
+                            table.insert(targets, v)
+                        end
+                    end
+                end)
+            end
+
+            if #targets == 0 then break end
+
+            foundCount = foundCount + #targets
+            MagnetFound:SetDesc(tostring(#targets))
+
+            -- Kill tiap target (logic Farm Level)
+            for _, v in ipairs(targets) do
+                if not _G.AutoMagnetEvent then break end
+                if v.Parent and v:FindFirstChild("HumanoidRootPart") and Attack.Alive(v) then
+                    local killStart = tick()
+                    repeat
+                        task.wait(Sec)
+                        if v.Parent and v:FindFirstChild("HumanoidRootPart") then
+                            _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
+                        end
+                        Attack.Kill(v, true)
+                    until not _G.AutoMagnetEvent
+                        or not v.Parent
+                        or not v:FindFirstChild("Humanoid")
+                        or v.Humanoid.Health <= 0
+                        or (tick() - killStart) > 15
+                end
+            end
+
+            task.wait(0.2)
+        end
+
         if foundCount > 0 then
             MagnetPatrolStatus:SetDesc("🟢 ["..currentIndex.."/"..#islandOrder.."] "..island.Name.." — "..foundCount.." kill")
         else
             MagnetPatrolStatus:SetDesc("🔵 ["..currentIndex.."/"..#islandOrder.."] "..island.Name.." — kosong")
         end
 
-        -- === ⚡ PINDAH KE PULAU BERIKUTNYA (DI LUAR PCALL!) ===
         currentIndex = currentIndex + 1
     end
 end)
