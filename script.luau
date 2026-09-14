@@ -2524,17 +2524,18 @@ task.spawn(function()
 end)
 
 --=============================================================
---  MAGNET EVENT (Update 30) - Pakai _tp (tween lama)
+--  MAGNET EVENT (Update 30) - Pakai _tp lama, loop sabar
 --=============================================================
 Tabs.Main:AddSection("Magnet Event")
 
 -- ====== KONFIGURASI INTERNAL ======
-local ISLAND_RADIUS   = 800
-local SEARCH_RADIUS   = 2500
-local MIN_CHECK_TIME  = 6
-local MAX_CHECK_TIME  = 25
-local COOLDOWN_KILL   = 4
-local TWEEN_TIMEOUT   = 45     -- safety kalau tween stuck
+local ISLAND_RADIUS    = 800
+local SEARCH_RADIUS    = 2500
+local MIN_CHECK_TIME   = 6
+local MAX_CHECK_TIME   = 25
+local COOLDOWN_KILL    = 4
+local ARRIVE_DIST      = 80      -- jarak dianggap "sudah sampai pulau"
+local TWEEN_MAX_TRIES  = 300     -- 300 × 0.15s = 45 detik maksimal tween
 -- ==================================
 
 -- ---------- DETEKSI MAGNETIZED ENEMY ----------
@@ -2622,46 +2623,29 @@ local function GetCurrentIslandIndex(order)
     return nil, nearestDist
 end
 
--- ---------- TWEEN PAKAI _tp LAMA (sekali panggil, tunggu selesai) ----------
-local function FlyToWithTP(targetCFrame)
-    local char = plr.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    -- Kalau sudah dekat, skip
-    if (hrp.Position - targetCFrame.Position).Magnitude < 60 then
-        return true
-    end
-
-    -- Panggil _tp SEKALI → dapet tween object
-    shouldTween = true
-    local tween = _tp(targetCFrame)
-
-    -- Tunggu tween selesai (natural, tidak di-restart)
+-- ---------- TWEEN KE PULAU PAKAI _tp (LOOP SABAR) ----------
+local function TweenToIsland(islandPos)
     local startT = tick()
-    if tween then
-        while tween.PlaybackState == Enum.PlaybackState.Playing do
-            if not _G.AutoMagnetEvent then
-                pcall(function() tween:Cancel() end)
-                return false
-            end
-            if (tick() - startT) > TWEEN_TIMEOUT then
-                pcall(function() tween:Cancel() end)
-                return false
-            end
-            task.wait(0.1)
-        end
-    else
-        -- Fallback kalau tween return nil
-        repeat
-            task.wait(0.2)
-        until (hrp.Position - targetCFrame.Position).Magnitude <= 60
-            or not _G.AutoMagnetEvent
-            or (tick() - startT) > TWEEN_TIMEOUT
-    end
+    local tries = 0
+    while _G.AutoMagnetEvent and tries < TWEEN_MAX_TRIES do
+        task.wait(0.15)
+        tries = tries + 1
 
-    return true
+        -- Paksa shouldTween true SETIAP iterasi (defensif)
+        shouldTween = true
+        _B = true
+
+        -- Panggil _tp (tween lama)
+        pcall(function() _tp(islandPos) end)
+
+        -- Cek apakah sudah sampai
+        local c = plr.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        if r and (r.Position - islandPos.Position).Magnitude <= ARRIVE_DIST then
+            return true, tries, (tick() - startT)
+        end
+    end
+    return false, tries, (tick() - startT)
 end
 
 -- ---------- SCAN MAGNET MOB ----------
@@ -2798,7 +2782,7 @@ task.spawn(function()
             continue
         end
 
-        -- Build order pertama kali + deteksi pulau saat ini
+        -- Build order + deteksi pulau saat ini
         if not islandOrder then
             BuildIslandOrder()
             local idx = GetCurrentIslandIndex(islandOrder)
@@ -2837,7 +2821,6 @@ task.spawn(function()
 
         local islandPos = island.Data.CFrame
 
-        -- Aktifkan mode tween + bring mob
         _B = true
         shouldTween = true
         pcall(function()
@@ -2847,7 +2830,7 @@ task.spawn(function()
         end)
 
         --=========================================================
-        -- STEP 1: TWEEN PERLAHAN KE PULAU (pakai _tp LAMA)
+        -- STEP 1: TWEEN PERLAHAN KE PULAU (pakai _tp, loop sabar)
         --=========================================================
         char = plr.Character
         local distToIsland = char and char:FindFirstChild("HumanoidRootPart")
@@ -2855,13 +2838,21 @@ task.spawn(function()
 
         MagnetPatrolStatus:SetDesc("✈️ ["..currentIndex.."/"..#islandOrder.."] Tween ke "..island.Name.." ("..math.floor(distToIsland).." studs)...")
 
-        FlyToWithTP(islandPos)
+        local arrived, tries, elapsed = TweenToIsland(islandPos)
 
         if not _G.AutoMagnetEvent then
             currentIndex = currentIndex + 1
             continue
         end
 
+        if not arrived then
+            MagnetPatrolStatus:SetDesc("⚠️ Gagal tween ke "..island.Name.." ("..math.floor(elapsed).."s, "..tries.." tries) — skip")
+            task.wait(1)
+            currentIndex = currentIndex + 1
+            continue
+        end
+
+        -- Kalau sampai, tunggu streaming
         task.wait(1.5)
 
         --=========================================================
@@ -2875,15 +2866,15 @@ task.spawn(function()
         local hasKilled    = false
 
         while _G.AutoMagnetEvent do
-            local elapsed = tick() - islandStart
+            local elapsed2 = tick() - islandStart
 
-            if elapsed > MAX_CHECK_TIME then break end
+            if elapsed2 > MAX_CHECK_TIME then break end
 
             local targets = ScanMagnetMobs(islandPos)
 
             if #targets == 0 then
                 if not hasKilled then
-                    if elapsed < MIN_CHECK_TIME then
+                    if elapsed2 < MIN_CHECK_TIME then
                         task.wait(0.5)
                     else
                         break
@@ -2901,6 +2892,7 @@ task.spawn(function()
                         local killStart = tick()
                         repeat
                             task.wait(Sec)
+                            shouldTween = true
                             if v.Parent and v:FindFirstChild("HumanoidRootPart") then
                                 _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
                             end
