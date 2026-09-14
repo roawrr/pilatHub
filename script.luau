@@ -2525,6 +2525,255 @@ end)
 
 Tabs.Main:AddSection("Farm Elite Hunter")
 
+--=============================================================
+--  MAGNET EVENT (Update 30)
+--=============================================================
+Tabs.Main:AddSection("Magnet Event")
+
+local function IsMagnetizedEnemy(v)
+    if not v or not v.Parent then return false end
+    if not v:FindFirstChild("Humanoid") then return false end
+    if string.find(v.Name:lower(), "magnet") then return true end
+    for attr, val in pairs(v:GetAttributes()) do
+        if string.find(tostring(attr):lower(), "magnet") then return true end
+        if typeof(val) == "string" and string.find(val:lower(), "magnet") then return true end
+    end
+    if v.Humanoid.DisplayName and string.find(v.Humanoid.DisplayName:lower(), "magnet") then
+        return true
+    end
+    for _, child in pairs(v:GetChildren()) do
+        if string.find(child.Name:lower(), "magnet") then return true end
+        if child:IsA("BillboardGui") then
+            for _, d in pairs(child:GetDescendants()) do
+                if d:IsA("TextLabel") and string.find(d.Text:lower(), "magnet") then
+                    return true
+                end
+            end
+        end
+    end
+    if v:FindFirstChild("Magnet") or v:FindFirstChild("MagnetEffect") or v:FindFirstChild("MagnetAura") then
+        return true
+    end
+    return false
+end
+
+local function IsMagnetEventActive()
+    for _, v in pairs(workspace.Enemies:GetChildren()) do
+        if IsMagnetizedEnemy(v) and Attack.Alive(v) then return true end
+    end
+    local lighting = game:GetService("Lighting")
+    if lighting:FindFirstChild("Sky") then
+        local sky = lighting.Sky
+        local ids = {
+            tostring(sky.SkyboxBk), tostring(sky.SkyboxDn),
+            tostring(sky.SkyboxFt), tostring(sky.SkyboxLf),
+            tostring(sky.SkyboxRt), tostring(sky.SkyboxUp)
+        }
+        for _, id in pairs(ids) do
+            if string.find(id:lower(), "magnet") or string.find(id:lower(), "galaxy") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local MagnetStatus = Tabs.Main:AddParagraph("Magnet Event Status", "Checking...")
+local MagnetTokens = Tabs.Main:AddParagraph("Magnet Token", "0")
+local MagnetFound  = Tabs.Main:AddParagraph("Magnet Enemy Found", "0")
+
+spawn(function()
+    local wasActive = false
+    while task.wait(1) do
+        pcall(function()
+            local active = IsMagnetEventActive()
+            if active then
+                MagnetStatus:SetDesc("🟢 ACTIVE - Farming sekarang!")
+                if not wasActive then
+                    Window:Notify({
+                        Title = "Magnet Event Aktif!",
+                        Content = "Langit berubah! Auto farm dimulai...",
+                        Duration = 5
+                    })
+                end
+            else
+                MagnetStatus:SetDesc("🔴 Not Active")
+            end
+            wasActive = active
+
+            local tokens = 0
+            pcall(function()
+                tokens = GetM("MagnetToken") or GetM("Magnet Token") or GetM("Magnet") or 0
+            end)
+            MagnetTokens:SetDesc(tostring(tokens))
+        end)
+    end
+end)
+
+Tabs.Main:AddSlider({
+    Name = "Magnet Search Radius",
+    Min = 200,
+    Max = 5000,
+    Default = 1500,
+    Increment = 100,
+    Callback = function(Value)
+        _G.MagnetSearchRadius = Value
+    end
+})
+
+Tabs.Main:AddToggle({
+    Name = "Auto Magnet Event [All Island]",
+    Description = "Cek seluruh pulau, tween ke Magnetized Enemy, kill semua",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoMagnetEvent = Value
+        if not Value then
+            shouldTween = false
+            _B = false
+        end
+    end
+})
+
+--=============================================================
+--  PATROL ROUND-ROBIN
+--=============================================================
+task.spawn(function()
+    local islandOrder = nil
+    local currentIndex = 1
+    local cycleCount = 0
+    local wasEventActive = false
+
+    local function BuildIslandOrder()
+        if not IslandData then return end
+        islandOrder = {}
+        for name, data in pairs(IslandData) do
+            table.insert(islandOrder, { Name = name, Data = data })
+        end
+        table.sort(islandOrder, function(a, b) return a.Name < b.Name end)
+        currentIndex = 1
+    end
+
+    while task.wait(0.3) do
+        if not _G.AutoMagnetEvent then
+            currentIndex = 1
+            cycleCount = 0
+            islandOrder = nil
+            wasEventActive = false
+            continue
+        end
+        if not IslandData then continue end
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
+
+        if not islandOrder then
+            BuildIslandOrder()
+        end
+
+        local eventActive = IsMagnetEventActive()
+        if eventActive and not wasEventActive then
+            currentIndex = 1
+            Window:Notify({
+                Title = "Magnet Event Mulai!",
+                Content = "Reset patroli ke pulau pertama...",
+                Duration = 3
+            })
+        end
+        wasEventActive = eventActive
+
+        pcall(function()
+            sethiddenproperty(plr, "SimulationRadius", math.huge)
+            _B = true
+            shouldTween = true
+
+            local hrp = plr.Character.HumanoidRootPart
+            local searchRadius = _G.MagnetSearchRadius or 1500
+
+            local island = islandOrder[currentIndex]
+            if not island then
+                currentIndex = 1
+                return
+            end
+
+            local islandPos = island.Data.CFrame
+
+            local tpStart = tick()
+            repeat
+                task.wait(0.15)
+                if not _G.AutoMagnetEvent then return end
+                _tp(islandPos)
+            until (hrp.Position - islandPos.Position).Magnitude <= 100
+                or (tick() - tpStart) > 12
+
+            if not _G.AutoMagnetEvent then return end
+            task.wait(0.4)
+
+            local islandStart = tick()
+            local maxWait = eventActive and 12 or 4
+            local foundCount = 0
+
+            while _G.AutoMagnetEvent and (tick() - islandStart) < maxWait do
+                local targets = {}
+
+                for _, v in pairs(workspace.Enemies:GetChildren()) do
+                    if not _G.AutoMagnetEvent then break end
+                    if Attack.Alive(v) and IsMagnetizedEnemy(v) then
+                        local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
+                        if dist <= searchRadius then
+                            table.insert(targets, v)
+                        end
+                    end
+                end
+
+                for _, v in pairs(replicated:GetChildren()) do
+                    if not _G.AutoMagnetEvent then break end
+                    if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart")
+                        and Attack.Alive(v) and IsMagnetizedEnemy(v) then
+                        local dist = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
+                        if dist <= searchRadius then
+                            table.insert(targets, v)
+                        end
+                    end
+                end
+
+                if #targets == 0 then break end
+
+                foundCount = foundCount + #targets
+                MagnetFound:SetDesc(tostring(#targets))
+
+                for _, v in ipairs(targets) do
+                    if not _G.AutoMagnetEvent then break end
+                    if v.Parent and Attack.Alive(v) then
+                        repeat
+                            task.wait()
+                            if not _G.AutoMagnetEvent then break end
+                            _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0))
+                            Attack.Kill(v, true)
+                        until not _G.AutoMagnetEvent
+                            or not v.Parent
+                            or v.Humanoid.Health <= 0
+                    end
+                end
+
+                task.wait(0.3)
+            end
+
+            if foundCount > 0 then
+                MagnetStatus:SetDesc("🟢 Checked ["..currentIndex.."/"..#islandOrder.."] "..island.Name.." ("..foundCount.." kill)")
+            else
+                MagnetStatus:SetDesc("🔵 Patrol ["..currentIndex.."/"..#islandOrder.."] "..island.Name)
+            end
+
+            currentIndex = currentIndex + 1
+            if currentIndex > #islandOrder then
+                currentIndex = 1
+                cycleCount = cycleCount + 1
+                MagnetStatus:SetDesc("🔁 Selesai 1 putaran. Ulang dari pulau pertama...")
+                task.wait(1.5)
+            end
+        end)
+    end
+end)
+
+
 local Process = Tabs.Main:AddParagraph("Elites Process", "")
 spawn(function()
     while wait(Sec) do
