@@ -1324,8 +1324,13 @@ local Minimizer = Window:NewMinimizer({
   KeyCode = Enum.KeyCode.LeftControl
 })
 
+local pilatUrl = "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png"
+local pilatData = game:HttpGet(pilatUrl)
+writefile("pilat.png", pilatData)
+local pilatAsset = getcustomasset("pilat.png")
+
 local MobileButton = Minimizer:CreateMobileMinimizer({
-  Image = "rbxassetid://115361764309114",
+  Image = pilatAsset,
   BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 })
 
@@ -11984,6 +11989,6 @@ StartMainLoops()
 Window:Notify({
   Title = "Pilat Hub",
   Content = "Pilat Hub Load",
-  Image = "rbxassetid://115361764309114",
+  Image = pilatAsset
   Duration = 5
 })
