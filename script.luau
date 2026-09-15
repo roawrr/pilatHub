@@ -2582,44 +2582,62 @@ local function XZDist(pos1, pos2)
     return (Vector3.new(pos1.X, 0, pos1.Z) - Vector3.new(pos2.X, 0, pos2.Z)).Magnitude
 end
 
---============ ISLAND LIST (Y rendah, XZ akurat) ============
+--============ ISLAND LIST (Dynamic dari Locations) ============
 local MagnetIslandList = {}
 
-if World1 then
-    MagnetIslandList = {
-        { Name = "Jungle",          CFrame = CFrame.new(-1240, 15, 200),     NPCNames = {"Monkey","Gorilla"} },
-        { Name = "Pirate Village",  CFrame = CFrame.new(-1130, 15, 3980),    NPCNames = {"Pirate","Brute"} },
-        { Name = "Desert",          CFrame = CFrame.new(1050, 10, 4350),     NPCNames = {"Desert Bandit","Desert Officer"} },
-        { Name = "Colosseum",       CFrame = CFrame.new(-1500, 60, -290),    NPCNames = {"Toga Warrior","Gladiator"} },
-        { Name = "Underwater City", CFrame = CFrame.new(61160, 5, 1819),     NPCNames = {"Fishman Warrior","Fishman Commando"} },
-        { Name = "Skylands",        CFrame = CFrame.new(-7880, 5545, -380),  NPCNames = {"Shanda","Royal Squad","Royal Soldier"} },
-        { Name = "Magma Village",   CFrame = CFrame.new(-5200, 8, 8400),     NPCNames = {"Military Soldier","Military Spy"} },
-        { Name = "Prison",          CFrame = CFrame.new(4875, 6, 735),       NPCNames = {"Prisoner","Dangerous Prisoner"} },
-        { Name = "Frozen Village",  CFrame = CFrame.new(1200, 28, -1500),    NPCNames = {"Snow Bandit","Snowman"} },
-        { Name = "Marine Fortress", CFrame = CFrame.new(-4500, 20, 4250),    NPCNames = {"Chief Petty Officer"} },
-    }
-elseif World2 then
-    MagnetIslandList = {
-        { Name = "Kingdom of Rose", CFrame = CFrame.new(-321, 73, 297),      NPCNames = {"Raider","Mercenary","Swan Pirate","Factory Staff"} },
-        { Name = "Green Zone",      CFrame = CFrame.new(-2447, 73, -3211),   NPCNames = {"Marine Lieutenant","Marine Captain"} },
-        { Name = "Graveyard",       CFrame = CFrame.new(-9515, 142, 5536),   NPCNames = {"Zombie","Vampire"} },
-        { Name = "Snow Mountain",   CFrame = CFrame.new(561, 401, -5306),    NPCNames = {"Snow Trooper","Winter Warrior"} },
-        { Name = "Hot and Cold",    CFrame = CFrame.new(-6026, 15, -5062),   NPCNames = {"Lab Subordinate","Horned Warrior","Magma Ninja","Lava Pirate"} },
-        { Name = "Cursed Ship",     CFrame = CFrame.new(923, 126, 32852),    NPCNames = {"Ship Deckhand","Ship Engineer","Ship Steward","Ship Officer"} },
-        { Name = "Ice Castle",      CFrame = CFrame.new(6137, 294, -6747),   NPCNames = {"Arctic Warrior","Snow Lurker"} },
-        { Name = "Forgotten Island",CFrame = CFrame.new(-3043, 238, -10191), NPCNames = {"Sea Soldier","Water Fighter"} },
-    }
-elseif World3 then
-    MagnetIslandList = {
-        { Name = "Sea of Treats",   CFrame = CFrame.new(-1145, 13, -14450),  NPCNames = {"Peanut Scout","Cookie Crafter","Cocoa Warrior","Sweet Thief","Candy Rebel","Chocolate Bar Battler","Peanut President","Ice Cream Commander","Baking Staff","Head Baker","Cake Guard"} },
-        { Name = "Floating Turtle", CFrame = CFrame.new(-12000, 331, -8500), NPCNames = {"Forest Pirate","Mythological Pirate","Jungle Pirate","Musketeer Pirate","Fishman Raider","Fishman Captain"} },
-        { Name = "Tiki Outpost",    CFrame = CFrame.new(-16200, 90, -17300), NPCNames = {"Isle Outlaw","Island Boy","Sun-kissed Warrior","Isle Champion"} },
-        { Name = "Port Town",       CFrame = CFrame.new(-290, 44, 5450),     NPCNames = {"Pirate Millionaire","Pistol Billionaire"} },
-        { Name = "Haunted Castle",  CFrame = CFrame.new(-9515, 142, 5536),   NPCNames = {"Reborn Skeleton","Living Zombie","Demonic Soul","Posessed Mummy"} },
-        { Name = "Hydra Island",    CFrame = CFrame.new(5228, 604, 345),     NPCNames = {"Dragon Crew Warrior","Dragon Crew Archer","Female Islander","Giant Islander"} },
-    }
+-- Kata yang di-exclude (bukan pulau / di-skip)
+local EXCLUDE_KEYWORDS = {
+    "sea",           -- parent container / Sea marker
+    "cursed ship",   -- exclude sesuai request
+    "cursedship",
+}
+
+local function ShouldExclude(name)
+    local lower = string.lower(name)
+    for _, kw in ipairs(EXCLUDE_KEYWORDS) do
+        if string.find(lower, kw, 1, true) then
+            return true
+        end
+    end
+    return false
 end
 
+local function BuildIslandList()
+    MagnetIslandList = {}
+    local worldOrigin = workspace:FindFirstChild("_WorldOrigin")
+    if not worldOrigin then return end
+    local locations = worldOrigin:FindFirstChild("Locations")
+    if not locations then return end
+
+    for _, v in pairs(locations:GetChildren()) do
+        if not ShouldExclude(v.Name) then
+            table.insert(MagnetIslandList, {
+                Name = v.Name,
+                CFrame = v.CFrame,
+                Object = v,
+            })
+        end
+    end
+
+    print("[MAGNET] Island list built: " .. #MagnetIslandList .. " island(s)")
+    for _, isl in ipairs(MagnetIslandList) do
+        print("  - " .. isl.Name)
+    end
+end
+
+BuildIslandList()
+
+-- Rebuild list saat ada Location baru muncul (misal event island)
+do
+    local worldOrigin = workspace:FindFirstChild("_WorldOrigin")
+    local locations = worldOrigin and worldOrigin:FindFirstChild("Locations")
+    if locations then
+        locations.ChildAdded:Connect(function()
+            task.wait(0.5)
+            BuildIslandList()
+        end)
+    end
+end
 --============ TWEEN (pakai XZ distance) ============
 local function TweenToPos(targetCFrame, distXZ, timeout)
     distXZ = distXZ or ARRIVE_DIST_XZ
@@ -2651,7 +2669,7 @@ local function TweenToIsland(island)
     return TweenToPos(island.CFrame, ARRIVE_DIST_XZ, 40)
 end
 
---============ FIND NPC IN ISLAND ============
+--============ FIND NPC IN ISLAND (generic, tanpa hardcode) ============
 local function FindIslandNPC(island)
     local E = workspace:FindFirstChild("Enemies")
     if not E then return nil end
@@ -2660,31 +2678,23 @@ local function FindIslandNPC(island)
     local magnetTarget, magnetDist = nil, math.huge
     for _, v in pairs(E:GetChildren()) do
         if IsMagnetEnemy(v) and v:FindFirstChild("HumanoidRootPart") then
-            for _, npcName in ipairs(island.NPCNames or {}) do
-                if v.Name == npcName then
-                    local d = XZDist(v.HumanoidRootPart.Position, island.CFrame.Position)
-                    if d < magnetDist and d <= MAGNET_RADIUS then
-                        magnetDist = d
-                        magnetTarget = v
-                    end
-                end
+            local d = XZDist(v.HumanoidRootPart.Position, island.CFrame.Position)
+            if d < magnetDist and d <= MAGNET_RADIUS then
+                magnetDist = d
+                magnetTarget = v
             end
         end
     end
     if magnetTarget then return magnetTarget end
 
-    -- Priority 2: NPC biasa terdekat (untuk tween awal)
+    -- Priority 2: NPC terdekat dari pusat pulau (apapun namanya)
     local nearest, nearestDist = nil, math.huge
     for _, v in pairs(E:GetChildren()) do
-        if v:FindFirstChild("HumanoidRootPart") and Attack.Alive(v) then
-            for _, npcName in ipairs(island.NPCNames or {}) do
-                if v.Name == npcName then
-                    local d = XZDist(v.HumanoidRootPart.Position, island.CFrame.Position)
-                    if d < nearestDist and d <= MAGNET_RADIUS then
-                        nearestDist = d
-                        nearest = v
-                    end
-                end
+        if v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and Attack.Alive(v) then
+            local d = XZDist(v.HumanoidRootPart.Position, island.CFrame.Position)
+            if d < nearestDist and d <= MAGNET_RADIUS then
+                nearestDist = d
+                nearest = v
             end
         end
     end
