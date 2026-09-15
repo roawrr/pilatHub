@@ -2524,7 +2524,7 @@ task.spawn(function()
 end)
 
 --=============================================================
---  MAGNET EVENT (Update 30) - Full Tab
+--  MAGNET EVENT (Update 30) - Full Tab [EN]
 --=============================================================
 Tabs.Main:AddSection("Magnet Event")
 
@@ -2543,7 +2543,7 @@ local GACHA_BOX_DEFAULT    = "MagnetEventGacha26"
 local GACHA_ROLL_CONTEXTS  = {"Roll", "Spin", "Gacha", "Pull", "Buy", "Purchase", "Open"}
 --=================================
 
---============ DETEKSI ============
+--============ DETECTION ============
 local function IsMagnetEnemy(v)
     if not v or not v.Parent then return false end
     if not v:FindFirstChild("Humanoid") then return false end
@@ -2559,16 +2559,16 @@ local function IsMagnetEnemy(v)
 end
 
 local function IsMagnetEventActive()
-    local Enemies = workspace:FindFirstChild("Enemies")
-    if Enemies then
-        for _, v in pairs(Enemies:GetChildren()) do
+    local EnemiesFolder = workspace:FindFirstChild("Enemies")
+    if EnemiesFolder then
+        for _, v in pairs(EnemiesFolder:GetChildren()) do
             local ok, isMagnet = pcall(function() return v:GetAttribute("MagnetEnemy") end)
             if ok and isMagnet == true then return true end
         end
     end
-    local Lighting = game:GetService("Lighting")
-    local ok3, fogEnd = pcall(function() return Lighting.FogEnd end)
-    local ok4, ambient = pcall(function() return Lighting.Ambient end)
+    local LightingSvc = game:GetService("Lighting")
+    local ok3, fogEnd = pcall(function() return LightingSvc.FogEnd end)
+    local ok4, ambient = pcall(function() return LightingSvc.Ambient end)
     if ok3 and ok4 and fogEnd and ambient then
         if fogEnd <= 1000 and ambient.R < 0.55 then return true end
     end
@@ -2620,7 +2620,7 @@ elseif World3 then
     }
 end
 
---============ TWEEN (loop _tp - proven pattern) ============
+--============ TWEEN (proven loop pattern) ============
 local function TweenToIsland(targetCFrame)
     local attempts = 0
     local maxAttempts = 300
@@ -2652,12 +2652,12 @@ local function TweenToIsland(targetCFrame)
     return false
 end
 
---============ SCAN ============
+--============ SCAN FUNCTIONS ============
 local function ScanAllMagnetEnemies()
     local list = {}
-    local enemies = workspace:FindFirstChild("Enemies")
-    if not enemies then return list end
-    for _, v in pairs(enemies:GetChildren()) do
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return list end
+    for _, v in pairs(enemiesFolder:GetChildren()) do
         if IsMagnetEnemy(v) and v:FindFirstChild("HumanoidRootPart") then
             table.insert(list, v)
         end
@@ -2667,9 +2667,9 @@ end
 
 local function ScanMagnetAtIsland(islandPos)
     local list = {}
-    local enemies = workspace:FindFirstChild("Enemies")
-    if not enemies then return list end
-    for _, v in pairs(enemies:GetChildren()) do
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return list end
+    for _, v in pairs(enemiesFolder:GetChildren()) do
         pcall(function()
             if IsMagnetEnemy(v) and v:FindFirstChild("HumanoidRootPart") then
                 local d = (v.HumanoidRootPart.Position - islandPos.Position).Magnitude
@@ -2708,7 +2708,7 @@ local function GetIslandsWithMagnet()
     return result
 end
 
---============ GACHA FUNCTION ============
+--============ GACHA FUNCTIONS ============
 local function GetGachaRemote()
     local net = replicated:FindFirstChild("Modules")
         and replicated.Modules:FindFirstChild("Net")
@@ -2748,12 +2748,12 @@ local function TryRollGacha(boxName)
     return success
 end
 
---============ PARAGRAPH ============
-local MagnetEventStatus  = Tabs.Main:AddParagraph("Event Status", "🔴 Not Active")
-local MagnetLocation     = Tabs.Main:AddParagraph("location", "Detecting...")
-local MagnetPatrolStatus = Tabs.Main:AddParagraph("Patrol", "Idle")
-local MagnetMobInfo      = Tabs.Main:AddParagraph("NPC Magnet", "0")
-local MagnetScanInfo     = Tabs.Main:AddParagraph("Island With Magnet", "-")
+--============ PARAGRAPHS ============
+local MagnetEventStatus  = Tabs.Main:AddParagraph("Event Status", "Not Active")
+local MagnetLocation     = Tabs.Main:AddParagraph("Location", "Detecting...")
+local MagnetPatrolStatus = Tabs.Main:AddParagraph("Patrol Status", "Idle")
+local MagnetMobInfo      = Tabs.Main:AddParagraph("Magnet NPC", "0")
+local MagnetScanInfo     = Tabs.Main:AddParagraph("Islands With Magnet", "-")
 local MagnetTokenInfo    = Tabs.Main:AddParagraph("Token", "0")
 local MagnetGachaStatus  = Tabs.Main:AddParagraph("Gacha Status", "Idle")
 
@@ -2763,16 +2763,16 @@ spawn(function()
         pcall(function()
             local active = IsMagnetEventActive()
             if active then
-                MagnetEventStatus:SetDesc("🟢 ACTIVE")
+                MagnetEventStatus:SetDesc("ACTIVE")
                 if not wasActive then
                     Window:Notify({
-                        Title = "Magnet Event Aktif!",
-                        Content = "Mulai patroli...",
+                        Title = "Magnet Event Active!",
+                        Content = "Starting patrol...",
                         Duration = 5
                     })
                 end
             else
-                MagnetEventStatus:SetDesc("🔴 Not Active")
+                MagnetEventStatus:SetDesc("Not Active")
             end
             wasActive = active
         end)
@@ -2796,9 +2796,9 @@ spawn(function()
                 end
             end
             if nearest and dist <= ISLAND_DETECT_RANGE then
-                MagnetLocation:SetDesc("📍 " .. nearest.Name .. " (" .. GetSeaName() .. ")")
+                MagnetLocation:SetDesc(nearest.Name .. " (" .. GetSeaName() .. ")")
             else
-                MagnetLocation:SetDesc("🌊 " .. GetSeaName())
+                MagnetLocation:SetDesc(GetSeaName())
             end
         end)
 
@@ -2810,9 +2810,9 @@ spawn(function()
                     for _, isl in ipairs(islands) do
                         table.insert(names, isl.Name)
                     end
-                    MagnetScanInfo:SetDesc(#islands .. " pulau: " .. table.concat(names, ", "))
+                    MagnetScanInfo:SetDesc(#islands .. " island(s): " .. table.concat(names, ", "))
                 else
-                    MagnetScanInfo:SetDesc("0 pulau")
+                    MagnetScanInfo:SetDesc("0 island")
                 end
             else
                 MagnetScanInfo:SetDesc("-")
@@ -2824,7 +2824,7 @@ end)
 --============ TOGGLE: AUTO FARM MAGNET ============
 Tabs.Main:AddToggle({
     Name = "Auto Farm Magnet",
-    Description = "Patrol & kill magnet enemy",
+    Description = "Patrol & kill magnet enemies",
     Default = false,
     Callback = function(Value)
         _G.AutoMagnetEvent = Value
@@ -2838,22 +2838,29 @@ Tabs.Main:AddToggle({
 --============ TOGGLE: CHECK BEFORE TWEEN ============
 Tabs.Main:AddToggle({
     Name = "Check Before Tween",
-    Description = "Scan first, tween only to the island that has enemy magnets",
+    Description = "Scan first, tween only to islands with magnet enemies",
     Default = true,
     Callback = function(Value)
         _G.CheckBeforeTween = Value
-        Window:Notify({
-            Title = Value and "Check Before Tween ON" or "Check Before Tween OFF",
-            Content = Value and "Scan first, tween to the island with the magnet" or "Tween sequentially the entire island"",
-            Duration = 3
-        })
+        if Value then
+            Window:Notify({
+                Title = "Check Before Tween: ON",
+                Content = "Scan first, tween only to islands with magnet",
+                Duration = 3
+            })
+        else
+            Window:Notify({
+                Title = "Check Before Tween: OFF",
+                Content = "Tween sequentially through every island",
+                Duration = 3
+            })
+        end
     end
 })
 
 --============ SECTION: GACHA ============
 Tabs.Main:AddSection("Magnet Gacha")
 
--- Box Name input
 Tabs.Main:AddTextBox({
     Name = "Gacha Box Name",
     Placeholder = GACHA_BOX_DEFAULT,
@@ -2868,15 +2875,13 @@ Tabs.Main:AddTextBox({
     end
 })
 
--- Open Shop Button
 Tabs.Main:AddButton({
     Name = "Open Magnet Shop",
-    Description = "Open GUI Magnet Gacha Shop",
+    Description = "Open Magnet Gacha Shop GUI",
     Callback = function()
         local boxName = _G.GachaBoxName or GACHA_BOX_DEFAULT
-        MagnetGachaStatus:SetDesc("Membuka shop...")
+        MagnetGachaStatus:SetDesc("Opening shop...")
 
-        -- Cara 1: cari GUI
         local opened = false
         pcall(function()
             local pg = plr:FindFirstChild("PlayerGui")
@@ -2895,36 +2900,33 @@ Tabs.Main:AddButton({
             end
         end)
 
-        -- Cara 2: panggil remote Check
         pcall(function()
             TryOpenGacha(boxName)
             opened = true
         end)
 
         if opened then
-            MagnetGachaStatus:SetDesc("✅ Shop Open")
+            MagnetGachaStatus:SetDesc("Shop opened")
         else
-            MagnetGachaStatus:SetDesc("⚠️ Error")
+            MagnetGachaStatus:SetDesc("Failed to open shop")
         end
     end
 })
 
--- Auto Gacha Toggle
 Tabs.Main:AddToggle({
     Name = "Auto Gacha Magnet",
-    Description = "error",
+    Description = "Auto roll magnet gacha",
     Default = false,
     Callback = function(Value)
         _G.AutoMagnetGacha = Value
         if Value then
-            MagnetGachaStatus:SetDesc("Auto roll aktif...")
+            MagnetGachaStatus:SetDesc("Auto roll active...")
         else
             MagnetGachaStatus:SetDesc("Idle")
         end
     end
 })
 
--- Auto Gacha Loop
 task.spawn(function()
     local lastRoll = 0
     while task.wait(1) do
@@ -2939,21 +2941,21 @@ task.spawn(function()
         pcall(function()
             local tokens = GetM("MagnetToken") or GetM("Magnet Token") or GetM("Magnet") or 0
             if tokens <= 0 then
-                MagnetGachaStatus:SetDesc("tokens out")
+                MagnetGachaStatus:SetDesc("No tokens, farming first")
                 return
             end
 
             local ok = TryRollGacha(boxName)
             if ok then
-                MagnetGachaStatus:SetDesc("🎲 Roll dicek (T:" .. tostring(tokens) .. ")")
+                MagnetGachaStatus:SetDesc("Roll sent (Tokens: " .. tostring(tokens) .. ")")
             else
-                MagnetGachaStatus:SetDesc("⚠️ Roll failed")
+                MagnetGachaStatus:SetDesc("Roll failed")
             end
         end)
     end
 end)
 
---============ KILL MAGNET DI PULAU ============
+--============ KILL MAGNET AT ISLAND ============
 local function KillMagnetAtIsland(island)
     local islandPos = island.CFrame
     local totalKilled = 0
@@ -2980,7 +2982,7 @@ local function KillMagnetAtIsland(island)
                 if not _G.AutoMagnetEvent then break end
                 if v.Parent and v:FindFirstChild("HumanoidRootPart") and Attack.Alive(v) then
                     local tier = v:GetAttribute("MagnetTier") or 1
-                    MagnetPatrolStatus:SetDesc("⚔️ " .. island.Name .. " - kill " .. v.Name .. " (T" .. tier .. ")")
+                    MagnetPatrolStatus:SetDesc(island.Name .. " - killing " .. v.Name .. " (T" .. tier .. ")")
 
                     local killStart = tick()
                     repeat
@@ -3021,12 +3023,12 @@ task.spawn(function()
 
         local char = plr.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then
-            MagnetPatrolStatus:SetDesc("⏳ Waiting karakter...")
+            MagnetPatrolStatus:SetDesc("Waiting for character...")
             continue
         end
 
         if #MagnetIslandList == 0 then
-            MagnetPatrolStatus:SetDesc("⏳ Waiting List Island...")
+            MagnetPatrolStatus:SetDesc("Waiting for island list...")
             continue
         end
 
@@ -3043,21 +3045,21 @@ task.spawn(function()
         end)
 
         --=========================================
-        -- EVENT AKTIF
+        -- EVENT ACTIVE
         --=========================================
         if eventActive then
             if eventJustStarted then
                 currentIndex = 1
-                MagnetPatrolStatus:SetDesc("🔁 Event Started")
+                MagnetPatrolStatus:SetDesc("Event started! Resetting to first island")
                 task.wait(0.5)
             end
 
             if _G.CheckBeforeTween then
-                MagnetPatrolStatus:SetDesc("🔍 Scanning")
+                MagnetPatrolStatus:SetDesc("Scanning islands with magnet...")
                 local islandsWithMagnet = GetIslandsWithMagnet()
 
                 if #islandsWithMagnet == 0 then
-                    MagnetPatrolStatus:SetDesc("🔍 scanning...")
+                    MagnetPatrolStatus:SetDesc("No magnet enemy found, waiting...")
                     task.wait(2)
                 else
                     local target = nil
@@ -3070,19 +3072,19 @@ task.spawn(function()
                     end
 
                     if target then
-                        MagnetPatrolStatus:SetDesc("✈️ [CHECK] Tween To " .. target.Name)
+                        MagnetPatrolStatus:SetDesc("[CHECK] Tweening to " .. target.Name)
                         local ok = TweenToIsland(target.CFrame)
 
                         if _G.AutoMagnetEvent and ok then
                             task.wait(1)
                             local killed = KillMagnetAtIsland(target)
                             if killed > 0 then
-                                MagnetPatrolStatus:SetDesc("🟢 " .. target.Name .. " - " .. killed .. " kill ✓")
+                                MagnetPatrolStatus:SetDesc(target.Name .. " - " .. killed .. " kill(s)")
                             else
-                                MagnetPatrolStatus:SetDesc("🔵 " .. target.Name .. " - empty")
+                                MagnetPatrolStatus:SetDesc(target.Name .. " - empty")
                             end
                         elseif not ok then
-                            MagnetPatrolStatus:SetDesc("⚠️ Failed tween to " .. target.Name)
+                            MagnetPatrolStatus:SetDesc("Failed to tween to " .. target.Name)
                             task.wait(1)
                         end
                     end
@@ -3092,7 +3094,7 @@ task.spawn(function()
                 -- Sequential mode
                 if currentIndex > #MagnetIslandList then
                     currentIndex = 1
-                    MagnetPatrolStatus:SetDesc("🔁 Round complete, restart from first island")
+                    MagnetPatrolStatus:SetDesc("Round complete, restarting from first island")
                     task.wait(1)
                 end
 
@@ -3102,7 +3104,7 @@ task.spawn(function()
                     continue
                 end
 
-                MagnetPatrolStatus:SetDesc("✈️ [" .. currentIndex .. "/" .. #MagnetIslandList .. "] Tween to " .. island.Name)
+                MagnetPatrolStatus:SetDesc("[" .. currentIndex .. "/" .. #MagnetIslandList .. "] Tweening to " .. island.Name)
                 local ok = TweenToIsland(island.CFrame)
 
                 if not _G.AutoMagnetEvent then
@@ -3114,12 +3116,12 @@ task.spawn(function()
                     task.wait(1)
                     local killed = KillMagnetAtIsland(island)
                     if killed > 0 then
-                        MagnetPatrolStatus:SetDesc("🟢 [" .. currentIndex .. "/" .. #MagnetIslandList .. "] " .. island.Name .. " - " .. killed .. " kill ✓")
+                        MagnetPatrolStatus:SetDesc("[" .. currentIndex .. "/" .. #MagnetIslandList .. "] " .. island.Name .. " - " .. killed .. " kill(s)")
                     else
-                        MagnetPatrolStatus:SetDesc("🔵 [" .. currentIndex .. "/" .. #MagnetIslandList .. "] " .. island.Name .. " - kosong")
+                        MagnetPatrolStatus:SetDesc("[" .. currentIndex .. "/" .. #MagnetIslandList .. "] " .. island.Name .. " - empty")
                     end
                 else
-                    MagnetPatrolStatus:SetDesc("⚠️ Failed tween to " .. island.Name .. " - skip")
+                    MagnetPatrolStatus:SetDesc("Failed to tween to " .. island.Name .. " - skip")
                     task.wait(1)
                 end
 
@@ -3127,7 +3129,7 @@ task.spawn(function()
             end
 
         --=========================================
-        -- EVENT OFF: AFK prevent
+        -- EVENT OFF: AFK PREVENTION
         --=========================================
         else
             local now = tick()
@@ -3137,17 +3139,17 @@ task.spawn(function()
 
                 local island = MagnetIslandList[currentIndex]
                 if island then
-                    MagnetPatrolStatus:SetDesc("💤 [AFK] Tween to " .. island.Name)
+                    MagnetPatrolStatus:SetDesc("[AFK] Tweening to " .. island.Name)
                     TweenToIsland(island.CFrame)
                     if _G.AutoMagnetEvent then
-                        MagnetPatrolStatus:SetDesc("💤 [AFK] success " .. island.Name .. ", wait 10 min")
+                        MagnetPatrolStatus:SetDesc("[AFK] Arrived at " .. island.Name .. ", waiting 10 min")
                         currentIndex = currentIndex + 1
                         if currentIndex > #MagnetIslandList then currentIndex = 1 end
                     end
                 end
             else
                 local remaining = math.ceil((AFK_PATROL_INTERVAL - (now - lastAfkTime)) / 60)
-                MagnetPatrolStatus:SetDesc("💤 [AFK] Next patrol in " .. remaining .. " min")
+                MagnetPatrolStatus:SetDesc("[AFK] Next patrol in " .. remaining .. " min")
                 task.wait(2)
             end
         end
