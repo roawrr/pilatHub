@@ -2646,11 +2646,31 @@ local function IsMagnetEventActive()
     return false
 end
 
+--============ RAYCAST HELPER ============
+local function FindLandY(posX, posZ, currentY)
+    -- Cari daratan dari atas ke bawah
+    local rayOrigin = Vector3.new(posX, currentY + 500, posZ)
+    local rayDirection = Vector3.new(0, -1500, 0)
+    
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {plr.Character}
+    params.IgnoreWater = true  -- ⭐ abaikan air
+    
+    local result = workspace:Raycast(rayOrigin, rayDirection, params)
+    if result and result.Position then
+        return result.Position.Y
+    end
+    return nil
+end
+
+--============ TWEEN TO (Anti Air) ============
 local function TweenTo(targetCFrame, distXZ, timeout)
     distXZ = distXZ or ARRIVE_DIST
     timeout = timeout or 40
     local startT = tick()
     local attempts = 0
+    local fixedY = nil
 
     while _G.AutoMagnetEvent and (tick() - startT) < timeout and attempts < 500 do
         task.wait(0.1)
@@ -2663,26 +2683,20 @@ local function TweenTo(targetCFrame, distXZ, timeout)
         local root = char:FindFirstChild("HumanoidRootPart")
         if not root then continue end
 
-        local playerY  = root.Position.Y
-        local targetY  = targetCFrame.Position.Y
-        local yDiff    = targetY - playerY
-
-        -- =================== FIX Y ===================
-        -- Rule 1: Kalau Y target aneh (0 / negatif) → pakai Y player
-        -- Rule 2: Kalau delta Y > 100 → increment max 50 per step
-        -- =============================================
-        if not targetY or targetY <= 0 then
-            targetY = playerY
-        elseif math.abs(yDiff) > 100 then
-            local dir = yDiff > 0 and 1 or -1
-            targetY = playerY + (dir * 50)
+        -- Cari Y daratan cuma sekali per tween
+        if not fixedY then
+            fixedY = FindLandY(targetCFrame.Position.X, targetCFrame.Position.Z, root.Position.Y)
+            if not fixedY then
+                -- Fallback: pakai Y player
+                fixedY = root.Position.Y
+            end
         end
 
-        -- Target CFrame: XZ target + Y yang sudah di-clamp
-        local finalCF = CFrame.new(targetCFrame.Position.X, targetY, targetCFrame.Position.Z)
+        -- Target CFrame: XZ target + Y daratan
+        local finalCF = CFrame.new(targetCFrame.Position.X, fixedY + 5, targetCFrame.Position.Z)
         pcall(function() _tp(finalCF) end)
 
-        -- Cek arrival: XZ saja (biar gak infinite loop kalau Y mismatch)
+        -- Cek arrival: XZ saja
         if XZDist(root.Position, targetCFrame.Position) <= distXZ then
             return true
         end
