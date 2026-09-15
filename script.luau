@@ -3203,6 +3203,8 @@ task.spawn(function()
                 if currentIndex > #MagnetIslandList then currentIndex = 1 end
             end
         end
+    end
+end)
 
 Tabs.Main:AddSection("Farm Elite Hunter")
 local Process = Tabs.Main:AddParagraph("Elites Process", "")
