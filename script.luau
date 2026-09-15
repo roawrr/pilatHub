@@ -3154,37 +3154,45 @@ task.spawn(function()
         --=========================================
         -- EVENT OFF: AFK PREVENTION
         --=========================================
+                --=========================================
+        -- EVENT OFF: AFK PATROL (LOOP TANPA JEDA)
+        --=========================================
         else
-            local now = tick()
-            if now >= nextAfkTime then
-                -- Set timer DULU baru tween (fix bug pindah cepat)
-                nextAfkTime = now + AFK_PATROL_INTERVAL
+            nextAfkTime = tick() + AFK_PATROL_INTERVAL
+            MagnetAfkInfo:SetDesc("[AFK] Looping islands")
 
-                if currentIndex > #MagnetIslandList then currentIndex = 1 end
-                local island = MagnetIslandList[currentIndex]
-                if island then
-                    MagnetPatrolStatus:SetDesc("[AFK] Tweening to " .. island.Name)
-                    MagnetAfkInfo:SetDesc("[AFK] Executing at " .. island.Name)
-                    TweenToIsland(island)
-                    if _G.AutoMagnetEvent then
-                        local npc = FindIslandNPC(island)
-                        if npc then
-                            TweenToNPC(npc, 5)
-                        end
-                        MagnetPatrolStatus:SetDesc("[AFK] Reached " .. island.Name .. ", waiting...")
-                        currentIndex = currentIndex + 1
-                        if currentIndex > #MagnetIslandList then currentIndex = 1 end
+            -- Cycle island terus-terusan tanpa nunggu
+            if currentIndex > #MagnetIslandList then
+                currentIndex = 1
+                MagnetPatrolStatus:SetDesc("[AFK] Round complete, restarting...")
+                task.wait(0.5)
+            end
+
+            local island = MagnetIslandList[currentIndex]
+            if island then
+                MagnetPatrolStatus:SetDesc("[AFK] Tweening to " .. island.Name)
+
+                -- Tween ke pulau
+                local ok = TweenToIsland(island)
+
+                if _G.AutoMagnetEvent and ok then
+                    -- Tween ke NPC di pulau (kalau ada)
+                    local npc = FindIslandNPC(island)
+                    if npc then
+                        MagnetPatrolStatus:SetDesc("[AFK] Walking to NPC: " .. npc.Name)
+                        TweenToNPC(npc, 5)
                     end
+
+                    MagnetPatrolStatus:SetDesc("[AFK] Reached " .. island.Name)
                 end
-            else
-                local remaining = math.ceil((nextAfkTime - now) / 60)
-                MagnetPatrolStatus:SetDesc("[AFK] Next patrol in " .. remaining .. " min")
-                MagnetAfkInfo:SetDesc("[AFK] Waiting " .. remaining .. " min")
+
+                -- Jeda singkat saja antar pulau (2 detik) biar tidak spam
                 task.wait(2)
+
+                currentIndex = currentIndex + 1
+                if currentIndex > #MagnetIslandList then currentIndex = 1 end
             end
         end
-    end
-end)
 
 Tabs.Main:AddSection("Farm Elite Hunter")
 local Process = Tabs.Main:AddParagraph("Elites Process", "")
