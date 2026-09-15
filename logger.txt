@@ -1,0 +1,614 @@
+--=============================================================
+--  MAGNET EVENT LOGGER - Simpan ke Delta Workspace
+--=============================================================
+-- Cara pakai:
+--   1. Jalankan script ini SEBELUM event Magnet mulai
+--   2. Biarkan jalan terus (tidak perlu di-stop)
+--   3. Cek file log di Delta/Workspace/magnet_log.txt
+--   4. Saat event Magnet mulai, log akan otomatis mencatat
+--=============================================================
+
+-- ====== CONFIG ======
+local LOG_FOLDER   = "Delta/Workspace"
+local LOG_FILE     = "magnet_log.txt"
+local LOG_INTERVAL = 60      -- update otomatis tiap 60 detik
+local MAX_LOG_SIZE = 500000  -- 500 KB, auto rotate kalau lebih
+-- ====================
+
+local LOG_PATH = LOG_FOLDER .. "/" .. LOG_FILE
+
+-- ---------- CEK SUPPORT ----------
+local hasWrite = (typeof(writefile) == "function")
+local hasAppend = (typeof(appendfile) == "function")
+local hasRead = (typeof(readfile) == "function")
+local hasIsFile = (typeof(isfile) == "function")
+local hasMakeFolder = (typeof(makefolder) == "function")
+
+if not hasWrite or not hasAppend then
+    warn("[MAGNET LOGGER] Executor tidak support writefile/appendfile")
+    return
+end
+
+-- ---------- BUAT FOLDER ----------
+pcall(function()
+    if hasMakeFolder and not (hasIsFile and isfile(LOG_PATH)) then
+        makefolder(LOG_FOLDER)
+    end
+end)
+
+-- ---------- HELPER: TULIS LOG ----------
+local function WriteLine(text)
+    pcall(function()
+        appendfile(LOG_PATH, tostring(text) .. "\n")
+    end)
+end
+
+local function WriteHeader(title)
+    local line = "\n"
+        .. "=========================================================\n"
+        .. "  " .. title .. "\n"
+        .. "  Waktu: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n"
+        .. "  Waktu Lokal: " .. os.date("%H:%M:%S") .. "\n"
+        .. "  Tick: " .. tostring(os.clock()) .. "\n"
+        .. "=========================================================\n"
+    pcall(function()
+        appendfile(LOG_PATH, line)
+    end)
+end
+
+-- ---------- ROTATE LOG KALAU BESAR ----------
+local function RotateIfNeeded()
+    pcall(function()
+        if hasRead and hasIsFile and isfile(LOG_PATH) then
+            local content = readfile(LOG_PATH)
+            if content and #content > MAX_LOG_SIZE then
+                -- simpan sebagai backup, mulai file baru
+                local backupPath = LOG_FOLDER .. "/magnet_log_old_" .. os.time() .. ".txt"
+                writefile(backupPath, content)
+                writefile(LOG_PATH, "[MAGNET LOGGER] Log di-rotate. Backup: " .. backupPath .. "\n")
+            end
+        end
+    end)
+end
+
+-- ---------- CATAT INFO DASAR ----------
+local function GetBaseInfo()
+    local plr = game.Players.LocalPlayer
+    return {
+        PlaceId = game.PlaceId,
+        JobId = game.JobId,
+        PlayerName = plr and plr.Name or "?",
+        PlayerLevel = plr and plr.Data and plr.Data.Level and plr.Data.Level.Value or "?",
+        Sea = (game.PlaceId == 2753915549 or game.PlaceId == 85211729168715) and "Sea 1"
+              or (game.PlaceId == 4442272183 or game.PlaceId == 79091703265657) and "Sea 2"
+              or (game.PlaceId == 7449423635 or game.PlaceId == 100117331123089) and "Sea 3"
+              or "Unknown",
+        ServerTime = workspace:GetServerTimeNow(),
+        PlayerPos = "?"
+    }
+end
+
+-- ---------- SNAPSHOT: SKY ----------
+local function GetSkyInfo()
+    local Lighting = game:GetService("Lighting")
+    local sky = Lighting:FindFirstChild("Sky")
+    if not sky then return {} end
+    return {
+        SkyboxBk = tostring(sky.SkyboxBk),
+        SkyboxDn = tostring(sky.SkyboxDn),
+        SkyboxFt = tostring(sky.SkyboxFt),
+        SkyboxLf = tostring(sky.SkyboxLf),
+        SkyboxRt = tostring(sky.SkyboxRt),
+        SkyboxUp = tostring(sky.SkyboxUp),
+        MoonTextureId = tostring(sky.MoonTextureId),
+        SunTextureId = tostring(sky.SunTextureId),
+    }
+end
+
+-- ---------- SNAPSHOT: LIGHTING ----------
+local function GetLightingInfo()
+    local Lighting = game:GetService("Lighting")
+    local info = {
+        ClockTime = Lighting.ClockTime,
+        Brightness = Lighting.Brightness,
+        Ambient = tostring(Lighting.Ambient),
+        OutdoorAmbient = tostring(Lighting.OutdoorAmbient),
+        GlobalShadows = Lighting.GlobalShadows,
+        FogEnd = Lighting.FogEnd,
+        FogStart = Lighting.FogStart,
+        FogColor = tostring(Lighting.FogColor),
+    }
+    -- Effects
+    local effects = {}
+    for _, v in pairs(Lighting:GetChildren()) do
+        if v:IsA("PostEffect") or v:IsA("Atmosphere") then
+            table.insert(effects, v.ClassName .. ":" .. v.Name .. " enabled=" .. tostring(v.Enabled))
+        end
+    end
+    info.Effects = effects
+    return info
+end
+
+-- ---------- SNAPSHOT: ATTRIBUTES ----------
+local function GetAttributesOf(inst)
+    local t = {}
+    local ok, attrs = pcall(function() return inst:GetAttributes() end)
+    if ok and attrs then
+        for k, v in pairs(attrs) do
+            t[k] = tostring(v)
+        end
+    end
+    return t
+end
+
+-- ---------- SNAPSHOT: WORKSPACE CHILDREN ----------
+local function GetWorkspaceChildrenNames()
+    local names = {}
+    for _, v in pairs(workspace:GetChildren()) do
+        table.insert(names, v.Name)
+    end
+    return names
+end
+
+-- ---------- SNAPSHOT: ENEMIES DETAIL ----------
+local function GetMagnetEnemiesInfo()
+    local Enemies = workspace:FindFirstChild("Enemies")
+    if not Enemies then return {}, 0 end
+
+    local list = {}
+    local totalCount = #Enemies:GetChildren()
+
+    for _, v in pairs(Enemies:GetChildren()) do
+        if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+            local hum = v.Humanoid
+            if hum.Health > 0 then
+                -- Cek apakah ini magnet
+                local isMagnet = false
+                local clues = {}
+
+                if string.find(string.lower(v.Name), "magnet") then
+                    isMagnet = true
+                    table.insert(clues, "NAME:" .. v.Name)
+                end
+
+                local attrs = GetAttributesOf(v)
+                for k, val in pairs(attrs) do
+                    local s = string.lower(k .. "=" .. val)
+                    if string.find(s, "magnet") or string.find(s, "event")
+                        or string.find(s, "charge") or string.find(s, "cosmic") then
+                        isMagnet = true
+                        table.insert(clues, "ATTR:" .. k .. "=" .. val)
+                    end
+                end
+
+                if hum.DisplayName and string.find(string.lower(hum.DisplayName), "magnet") then
+                    isMagnet = true
+                    table.insert(clues, "DISPLAY:" .. hum.DisplayName)
+                end
+
+                for _, d in pairs(v:GetDescendants()) do
+                    if d.Name and (string.find(string.lower(d.Name), "magnet")
+                        or string.find(string.lower(d.Name), "charge")) then
+                        isMagnet = true
+                        table.insert(clues, "DESC:" .. d.Name .. " (" .. d.ClassName .. ")")
+                        break
+                    end
+                    if d:IsA("TextLabel") and string.find(string.lower(d.Text), "magnet") then
+                        isMagnet = true
+                        table.insert(clues, "LABEL:" .. d.Text)
+                        break
+                    end
+                end
+
+                -- Simpan info kalau magnet
+                if isMagnet then
+                    local pos = v.HumanoidRootPart.Position
+                    table.insert(list, {
+                        Name = v.Name,
+                        DisplayName = hum.DisplayName,
+                        Health = hum.Health,
+                        MaxHealth = hum.MaxHealth,
+                        Level = v:GetAttribute("Level") or "?",
+                        Position = string.format("(%.0f,%.0f,%.0f)", pos.X, pos.Y, pos.Z),
+                        Clues = clues,
+                        Attributes = attrs
+                    })
+                end
+            end
+        end
+    end
+
+    return list, totalCount
+end
+
+-- ---------- SNAPSHOT: REMOTE CALLS (tracking) ----------
+local recentRemoteCalls = {}
+
+-- Hook remote supaya bisa dilog
+local function SetupRemoteHook()
+    if getgenv()._MagnetRemoteHooked then return end
+    getgenv()._MagnetRemoteHooked = true
+
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+    local function hookRemote(remote)
+        if not remote or not remote.Parent then return end
+        if remote:GetAttribute("_MagnetHooked") then return end
+        pcall(function() remote:SetAttribute("_MagnetHooked", true) end)
+
+        if remote:IsA("RemoteEvent") then
+            local old = remote.FireServer
+            if hookfunction then
+                pcall(function()
+                    hookfunction(old, function(self, ...)
+                        local args = {...}
+                        local argStr = ""
+                        for _, a in pairs(args) do
+                            argStr = argStr .. " " .. tostring(a)
+                        end
+                        if string.find(string.lower(argStr), "magnet")
+                            or string.find(string.lower(argStr), "event")
+                            or string.find(string.lower(argStr), "cosmic")
+                            or string.find(string.lower(argStr), "galaxy") then
+                            table.insert(recentRemoteCalls, {
+                                time = os.time(),
+                                type = "FireServer",
+                                name = self:GetFullName(),
+                                args = argStr,
+                            })
+                            -- Batasi 50 terakhir
+                            while #recentRemoteCalls > 50 do
+                                table.remove(recentRemoteCalls, 1)
+                            end
+                        end
+                        return old(self, ...)
+                    end)
+                end)
+            end
+        elseif remote:IsA("RemoteFunction") then
+            local old = remote.InvokeServer
+            if hookfunction then
+                pcall(function()
+                    hookfunction(old, function(self, ...)
+                        local args = {...}
+                        local argStr = ""
+                        for _, a in pairs(args) do
+                            argStr = argStr .. " " .. tostring(a)
+                        end
+                        if string.find(string.lower(argStr), "magnet")
+                            or string.find(string.lower(argStr), "event")
+                            or string.find(string.lower(argStr), "cosmic")
+                            or string.find(string.lower(argStr), "galaxy") then
+                            table.insert(recentRemoteCalls, {
+                                time = os.time(),
+                                type = "InvokeServer",
+                                name = self:GetFullName(),
+                                args = argStr,
+                            })
+                            while #recentRemoteCalls > 50 do
+                                table.remove(recentRemoteCalls, 1)
+                            end
+                        end
+                        return old(self, ...)
+                    end)
+                end)
+            end
+        end
+    end
+
+    for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+            pcall(function() hookRemote(v) end)
+        end
+    end
+
+    ReplicatedStorage.DescendantAdded:Connect(function(v)
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+            pcall(function() hookRemote(v) end)
+        end
+    end)
+end
+
+SetupRemoteHook()
+
+-- ---------- SNAPSHOT: PLAYERGUI ----------
+local function GetGuiInfo()
+    local plr = game.Players.LocalPlayer
+    local pg = plr:FindFirstChild("PlayerGui")
+    if not pg then return {} end
+    local list = {}
+    for _, v in pairs(pg:GetChildren()) do
+        table.insert(list, v.Name .. " (" .. v.ClassName .. ")")
+    end
+    return list
+end
+
+-- ---------- SNAPSHOT: REPLICATEDSTORAGE ----------
+local function GetReplicatedNames()
+    local list = {}
+    for _, v in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+        table.insert(list, v.Name)
+    end
+    return list
+end
+
+-- ---------- STATE TRACKING ----------
+local lastState = {
+    skyHash = "",
+    lightingHash = "",
+    magnetCount = 0,
+    wsChildrenCount = 0,
+    guiCount = 0,
+}
+
+local function HashString(s)
+    local h = 0
+    for i = 1, #s do
+        h = (h * 31 + string.byte(s, i)) % 2^31
+    end
+    return tostring(h)
+end
+
+-- ---------- DETEKSI APAKAH MAGNET AKTIF (untuk trigger change-log) ----------
+local function IsMagnetActiveQuick()
+    -- Cek enemy magnet
+    local Enemies = workspace:FindFirstChild("Enemies")
+    if Enemies then
+        for _, v in pairs(Enemies:GetChildren()) do
+            if string.find(string.lower(v.Name), "magnet") then return true end
+            local attrs = GetAttributesOf(v)
+            for k, val in pairs(attrs) do
+                if string.find(string.lower(k .. "=" .. val), "magnet") then return true end
+            end
+        end
+    end
+    -- Cek Sky
+    local Lighting = game:GetService("Lighting")
+    if Lighting:FindFirstChild("Sky") then
+        local sky = Lighting.Sky
+        local ids = {tostring(sky.SkyboxBk), tostring(sky.SkyboxDn), tostring(sky.SkyboxFt), tostring(sky.SkyboxLf), tostring(sky.SkyboxRt), tostring(sky.SkyboxUp)}
+        for _, id in pairs(ids) do
+            local s = string.lower(id)
+            if string.find(s, "magnet") or string.find(s, "galaxy") then
+                return true
+            end
+        end
+    end
+    -- Cek workspace/game attributes
+    for k, v in pairs(GetAttributesOf(workspace)) do
+        if string.find(string.lower(k .. "=" .. tostring(v)), "magnet") then return true end
+    end
+    for k, v in pairs(GetAttributesOf(game)) do
+        if string.find(string.lower(k .. "=" .. tostring(v)), "magnet") then return true end
+    end
+    return false
+end
+
+-- ---------- FUNGSI UTAMA: TULIS SNAPSHOT ----------
+local lastMagnetActive = false
+local logCount = 0
+
+local function WriteSnapshot(trigger)
+    logCount = logCount + 1
+
+    local base = GetBaseInfo()
+    local char = game.Players.LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local p = char.HumanoidRootPart.Position
+        base.PlayerPos = string.format("(%.0f, %.0f, %.0f)", p.X, p.Y, p.Z)
+    end
+
+    local sky = GetSkyInfo()
+    local lighting = GetLightingInfo()
+    local wsAttrs = GetAttributesOf(workspace)
+    local gameAttrs = GetAttributesOf(game)
+    local plrAttrs = GetAttributesOf(game.Players.LocalPlayer)
+    local magnetEnemies, totalEnemies = GetMagnetEnemiesInfo()
+    local gui = GetGuiInfo()
+    local reps = GetReplicatedNames()
+    local active = IsMagnetActiveQuick()
+
+    WriteHeader("[SNAPSHOT #" .. logCount .. "] Trigger: " .. trigger ..
+        (active and " | MAGNET ACTIVE ✅" or " | NOT ACTIVE ❌"))
+
+    WriteLine("[BASE INFO]")
+    WriteLine("  PlaceId      : " .. base.PlaceId)
+    WriteLine("  JobId        : " .. base.JobId)
+    WriteLine("  Player       : " .. base.PlayerName .. " (Lv " .. tostring(base.PlayerLevel) .. ")")
+    WriteLine("  Sea          : " .. base.Sea)
+    WriteLine("  Player Pos   : " .. base.PlayerPos)
+    WriteLine("  Server Time  : " .. tostring(base.ServerTime))
+    WriteLine("")
+
+    WriteLine("[MAGNET STATUS]")
+    WriteLine("  Active       : " .. tostring(active))
+    WriteLine("  Total Enemy  : " .. tostring(totalEnemies))
+    WriteLine("  Magnet Enemy : " .. tostring(#magnetEnemies))
+    WriteLine("")
+
+    if #magnetEnemies > 0 then
+        WriteLine("[MAGNET ENEMIES DETAIL]")
+        for i, e in ipairs(magnetEnemies) do
+            WriteLine("  --- #" .. i .. " ---")
+            WriteLine("    Name        : " .. e.Name)
+            WriteLine("    DisplayName : " .. tostring(e.DisplayName))
+            WriteLine("    Health      : " .. tostring(e.Health) .. "/" .. tostring(e.MaxHealth))
+            WriteLine("    Level       : " .. tostring(e.Level))
+            WriteLine("    Position    : " .. e.Position)
+            WriteLine("    Clues       : " .. table.concat(e.Clues, " | "))
+            WriteLine("    Attributes  :")
+            for k, v in pairs(e.Attributes) do
+                WriteLine("      " .. k .. " = " .. v)
+            end
+        end
+        WriteLine("")
+    end
+
+    WriteLine("[SKY]")
+    for k, v in pairs(sky) do
+        WriteLine("  " .. k .. " = " .. tostring(v))
+    end
+    WriteLine("")
+
+    WriteLine("[LIGHTING]")
+    for k, v in pairs(lighting) do
+        if k ~= "Effects" then
+            WriteLine("  " .. k .. " = " .. tostring(v))
+        end
+    end
+    if lighting.Effects then
+        WriteLine("  Effects:")
+        for _, e in ipairs(lighting.Effects) do
+            WriteLine("    - " .. e)
+        end
+    end
+    WriteLine("")
+
+    WriteLine("[WORKSPACE ATTRIBUTES]")
+    if next(wsAttrs) == nil then
+        WriteLine("  (kosong)")
+    else
+        for k, v in pairs(wsAttrs) do
+            WriteLine("  " .. k .. " = " .. v)
+        end
+    end
+    WriteLine("")
+
+    WriteLine("[GAME ATTRIBUTES]")
+    if next(gameAttrs) == nil then
+        WriteLine("  (kosong)")
+    else
+        for k, v in pairs(gameAttrs) do
+            WriteLine("  " .. k .. " = " .. v)
+        end
+    end
+    WriteLine("")
+
+    WriteLine("[PLAYER ATTRIBUTES]")
+    if next(plrAttrs) == nil then
+        WriteLine("  (kosong)")
+    else
+        for k, v in pairs(plrAttrs) do
+            WriteLine("  " .. k .. " = " .. v)
+        end
+    end
+    WriteLine("")
+
+    WriteLine("[RECENT REMOTE CALLS (max 50)]")
+    if #recentRemoteCalls == 0 then
+        WriteLine("  (belum ada remote dengan keyword magnet/event)")
+    else
+        for _, r in ipairs(recentRemoteCalls) do
+            WriteLine("  [" .. os.date("%H:%M:%S", r.time) .. "] " .. r.type .. " " .. r.name .. " ->" .. r.args)
+        end
+    end
+    WriteLine("")
+
+    WriteLine("[PLAYERGUI CHILDREN]")
+    for _, name in ipairs(gui) do
+        WriteLine("  - " .. name)
+    end
+    WriteLine("")
+
+    WriteLine("[REPLICATEDSTORAGE CHILDREN]")
+    for _, name in ipairs(reps) do
+        WriteLine("  - " .. name)
+    end
+    WriteLine("")
+
+    WriteLine("[END SNAPSHOT #" .. logCount .. "]")
+    WriteLine("")
+
+    -- Update lastState
+    lastState.skyHash = HashString(table.concat({
+        sky.SkyboxBk or "", sky.SkyboxDn or "", sky.SkyboxFt or "",
+        sky.SkyboxLf or "", sky.SkyboxRt or "", sky.SkyboxUp or ""
+    }, "|"))
+    lastState.lightingHash = HashString(tostring(lighting.ClockTime) .. tostring(lighting.Brightness))
+    lastState.magnetCount = #magnetEnemies
+    lastState.wsChildrenCount = #GetWorkspaceChildrenNames()
+    lastState.guiCount = #gui
+    lastMagnetActive = active
+end
+
+-- ---------- INITIAL SNAPSHOT ----------
+pcall(function()
+    RotateIfNeeded()
+
+    if hasWrite then
+        writefile(LOG_PATH,
+            "=========================================================\n" ..
+            "  MAGNET EVENT LOGGER\n" ..
+            "  Started: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n" ..
+            "  Path: " .. LOG_PATH .. "\n" ..
+            "  Update interval: setiap " .. LOG_INTERVAL .. " detik\n" ..
+            "  Update langsung: saat ada perubahan Sky / Magnet Count\n" ..
+            "=========================================================\n"
+        )
+    end
+end)
+
+WriteSnapshot("INITIAL")
+print("[MAGNET LOGGER] Aktif! Log tersimpan di: " .. LOG_PATH)
+
+-- ---------- LOOP 1: TIMER 1 MENIT ----------
+task.spawn(function()
+    while task.wait(LOG_INTERVAL) do
+        pcall(function()
+            RotateIfNeeded()
+            WriteSnapshot("TIMER " .. LOG_INTERVAL .. "s")
+        end)
+    end
+end)
+
+-- ---------- LOOP 2: WATCHER PERUBAHAN ----------
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            -- Cek apakah sky berubah
+            local sky = GetSkyInfo()
+            local skyStr = table.concat({
+                sky.SkyboxBk or "", sky.SkyboxDn or "", sky.SkyboxFt or "",
+                sky.SkyboxLf or "", sky.SkyboxRt or "", sky.SkyboxUp or ""
+            }, "|")
+            local newSkyHash = HashString(skyStr)
+
+            -- Cek magnet enemies count
+            local _, totalE = GetMagnetEnemiesInfo()
+            local active = IsMagnetActiveQuick()
+
+            -- Deteksi perubahan
+            if newSkyHash ~= lastState.skyHash then
+                WriteSnapshot("SKY CHANGED")
+            elseif active ~= lastMagnetActive then
+                WriteSnapshot("MAGNET STATE CHANGED -> " .. tostring(active))
+            end
+        end)
+    end
+end)
+
+-- ---------- LOOP 3: DETEKSI ENEMY MAGNET MUNCUL ----------
+task.spawn(function()
+    local lastEnemyCount = 0
+    while task.wait(2) do
+        pcall(function()
+            local list, _ = GetMagnetEnemiesInfo()
+            if #list ~= lastEnemyCount then
+                if #list > 0 or lastEnemyCount > 0 then
+                    WriteSnapshot("MAGNET ENEMY COUNT CHANGED: " .. lastEnemyCount .. " -> " .. #list)
+                end
+                lastEnemyCount = #list
+            end
+        end)
+    end
+end)
+
+-- ---------- BINDING: BUAT SCRIPT STOP (opsional) ----------
+getgenv().MagnetLoggerStop = function()
+    getgenv()._MagnetLoggerRunning = false
+    print("[MAGNET LOGGER] Stopped")
+end
+
+print("[MAGNET LOGGER] Setup selesai.")
+print("[MAGNET LOGGER] Log file: " .. LOG_PATH)
+print("[MAGNET LOGGER] Biarkan script jalan. Cek file setelah event magnet muncul.")
