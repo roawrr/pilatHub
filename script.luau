@@ -2651,18 +2651,40 @@ local function TweenTo(targetCFrame, distXZ, timeout)
     timeout = timeout or 40
     local startT = tick()
     local attempts = 0
+
     while _G.AutoMagnetEvent and (tick() - startT) < timeout and attempts < 500 do
         task.wait(0.1)
         attempts = attempts + 1
         shouldTween = true
         _B = true
-        pcall(function() _tp(targetCFrame) end)
-        local c = plr.Character
-        if c then
-            local r = c:FindFirstChild("HumanoidRootPart")
-            if r and XZDist(r.Position, targetCFrame.Position) <= distXZ then
-                return true
-            end
+
+        local char = plr.Character
+        if not char then continue end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+
+        local playerY  = root.Position.Y
+        local targetY  = targetCFrame.Position.Y
+        local yDiff    = targetY - playerY
+
+        -- =================== FIX Y ===================
+        -- Rule 1: Kalau Y target aneh (0 / negatif) → pakai Y player
+        -- Rule 2: Kalau delta Y > 100 → increment max 50 per step
+        -- =============================================
+        if not targetY or targetY <= 0 then
+            targetY = playerY
+        elseif math.abs(yDiff) > 100 then
+            local dir = yDiff > 0 and 1 or -1
+            targetY = playerY + (dir * 50)
+        end
+
+        -- Target CFrame: XZ target + Y yang sudah di-clamp
+        local finalCF = CFrame.new(targetCFrame.Position.X, targetY, targetCFrame.Position.Z)
+        pcall(function() _tp(finalCF) end)
+
+        -- Cek arrival: XZ saja (biar gak infinite loop kalau Y mismatch)
+        if XZDist(root.Position, targetCFrame.Position) <= distXZ then
+            return true
         end
     end
     return false
