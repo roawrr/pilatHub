@@ -2611,50 +2611,38 @@ local function BuildIslandOrder()
 end
 
 --============ TWEEN (pakai _tp lama, tunggu sampai tiba) ============
+--============ TWEEN (pattern Farm Level, terbukti bekerja) ============
 local function TweenToIsland(targetCFrame)
-    local retries = 0
-    local maxRetries = 3
+    local attempts = 0
+    local maxAttempts = 300  -- 30 detik @ 0.1s
 
-    while _G.AutoMagnetEvent and retries < maxRetries do
-        retries = retries + 1
+    while _G.AutoMagnetEvent and attempts < maxAttempts do
+        task.wait(0.1)
+        attempts = attempts + 1
 
-        local char = plr.Character
-        if not char then return false end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-
-        if (hrp.Position - targetCFrame.Position).Magnitude <= ARRIVE_DIST then
-            return true
-        end
-
+        -- Paksa shouldTween true setiap iterasi (jangan sampai di-cancel)
         shouldTween = true
         _B = true
+
+        -- Panggil _tp berulang — pattern Farm Level
         pcall(function() _tp(targetCFrame) end)
 
-        local startT = tick()
-        local lastPos = hrp.Position
-        local lastMove = tick()
-
-        while _G.AutoMagnetEvent do
-            task.wait(0.2)
-            shouldTween = true
-
-            local c = plr.Character
-            if not c then return false end
+        -- Cek apakah sudah tiba
+        local c = plr.Character
+        if c then
             local r = c:FindFirstChild("HumanoidRootPart")
-            if not r then return false end
-
-            if (r.Position - targetCFrame.Position).Magnitude <= ARRIVE_DIST then
+            if r and (r.Position - targetCFrame.Position).Magnitude <= ARRIVE_DIST then
                 return true
             end
+        end
+    end
 
-            if (r.Position - lastPos).Magnitude > 5 then
-                lastMove = tick()
-            end
-            lastPos = r.Position
-
-            if (tick() - lastMove) > 4 then break end
-            if (tick() - startT) > TWEEN_TIMEOUT then return false end
+    -- Kalau gagal, cek terakhir kali apakah sudah dekat
+    local c = plr.Character
+    if c then
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if r and (r.Position - targetCFrame.Position).Magnitude <= ARRIVE_DIST * 3 then
+            return true
         end
     end
     return false
