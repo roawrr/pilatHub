@@ -2730,45 +2730,74 @@ local function ScanMagnetAtIsland(islandPos)
     return list
 end
 
-local function ScanNPCAtIsland(islandPos, maxDist)
+--============ SCAN NPC (Prioritas Magnet saat event) ============
+local function ScanNPCAtIsland(islandPos, maxDist, prioritizeMagnet)
     maxDist = maxDist or SEARCH_RADIUS
-    local list = {}
+    local magnetList = {}
+    local normalList = {}
     local E = workspace:FindFirstChild("Enemies")
-    if not E then return list end
+    if not E then return {} end
+
     for _, v in pairs(E:GetChildren()) do
         if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and Attack.Alive(v) then
             local d = XZDist(v.HumanoidRootPart.Position, islandPos)
             if d <= maxDist then
-                table.insert(list, { Model = v, Dist = d })
+                local isMagnet = IsMagnetEnemy(v)
+                if isMagnet then
+                    table.insert(magnetList, { Model = v, Dist = d, IsMagnet = true })
+                else
+                    table.insert(normalList, { Model = v, Dist = d, IsMagnet = false })
+                end
             end
         end
     end
-    table.sort(list, function(a, b) return a.Dist < b.Dist end)
-    return list
+
+    -- Sort both by jarak
+    table.sort(magnetList, function(a, b) return a.Dist < b.Dist end)
+    table.sort(normalList, function(a, b) return a.Dist < b.Dist end)
+
+    -- Kalau prioritize magnet: magnet dulu, baru normal
+    if prioritizeMagnet then
+        local combined = {}
+        for _, v in ipairs(magnetList) do table.insert(combined, v) end
+        for _, v in ipairs(normalList) do table.insert(combined, v) end
+        return combined
+    else
+        -- AFK mode: normal aja (skip magnet biar tidak bentrok kalau ada event tak sengaja)
+        return normalList
+    end
 end
 
---============ VISIT ISLAND (NPC by NPC) ============
+--============ VISIT ISLAND (Dual Mode) ============
 local function VisitIsland(island)
     -- STEP 1: Tween ke pulau
-    StatusAction:SetDesc("Tweening to " .. island.Name)
+    local eventActive = IsMagnetEventActive()
+    local prefix = eventActive and "[EVENT]" or "[AFK]"
+    StatusAction:SetDesc(prefix .. " Tween to " .. island.Name)
     TweenTo(island.CFrame, ARRIVE_DIST, 40)
 
     if not _G.AutoMagnetEvent then return 0 end
 
-    -- STEP 2: Scan semua NPC
-    local npcs = ScanNPCAtIsland(island.CFrame.Position, SEARCH_RADIUS)
+    -- STEP 2: Scan NPC di pulau
+    -- Kalau event aktif → prioritas magnet
+    -- Kalau event tidak aktif → cuma NPC biasa (afk farm)
+    local npcs = ScanNPCAtIsland(island.CFrame.Position, SEARCH_RADIUS, eventActive)
+
     local killed = 0
 
-    -- STEP 3: Tween ke NPC satu per satu
+    -- STEP 3: Loop NPC satu per satu
     for i, entry in ipairs(npcs) do
         if not _G.AutoMagnetEvent then break end
         local npc = entry.Model
         if not npc.Parent or not npc:FindFirstChild("HumanoidRootPart") then continue end
 
         EquipMelee()
-        StatusAction:SetDesc("[" .. i .. "/" .. #npcs .. "] " .. npc.Name .. " @ " .. island.Name)
 
-        -- Tween ke NPC
+        -- Update status
+        local tag = entry.IsMagnet and "⭐MAGNET" or "NPC"
+        StatusAction:SetDesc(prefix .. " [" .. i .. "/" .. #npcs .. "] " .. tag .. ": " .. npc.Name)
+
+        -- STEP 4: Tween ke NPC
         local npcCF = npc.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0)
         local startT = tick()
         while _G.AutoMagnetEvent and (tick() - startT) < NPC_TIMEOUT do
@@ -2783,8 +2812,8 @@ local function VisitIsland(island)
             end
         end
 
-        -- Kill kalau event aktif
-        if IsMagnetEventActive() and Attack.Alive(npc) then
+        -- STEP 5: Kill NPC (selalu, tidak peduli event ON/OFF)
+        if Attack.Alive(npc) then
             local kStart = tick()
             repeat
                 task.wait(0.08)
@@ -2808,7 +2837,6 @@ local function VisitIsland(island)
 
     return killed
 end
-
 --============ GACHA ============
 local replicated = game:GetService("ReplicatedStorage")
 local GachaClient, GachaWindow
