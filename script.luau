@@ -2612,33 +2612,23 @@ local IslandOrder = {
 }
 
 --============ COMPUTE ISLAND CENTERS ============
+--============ ISLAND POSITIONS (hardcoded, akurat) ============
+local IslandPositions = {
+    ["Port Town"]       = Vector3.new(-290,    44,    5450),
+    ["Hydra Island"]    = Vector3.new(5228,    604,   345),
+    ["Floating Turtle"] = Vector3.new(-12000,  331,   -8500),
+    ["Haunted Castle"]  = Vector3.new(-9515,   142,   5536),
+    ["Sea of Treats"]   = Vector3.new(-1145,   13,    -14450),
+    ["Tiki Outpost"]    = Vector3.new(-16200,  90,    -17300),
+    -- Submerged di-detect pakai isInSubmergedIsland()
+}
+
+-- Alias supaya IslandCenters tetap valid (dipakai FastTween/dll)
 local IslandCenters = {}
-
-local function ComputeIslandCenter(islandName)
-    if islandName == "Submerged Island" then
-        return CFrame.new(10641.0918, -1953.92981, 9825.07031)
-    end
-    local npcData = IslandNPCs[islandName]
-    if not npcData then return nil end
-    local sumX, sumY, sumZ, count = 0, 0, 0, 0
-    local seen = {}
-    for _, cf in pairs(npcData) do
-        local key = string.format("%.0f_%.0f_%.0f", cf.Position.X, cf.Position.Y, cf.Position.Z)
-        if not seen[key] then
-            seen[key] = true
-            sumX = sumX + cf.Position.X
-            sumY = sumY + cf.Position.Y
-            sumZ = sumZ + cf.Position.Z
-            count = count + 1
-        end
-    end
-    if count == 0 then return nil end
-    return CFrame.new(sumX / count, sumY / count, sumZ / count)
+for name, pos in pairs(IslandPositions) do
+    IslandCenters[name] = CFrame.new(pos)
 end
-
-for _, name in ipairs(IslandOrder) do
-    IslandCenters[name] = ComputeIslandCenter(name)
-end
+IslandCenters["Submerged Island"] = CFrame.new(10641.09, -1953.92, 9825.07)
 
 --============ SUBMERGED CONFIG ============
 local SubmergedConfig = {
@@ -2729,9 +2719,8 @@ end
 local FAST_TWEEN_SPEED   = 320          -- studs/detik (default _tp = 200)
 local ROLLBACK_CHECK_SEC = 0.6          -- detik untuk cek rollback
 local ROLLBACK_THRESHOLD = 40           -- studs — kalau balik > ini, dianggap rollback
-
 local function FastTween(targetCFrame, distXZ, timeout)
-    distXZ  = distXZ or ARRIVE_DIST
+    distXZ  = distXZ  or ARRIVE_DIST
     timeout = timeout or 60
 
     local char = plr.Character
@@ -2739,89 +2728,32 @@ local function FastTween(targetCFrame, distXZ, timeout)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
 
-    -- Sudah sampai
     if XZDist(hrp.Position, targetCFrame.Position) <= distXZ then
         return true
     end
 
-    shouldTween = true
-
-    -- 1. Coba bypass system (anti-teleport)
-    pcall(function()
-        if CanBypassTeleport(targetCFrame) then
-            BypassTP(targetCFrame)
-            task.wait(0.4)
-        end
-    end)
-
-    -- 2. Request entrance kalau perlu
-    pcall(function()
-        requestentrance(targetCFrame)
-    end)
-
-    -- 3. Tween pakai `block` dengan speed custom
-    local distance  = (targetCFrame.Position - hrp.Position).Magnitude
-    local duration  = math.max(distance / FAST_TWEEN_SPEED, 0.05)
-    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-    local tween     = TweenService:Create(block, tweenInfo, {CFrame = targetCFrame})
-
-    tween:Play()
-
-    -- 4. Wait sampai selesai ATAU rollback terdeteksi
-    local startT    = tick()
-    local lastPos   = hrp.Position
-    local lastCheck = tick()
-    local rolledBack = false
-
-    while tween.PlaybackState == Enum.PlaybackState.Playing do
-        if not _G.AutoMagnetEvent then
-            tween:Cancel()
-            break
-        end
-
-        if (tick() - startT) > timeout then
-            tween:Cancel()
-            break
-        end
-
-        -- Cek rollback setiap 0.6 detik
-        if (tick() - lastCheck) >= ROLLBACK_CHECK_SEC then
-            local nowPos = hrp.Position
-            local moved  = (nowPos - lastPos).Magnitude
-            local toGo   = (targetCFrame.Position - nowPos).Magnitude
-
-            -- Rollback = tiba-tiba mundur jauh dari posisi sebelumnya
-            if moved > ROLLBACK_THRESHOLD and toGo > XZDist(lastPos, targetCFrame.Position) + 20 then
-                rolledBack = true
-                break
-            end
-
-            lastPos   = nowPos
-            lastCheck = tick()
-        end
-
-        task.wait(0.1)
+    -- Panggil _tp bawaan (sama persis dengan Auto Farm Level)
+    local ok, err = pcall(_tp, targetCFrame)
+    if not ok then
+        warn("[FastTween] _tp error: " .. tostring(err))
+        return false
     end
 
-    if rolledBack then
-        -- Anti-rollback: paksa posisi pakai notween
-        pcall(function()
-            notween(targetCFrame)
-        end)
+    -- Tunggu sampai HRP benar-benar sampai
+    local startT = tick()
+    while _G.AutoMagnetEvent and (tick() - startT) < timeout do
         task.wait(0.15)
-        pcall(function()
-            notween(targetCFrame)
-        end)
-        task.wait(0.15)
+        local c2 = plr.Character
+        local h2 = c2 and c2:FindFirstChild("HumanoidRootPart")
+        if not h2 then break end
+        if XZDist(h2.Position, targetCFrame.Position) <= distXZ then
+            return true
+        end
     end
 
-    -- Tunggu HRP sampai
-    local waitStart = tick()
-    while XZDist(hrp.Position, targetCFrame.Position) > distXZ and (tick() - waitStart) < 3 do
-        task.wait(0.05)
-    end
-
-    return XZDist(hrp.Position, targetCFrame.Position) <= distXZ
+    local c3 = plr.Character
+    local h3 = c3 and c3:FindFirstChild("HumanoidRootPart")
+    return h3 and XZDist(h3.Position, targetCFrame.Position) <= distXZ or false
 end
 
 --============ SUBMERGED HELPERS ============
@@ -3196,32 +3128,24 @@ local function DetectCurrentIsland()
     if not hrp then return nil end
 
     if isInSubmergedIsland() then
-        print("[Detect] Submerged Island")
         return "Submerged Island"
     end
 
     local myPos = hrp.Position
-    local MAX_DETECT_RADIUS = 2000
+    local MAX_DETECT_RADIUS = 3000
     local nearestName, nearestDist = nil, math.huge
 
-    for _, name in ipairs(IslandOrder) do
-        if name ~= "Submerged Island" then
-            local c = IslandCenters[name]
-            if c then
-                local d = XZDist(c.Position, myPos)
-                if d < nearestDist then
-                    nearestDist = d
-                    nearestName = name
-                end
-            end
+    for name, pos in pairs(IslandPositions) do
+        local d = XZDist(pos, myPos)
+        if d < nearestDist then
+            nearestDist = d
+            nearestName = name
         end
     end
 
     if nearestName and nearestDist <= MAX_DETECT_RADIUS then
-        print(string.format("[Detect] %s (dist %.0f)", nearestName, nearestDist))
         return nearestName
     end
-    print(string.format("[Detect] Ocean (nearest %s dist %.0f)", tostring(nearestName), nearestDist))
     return nil
 end
 
@@ -3246,66 +3170,68 @@ Tabs.Main:AddToggle({
     Description = "Sea 3 only. Cek pulau saat ini dulu, baru lanjut urutan.",
     Default = false,
     Callback = function(v)
-        if v and not World3 then
-            Window:Notify({ Title = "Error", Content = "Only works in Sea 3", Duration = 5 })
+    if v and not World3 then
+        Window:Notify({ Title = "Error", Content = "Only works in Sea 3", Duration = 5 })
+        return
+    end
+
+    if not v then
+        _G.AutoMagnetEvent = false
+        _G.MagnetReady     = false
+        _G.MagnetJustStarted = false
+        if activeTween then
+            pcall(function() activeTween:Cancel() end)
+            activeTween = nil
+        end
+        StatusAction:SetDesc("Idle")
+        return
+    end
+
+    -- ON
+    _G.AutoMagnetEvent   = true
+    _G.MagnetReady       = false  -- lock main loop dulu
+
+    task.spawn(function()
+        EquipMelee()
+        task.wait(0.3)
+
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            _G.AutoMagnetEvent = false
             return
         end
-        _G.AutoMagnetEvent = v
 
-        if v then
-            task.spawn(function()
-                EquipMelee()
-                task.wait(0.3)
+        -- Kill magnet nearby dulu
+        StatusAction:SetDesc("Scanning nearby magnet...")
+        KillMagnetInRadius(500)
 
-                local char = plr.Character
-                if not char or not char:FindFirstChild("HumanoidRootPart") then
-                    StatusAction:SetDesc("Waiting for character...")
-                    return
+        -- Deteksi island sekarang
+        local currentIslandName = DetectCurrentIsland()
+        local idx = currentIslandName and GetIslandIndex(currentIslandName)
+
+        if idx then
+            currentIndex = idx
+            StatusAction:SetDesc("Start: " .. currentIslandName)
+        else
+            -- Di laut → cari terdekat
+            local myPos = hrp.Position
+            local nIdx, nDist = 1, math.huge
+            for i, name in ipairs(IslandOrder) do
+                local pos = IslandPositions[name]
+                if pos then
+                    local d = XZDist(pos, myPos)
+                    if d < nDist then nDist = d; nIdx = i end
                 end
+            end
+            currentIndex = nIdx
+            StatusAction:SetDesc("Ocean → start: " .. IslandOrder[nIdx])
+        end
 
-                -- 1. Kill magnet musuh yang dekat dulu
-                StatusAction:SetDesc("Checking magnet NPC nearby...")
-                local killed = KillMagnetInRadius(500)
-                if killed > 0 then
-                    StatusAction:SetDesc("Killed " .. killed .. " nearby magnet")
-                    task.wait(1)
-                end
-
-                -- 2. Deteksi island tempat player berada
-                local currentIslandName = DetectCurrentIsland()
-
-                if currentIslandName then
-                    -- Player di sebuah pulau → mulai dari situ
-                    local idx = GetIslandIndex(currentIslandName)
-                    if idx then
-                        currentIndex = idx
-                        StatusAction:SetDesc("Starting at current island: " .. currentIslandName)
-
-                        -- KALAU PULAU SAAT INI = SUBMERGED → langsung process
-                        -- (loop utama akan handle enter/exit sendiri)
-                        if currentIslandName == "Submerged Island" then
-                            StatusAction:SetDesc("Already in Submerged - processing...")
-                        else
-                            StatusAction:SetDesc("Checking NPCs at " .. currentIslandName .. "...")
-                        end
-                        return
-                    end
-                end
-
-                -- 3. Fallback: player tidak di pulau mana pun (di laut / kosong)
-                --    → cari island terdekat seperti biasa
-                local myPos = char.HumanoidRootPart.Position
-                local nearestIdx, nearestDist = 1, math.huge
-                for i, name in ipairs(IslandOrder) do
-                    local center = IslandCenters[name]
-                    if center then
-                        local d = XZDist(center.Position, myPos)
-                        if d < nearestDist then
-                            nearestDist = d
-                            nearestIdx = i
-                        end
-                    end
-                end
+        _G.MagnetJustStarted = true
+        _G.MagnetReady = true    -- ← KUNCI!
+    end)
+end
                 currentIndex = nearestIdx
                 StatusAction:SetDesc("On ocean - starting from: " .. IslandOrder[nearestIdx])
             end)
