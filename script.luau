@@ -3196,6 +3196,7 @@ local function DetectCurrentIsland()
     if not hrp then return nil end
 
     if isInSubmergedIsland() then
+        print("[Detect] Submerged Island")
         return "Submerged Island"
     end
 
@@ -3217,8 +3218,10 @@ local function DetectCurrentIsland()
     end
 
     if nearestName and nearestDist <= MAX_DETECT_RADIUS then
+        print(string.format("[Detect] %s (dist %.0f)", nearestName, nearestDist))
         return nearestName
     end
+    print(string.format("[Detect] Ocean (nearest %s dist %.0f)", tostring(nearestName), nearestDist))
     return nil
 end
 
@@ -3378,61 +3381,78 @@ task.spawn(function()
 end)
 
 --============ MAIN LOOP — Check Island Sekarang → NPC by NPC → Pindah ============
+--============ MAIN LOOP — Target Island Based ============
 task.spawn(function()
     while task.wait(0.3) do
-        -- GATE 1: OFF
+        -- OFF → reset
         if not _G.AutoMagnetEvent then
             wasEventActive = false
             _G.MagnetReady = false
             continue
         end
 
-        -- GATE 2: tunggu deteksi awal selesai
+        -- Tunggu deteksi awal selesai
         if not _G.MagnetReady then continue end
 
         local char = plr.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
 
-        -- GATE 3: event baru aktif → reset (kecuali baru toggle)
+        -- Reset kalau event baru aktif
         local eventActive = IsMagnetEventActive()
         if eventActive and not wasEventActive and not _G.MagnetJustStarted then
             currentIndex = 1
-            pcall(function() StatusAction:SetDesc("Event started! Restart round") end)
+            pcall(function() StatusAction:SetDesc("Event started! Reset round") end)
             task.wait(0.5)
         end
         wasEventActive = eventActive
         _G.MagnetJustStarted = false
 
-        -- ---- Deteksi pulau sekarang ----
-        local currentIslandName = DetectCurrentIsland()
+        ---------------------------------------------------------
+        -- TARGET = island yang HARUS dikunjungi (dari urutan)
+        ---------------------------------------------------------
+        local targetIsland = IslandOrder[currentIndex]
+        if not targetIsland then
+            currentIndex = 1
+            continue
+        end
 
-        if currentIslandName then
-            -- Ada di pulau → proses pulau itu
-            local idx = GetIslandIndex(currentIslandName)
-            if idx then currentIndex = idx end
+        ---------------------------------------------------------
+        -- Deteksi player sekarang di pulau mana
+        ---------------------------------------------------------
+        local currentIsland = DetectCurrentIsland()
 
-            StatusAction:SetDesc("Processing current: " .. currentIslandName)
-            ProcessIsland(currentIslandName)
+        if currentIsland == targetIsland then
+            -----------------------------------------------------
+            -- SUDAH DI TARGET → proses NPC pulau ini
+            -----------------------------------------------------
+            pcall(function()
+                StatusAction:SetDesc("[" .. currentIndex .. "/" .. #IslandOrder .. "] Processing: " .. targetIsland)
+            end)
 
-            -- Selesai pulau ini → pindah ke index berikutnya
+            ProcessIsland(targetIsland)
+
+            -- Advance ke pulau berikutnya
             if _G.AutoMagnetEvent then
-                currentIndex = (idx or currentIndex) + 1
-                if currentIndex > #IslandOrder then currentIndex = 1 end
+                currentIndex = currentIndex + 1
+                if currentIndex > #IslandOrder then
+                    currentIndex = 1
+                end
+                task.wait(0.5)
             end
         else
-            -- Tidak di pulau mana pun → tween ke pulau urutan berikutnya
-            local nextIsland = IslandOrder[currentIndex]
-            if nextIsland then
-                local centerCF = IslandCenters[nextIsland]
-                if centerCF then
-                    StatusAction:SetDesc("Moving to " .. nextIsland)
-                    FastTween(centerCF, ARRIVE_DIST, 60)
-                end
-                currentIndex = currentIndex + 1
-                if currentIndex > #IslandOrder then currentIndex = 1 end
-            else
-                currentIndex = 1
+            -----------------------------------------------------
+            -- BELUM DI TARGET → tween ke pulau target
+            -----------------------------------------------------
+            local centerCF = IslandCenters[targetIsland]
+            if centerCF then
+                pcall(function()
+                    StatusAction:SetDesc("Moving to " .. targetIsland ..
+                        (currentIsland and (" (from " .. currentIsland .. ")") or " (from ocean)"))
+                end)
+                FastTween(centerCF, ARRIVE_DIST, 60)
             end
+            -- JANGAN advance index — nanti loop berikutnya cek lagi,
+            -- kalau sudah sampai, baru masuk blok atas
         end
     end
 end)
