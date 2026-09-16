@@ -2524,7 +2524,7 @@ task.spawn(function()
 end)
 
 --=============================================================
---  MAGNET EVENT — Fixed
+--  MAGNET EVENT — Manual Tween (Sea 3 Only)
 --=============================================================
 Tabs.Main:AddSection("Magnet Event")
 
@@ -2538,6 +2538,7 @@ local NPC_ARRIVE_DIST = 40
 local NPC_TIMEOUT     = 8
 local KILL_TIMEOUT    = 15
 local GACHA_DELAY     = 5
+local TWEEN_SPEED     = 200  -- studs/sec
 
 --============ NPC DATA ============
 local IslandNPCs = {
@@ -2599,7 +2600,7 @@ local IslandNPCs = {
     },
 }
 
---============ ISLAND ORDER (sequential) ============
+--============ ISLAND ORDER ============
 local IslandOrder = {
     "Port Town",
     "Hydra Island",
@@ -2610,7 +2611,7 @@ local IslandOrder = {
     "Submerged Island",
 }
 
---============ COMPUTE ISLAND CENTERS FROM NPC ============
+--============ COMPUTE ISLAND CENTERS ============
 local IslandCenters = {}
 
 local function ComputeIslandCenter(islandName)
@@ -2653,6 +2654,8 @@ local SubmergedConfig = {
 }
 
 --============ HELPERS ============
+local TweenService = game:GetService("TweenService")
+
 local function XZDist(p1, p2)
     return (Vector3.new(p1.X, 0, p1.Z) - Vector3.new(p2.X, 0, p2.Z)).Magnitude
 end
@@ -2690,6 +2693,64 @@ local function EquipMelee()
             return
         end
     end
+end
+
+--============ MANUAL TWEEN (Self-Contained) ============
+local activeTween = nil
+
+local function TweenTo(targetCFrame, distXZ, timeout)
+    distXZ = distXZ or ARRIVE_DIST
+    timeout = timeout or 40
+    
+    local char = plr.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    
+    -- Already arrived
+    if XZDist(hrp.Position, targetCFrame.Position) <= distXZ then
+        return true
+    end
+    
+    -- Cancel previous tween
+    if activeTween then
+        pcall(function() activeTween:Cancel() end)
+        activeTween = nil
+    end
+    
+    -- Anchor HRP biar physics tidak mengganggu tween
+    local wasAnchored = hrp.Anchored
+    hrp.Anchored = true
+    
+    local dist = (targetCFrame.Position - hrp.Position).Magnitude
+    local duration = math.clamp(dist / TWEEN_SPEED, 0.3, 30)
+    
+    local tween = TweenService:Create(
+        hrp,
+        TweenInfo.new(duration, Enum.EasingStyle.Linear),
+        {CFrame = targetCFrame}
+    )
+    activeTween = tween
+    tween:Play()
+    
+    local startT = tick()
+    while tween.PlaybackState == Enum.PlaybackState.Playing do
+        if not _G.AutoMagnetEvent then
+            tween:Cancel()
+            break
+        end
+        if (tick() - startT) > timeout then
+            tween:Cancel()
+            break
+        end
+        task.wait(0.1)
+    end
+    
+    -- Restore
+    hrp.Anchored = wasAnchored
+    activeTween = nil
+    
+    return XZDist(hrp.Position, targetCFrame.Position) <= distXZ
 end
 
 --============ SUBMERGED HELPERS ============
@@ -2745,30 +2806,27 @@ local function exitSubmergedIsland()
     return true
 end
 
---============ TWEEN ============
-local function TweenTo(targetCFrame, distXZ, timeout)
-    distXZ = distXZ or ARRIVE_DIST
-    timeout = timeout or 40
-    local startT = tick()
-    local attempts = 0
-    while _G.AutoMagnetEvent and (tick() - startT) < timeout and attempts < 500 do
-        task.wait(0.1)
-        attempts = attempts + 1
-        shouldTween = true
-        _B = true
-        pcall(function() _tp(targetCFrame) end)
-        local c = plr.Character
-        if c then
-            local r = c:FindFirstChild("HumanoidRootPart")
-            if r and XZDist(r.Position, targetCFrame.Position) <= distXZ then
-                return true
-            end
-        end
+--============ ATTACK (Manual, tidak pakai Attack.Kill) ============
+local function KillEnemy(v, enabled)
+    if not v or not enabled then return end
+    local hum = v:FindFirstChild("Humanoid")
+    local hrp = v:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return end
+    if hum.Health <= 0 then return end
+    
+    -- Tween ke atas musuh
+    TweenTo(hrp.CFrame * CFrame.new(0, 20, 0), 10, 3)
+    
+    -- Attack pakai tool yang lagi di-equip
+    local char = plr.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        pcall(function() tool:Activate() end)
     end
-    return false
 end
 
---============ KILL MAGNET IN RADIUS (for toggle ON) ============
+--============ KILL MAGNET IN RADIUS ============
 local function KillMagnetInRadius(radius)
     local E = workspace:FindFirstChild("Enemies")
     if not E then return 0 end
@@ -2782,13 +2840,11 @@ local function KillMagnetInRadius(radius)
             if d <= radius then
                 local kStart = tick()
                 repeat
-                    task.wait(0.08)
-                    shouldTween = true
+                    task.wait(0.1)
                     EquipMelee()
                     if v.Parent and v:FindFirstChild("HumanoidRootPart") then
-                        _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
+                        KillEnemy(v, true)
                     end
-                    Attack.Kill(v, true)
                 until not _G.AutoMagnetEvent
                     or not v.Parent
                     or not v:FindFirstChild("Humanoid")
@@ -2803,7 +2859,7 @@ end
 
 --============ VISIT ISLAND ============
 local function VisitIsland(islandName)
-    -- Exit Submerged if target is not Submerged
+    -- Exit Submerged
     if isInSubmergedIsland() and islandName ~= "Submerged Island" then
         StatusAction:SetDesc("Exiting Submerged...")
         exitSubmergedIsland()
@@ -2812,7 +2868,7 @@ local function VisitIsland(islandName)
 
     if not _G.AutoMagnetEvent then return end
 
-    -- Enter Submerged if target is Submerged
+    -- Enter Submerged
     if islandName == "Submerged Island" then
         if not isInSubmergedIsland() then
             StatusAction:SetDesc("Entering Submerged Island...")
@@ -2840,7 +2896,7 @@ local function VisitIsland(islandName)
     local npcData = IslandNPCs[islandName]
     if not npcData then return end
 
-    -- Dedup by CFrame
+    -- Dedup
     local uniqueCFs = {}
     local seen = {}
     for npcName, npcCF in pairs(npcData) do
@@ -2853,17 +2909,16 @@ local function VisitIsland(islandName)
 
     for i, npc in ipairs(uniqueCFs) do
         if not _G.AutoMagnetEvent then break end
-        StatusAction:SetDesc("[" .. i .. "/" .. #uniqueCFs .. "] " .. npc.Name .. " @ " .. islandName)
+        StatusAction:SetDesc("[" .. i .. "/" .. #uniqueCFs .. "] " .. npc.Name)
 
         EquipMelee()
-        local npcPos = npc.CFrame * CFrame.new(0, 20, 0)
-        TweenTo(npcPos, NPC_ARRIVE_DIST, NPC_TIMEOUT)
+        TweenTo(npc.CFrame * CFrame.new(0, 20, 0), NPC_ARRIVE_DIST, NPC_TIMEOUT)
 
         if not _G.AutoMagnetEvent then break end
         task.wait(0.3)
         EquipMelee()
 
-        -- Kill magnet enemies near this NPC position
+        -- Kill magnet enemies near this NPC
         local E = workspace:FindFirstChild("Enemies")
         if E then
             for _, v in pairs(E:GetChildren()) do
@@ -2872,13 +2927,9 @@ local function VisitIsland(islandName)
                     if d <= 200 then
                         local kStart = tick()
                         repeat
-                            task.wait(0.08)
-                            shouldTween = true
+                            task.wait(0.1)
                             EquipMelee()
-                            if v.Parent and v:FindFirstChild("HumanoidRootPart") then
-                                _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
-                            end
-                            Attack.Kill(v, true)
+                            KillEnemy(v, true)
                         until not _G.AutoMagnetEvent
                             or not v.Parent
                             or not v:FindFirstChild("Humanoid")
@@ -2982,11 +3033,9 @@ Tabs.Main:AddToggle({
         _G.AutoMagnetEvent = v
         if v then
             task.spawn(function()
-                -- Step 1: Equip melee
                 EquipMelee()
                 task.wait(0.3)
 
-                -- Step 2: Check current island NPC first
                 local char = plr.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     StatusAction:SetDesc("Checking magnet NPC nearby...")
@@ -2996,7 +3045,6 @@ Tabs.Main:AddToggle({
                         task.wait(1)
                     end
 
-                    -- Step 3: Determine nearest island
                     local myPos = char.HumanoidRootPart.Position
                     local nearestIdx, nearestDist = 1, math.huge
                     for i, name in ipairs(IslandOrder) do
@@ -3014,8 +3062,10 @@ Tabs.Main:AddToggle({
                 end
             end)
         else
-            shouldTween = false
-            _B = false
+            if activeTween then
+                pcall(function() activeTween:Cancel() end)
+                activeTween = nil
+            end
             StatusAction:SetDesc("Idle")
         end
     end
@@ -3112,21 +3162,12 @@ task.spawn(function()
             continue
         end
 
-        _B = true
-        shouldTween = true
-        pcall(function()
-            if sethiddenproperty then
-                sethiddenproperty(plr, "SimulationRadius", math.huge)
-            end
-        end)
-
         pcall(function() StatusAction:SetDesc("[" .. currentIndex .. "/" .. #IslandOrder .. "] " .. islandName) end)
         VisitIsland(islandName)
         currentIndex = currentIndex + 1
     end
 end)
 
---============ STARTUP ============
 Window:Notify({
     Title = "Magnet Event",
     Content = World3 and ("Loaded! " .. #IslandOrder .. " islands.") or "Not Sea 3 — feature disabled.",
