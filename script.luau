@@ -2659,16 +2659,45 @@ local TweenService = game:GetService("TweenService")
 local function XZDist(p1, p2)
     return (Vector3.new(p1.X, 0, p1.Z) - Vector3.new(p2.X, 0, p2.Z)).Magnitude
 end
+--============ DETEKSI MAGNET (diperluas) ============
+local MAGNET_ATTRS = {
+    "MagnetEnemy",
+    "MagnetEventStage",
+    "Magnetized",
+    "OverchargedMagnet",
+    "OverchargedMagnetized",
+    "MagnetEvent",
+    "Magnet",
+    "MagnetType",
+    "IsMagnet",
+    "IsOvercharged",
+    "Overcharged",
+}
 
 local function IsMagnetEnemy(v)
     if not v or not v.Parent then return false end
     if not v:FindFirstChild("Humanoid") then return false end
     if not v:FindFirstChild("HumanoidRootPart") then return false end
     if v.Humanoid.Health <= 0 then return false end
-    local ok, isMagnet = pcall(function() return v:GetAttribute("MagnetEnemy") end)
-    if ok and isMagnet == true then return true end
-    local ok2, stage = pcall(function() return v:GetAttribute("MagnetEventStage") end)
-    if ok2 and stage and stage > 0 then return true end
+
+    -- 1. Cek semua attribute magnet
+    for _, attrName in ipairs(MAGNET_ATTRS) do
+        local ok, val = pcall(function() return v:GetAttribute(attrName) end)
+        if ok and val ~= nil then
+            if val == true then return true end
+            if type(val) == "number" and val > 0 then return true end
+            if type(val) == "string" and val ~= "" and val ~= "false" then
+                return true
+            end
+        end
+    end
+
+    -- 2. Cek nama mengandung "magnet" (case-insensitive)
+    local nameLower = string.lower(tostring(v.Name or ""))
+    if string.find(nameLower, "magnet", 1, true) then
+        return true
+    end
+
     return false
 end
 
@@ -2695,41 +2724,104 @@ local function EquipMelee()
     end
 end
 
---============ MANUAL TWEEN (Same as Auto Farm Level) ============
-local function TweenTo(targetCFrame, distXZ, timeout)
-    distXZ = distXZ or ARRIVE_DIST
+--============ MANUAL TWEEN (Same as Auto Farm Level) ===========
+--============ FAST TWEEN (Anti-Rollback) ============
+local FAST_TWEEN_SPEED   = 320          -- studs/detik (default _tp = 200)
+local ROLLBACK_CHECK_SEC = 0.6          -- detik untuk cek rollback
+local ROLLBACK_THRESHOLD = 40           -- studs — kalau balik > ini, dianggap rollback
+
+local function FastTween(targetCFrame, distXZ, timeout)
+    distXZ  = distXZ or ARRIVE_DIST
     timeout = timeout or 60
-    
+
     local char = plr.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    
-    -- Sudah sampai? Langsung return
+
+    -- Sudah sampai
     if XZDist(hrp.Position, targetCFrame.Position) <= distXZ then
         return true
     end
-    
-    -- Paksa flag aktif (sama seperti Auto Farm Level)
+
     shouldTween = true
-    
-    -- Spam _tp dalam repeat loop (sama seperti cara farm level bekerja)
-    local startT = tick()
-    repeat
-        task.wait(Sec)
-        _tp(targetCFrame)
-        
-        local char2 = plr.Character
-        local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
-        if not hrp2 then break end
-        if XZDist(hrp2.Position, targetCFrame.Position) <= distXZ then
-            return true
+
+    -- 1. Coba bypass system (anti-teleport)
+    pcall(function()
+        if CanBypassTeleport(targetCFrame) then
+            BypassTP(targetCFrame)
+            task.wait(0.4)
         end
-    until not _G.AutoMagnetEvent or (tick() - startT) > timeout
-    
-    local char3 = plr.Character
-    local hrp3 = char3 and char3:FindFirstChild("HumanoidRootPart")
-    return hrp3 and XZDist(hrp3.Position, targetCFrame.Position) <= distXZ or false
+    end)
+
+    -- 2. Request entrance kalau perlu
+    pcall(function()
+        requestentrance(targetCFrame)
+    end)
+
+    -- 3. Tween pakai `block` dengan speed custom
+    local distance  = (targetCFrame.Position - hrp.Position).Magnitude
+    local duration  = math.max(distance / FAST_TWEEN_SPEED, 0.05)
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween     = TweenService:Create(block, tweenInfo, {CFrame = targetCFrame})
+
+    tween:Play()
+
+    -- 4. Wait sampai selesai ATAU rollback terdeteksi
+    local startT    = tick()
+    local lastPos   = hrp.Position
+    local lastCheck = tick()
+    local rolledBack = false
+
+    while tween.PlaybackState == Enum.PlaybackState.Playing do
+        if not _G.AutoMagnetEvent then
+            tween:Cancel()
+            break
+        end
+
+        if (tick() - startT) > timeout then
+            tween:Cancel()
+            break
+        end
+
+        -- Cek rollback setiap 0.6 detik
+        if (tick() - lastCheck) >= ROLLBACK_CHECK_SEC then
+            local nowPos = hrp.Position
+            local moved  = (nowPos - lastPos).Magnitude
+            local toGo   = (targetCFrame.Position - nowPos).Magnitude
+
+            -- Rollback = tiba-tiba mundur jauh dari posisi sebelumnya
+            if moved > ROLLBACK_THRESHOLD and toGo > XZDist(lastPos, targetCFrame.Position) + 20 then
+                rolledBack = true
+                break
+            end
+
+            lastPos   = nowPos
+            lastCheck = tick()
+        end
+
+        task.wait(0.1)
+    end
+
+    if rolledBack then
+        -- Anti-rollback: paksa posisi pakai notween
+        pcall(function()
+            notween(targetCFrame)
+        end)
+        task.wait(0.15)
+        pcall(function()
+            notween(targetCFrame)
+        end)
+        task.wait(0.15)
+    end
+
+    -- Tunggu HRP sampai
+    local waitStart = tick()
+    while XZDist(hrp.Position, targetCFrame.Position) > distXZ and (tick() - waitStart) < 3 do
+        task.wait(0.05)
+    end
+
+    return XZDist(hrp.Position, targetCFrame.Position) <= distXZ
 end
 
 --============ SUBMERGED HELPERS ============
@@ -2906,109 +2998,116 @@ local function CheckNPCsOnIsland(islandName)
     return killedCount
 end
 
---============ VISIT ISLAND (Tiki dulu, baru Submerged) ============
-local function VisitIsland(islandName)
-    ---------------------------------------------------------------
-    -- 1. KALAU DI SUBMERGED TAPI TARGET BUKAN SUBMERGED → KELUAR
-    ---------------------------------------------------------------
+--============ HELPER: Cek magnet di sekitar NPC ============
+local function KillMagnetNearPosition(pos, radius, timeout)
+    radius  = radius  or 250
+    timeout = timeout or KILL_TIMEOUT
+
+    local E = workspace:FindFirstChild("Enemies")
+    if not E then return 0 end
+
+    local killed = 0
+    for _, v in pairs(E:GetChildren()) do
+        if not _G.AutoMagnetEvent then break end
+        if IsMagnetEnemy(v) and v:FindFirstChild("HumanoidRootPart") then
+            local d = (v.HumanoidRootPart.Position - pos).Magnitude
+            if d <= radius then
+                local kStart = tick()
+                repeat
+                    task.wait(0.1)
+                    EquipMelee()
+                    if v.Parent and v:FindFirstChild("HumanoidRootPart") then
+                        KillEnemy(v, true)
+                    end
+                until not _G.AutoMagnetEvent
+                    or not v.Parent
+                    or not v:FindFirstChild("Humanoid")
+                    or v.Humanoid.Health <= 0
+                    or (tick() - kStart) > timeout
+                killed = killed + 1
+            end
+        end
+    end
+    return killed
+end
+
+--============ PROSES PULAU (NPC-by-NPC) ============
+local function ProcessIsland(islandName)
+    -- ---- Handle submerged ----
     if isInSubmergedIsland() and islandName ~= "Submerged Island" then
-        StatusAction:SetDesc("Exiting Submerged before tween...")
-        local exitStart = tick()
+        StatusAction:SetDesc("Exiting Submerged...")
+        local t0 = tick()
         repeat
             exitSubmergedIsland()
             task.wait(1.5)
-        until not isInSubmergedIsland() or (tick() - exitStart) > 20
-        if isInSubmergedIsland() then
-            StatusAction:SetDesc("Failed to exit Submerged - retrying")
-            return
-        end
+        until not isInSubmergedIsland() or (tick() - t0) > 20
         task.wait(1.5)
     end
 
     if not _G.AutoMagnetEvent then return end
 
-    ---------------------------------------------------------------
-    -- 2. KALAU TARGET = SUBMERGED → CEK TIKI OUTPOST DULU
-    ---------------------------------------------------------------
     if islandName == "Submerged Island" then
-        -- 2a. Pastikan kita di area Tiki Outpost (permukaan)
         if not isInSubmergedIsland() then
-            local tikiCenter = IslandCenters["Tiki Outpost"]
-            if tikiCenter then
-                local char = plr.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local far = not hrp or XZDist(hrp.Position, tikiCenter.Position) > 1500
-                if far then
-                    StatusAction:SetDesc("Tween to Tiki Outpost first")
-                    TweenTo(tikiCenter, ARRIVE_DIST, 40)
-                    task.wait(1)
-                end
-            end
-
-            -- 2b. CEK NPC TIKI OUTPOST DULU
-            StatusAction:SetDesc("Checking Tiki Outpost NPCs...")
-            local killedAtTiki = CheckNPCsOnIsland("Tiki Outpost")
-            StatusAction:SetDesc("Tiki Outpost done (" .. killedAtTiki .. " magnet)")
-            task.wait(1)
-        end
-
-        if not _G.AutoMagnetEvent then return end
-
-        -- 2c. Baru masuk Submerged
-        if not isInSubmergedIsland() then
-            StatusAction:SetDesc("Entering Submerged Island...")
+            StatusAction:SetDesc("Entering Submerged...")
             enterSubmergedIsland()
-            local t = tick()
-            while _G.AutoMagnetEvent and not isInSubmergedIsland() and (tick() - t) < 30 do
+            local t0 = tick()
+            while _G.AutoMagnetEvent and not isInSubmergedIsland() and (tick() - t0) < 30 do
                 task.wait(0.5)
             end
-            if not isInSubmergedIsland() then
-                StatusAction:SetDesc("Failed to enter Submerged")
-                return
-            end
+            if not isInSubmergedIsland() then return end
             task.wait(2)
         end
+    end
 
-        -----------------------------------------------------------
-        -- 2d. Cek NPC Submerged
-        -----------------------------------------------------------
-        if not _G.AutoMagnetEvent then return end
-        StatusAction:SetDesc("Checking Submerged Island NPCs...")
-        CheckNPCsOnIsland("Submerged Island")
+    -- ---- Ambil NPC list pulau ini ----
+    local npcData = IslandNPCs[islandName]
+    if not npcData then return end
 
-        -----------------------------------------------------------
-        -- 2e. Auto-exit setelah selesai
-        -----------------------------------------------------------
-        if _G.AutoMagnetEvent then
-            StatusAction:SetDesc("Finished Submerged - exiting...")
-            local exitStart = tick()
-            repeat
-                exitSubmergedIsland()
-                task.wait(1.5)
-            until not isInSubmergedIsland() or (tick() - exitStart) > 20
-
-            if isInSubmergedIsland() then
-                StatusAction:SetDesc("Stuck in Submerged - will retry")
-            else
-                StatusAction:SetDesc("Exited Submerged")
-            end
-            task.wait(1.5)
+    -- Dedup CFrame
+    local uniqueCFs, seen = {}, {}
+    for npcName, npcCF in pairs(npcData) do
+        local key = string.format("%.0f_%.0f_%.0f",
+            npcCF.Position.X, npcCF.Position.Y, npcCF.Position.Z)
+        if not seen[key] then
+            seen[key] = true
+            table.insert(uniqueCFs, { Name = npcName, CFrame = npcCF })
         end
-
-        return  -- selesai, tidak perlu proses bawah
     end
 
-    ---------------------------------------------------------------
-    -- 3. SURFACE ISLAND BIASA (Port Town, Hydra, dll)
-    ---------------------------------------------------------------
-    local centerCF = IslandCenters[islandName]
-    if centerCF then
-        StatusAction:SetDesc("Tween to " .. islandName)
-        TweenTo(centerCF, ARRIVE_DIST, 40)
+    -- ---- Tween NPC by NPC ----
+    for i, npc in ipairs(uniqueCFs) do
+        if not _G.AutoMagnetEvent then break end
+
+        StatusAction:SetDesc(
+            "[" .. islandName .. " " .. i .. "/" .. #uniqueCFs .. "] " .. npc.Name
+        )
+
+        EquipMelee()
+        FastTween(npc.CFrame * CFrame.new(0, 20, 0), NPC_ARRIVE_DIST, NPC_TIMEOUT)
+
+        if not _G.AutoMagnetEvent then break end
+
+        task.wait(0.2)
+        EquipMelee()
+
+        -- Kill magnet di sekitar NPC
+        local killed = KillMagnetNearPosition(npc.CFrame.Position, 250, KILL_TIMEOUT)
+        if killed > 0 then
+            StatusAction:SetDesc("Killed " .. killed .. " magnet at " .. npc.Name)
+        end
+        task.wait(0.2)
     end
 
-    if not _G.AutoMagnetEvent then return end
-    CheckNPCsOnIsland(islandName)
+    -- ---- Auto-exit kalau selesai di submerged ----
+    if islandName == "Submerged Island" and _G.AutoMagnetEvent then
+        StatusAction:SetDesc("Exiting Submerged after NPCs...")
+        local t0 = tick()
+        repeat
+            exitSubmergedIsland()
+            task.wait(1.5)
+        until not isInSubmergedIsland() or (tick() - t0) > 20
+        task.wait(1.5)
+    end
 end
 
 --============ GACHA ============
@@ -3278,31 +3377,23 @@ task.spawn(function()
     end
 end)
 
+--============ MAIN LOOP — Check Island Sekarang → NPC by NPC → Pindah ============
 task.spawn(function()
     while task.wait(0.3) do
-        ----------------------------------------------------------
-        -- GATE 1: flag OFF → reset
-        ----------------------------------------------------------
+        -- GATE 1: OFF
         if not _G.AutoMagnetEvent then
             wasEventActive = false
             _G.MagnetReady = false
             continue
         end
 
-        ----------------------------------------------------------
-        -- GATE 2: tunggu deteksi selesai (jangan proses dulu)
-        ----------------------------------------------------------
-        if not _G.MagnetReady then
-            continue
-        end
+        -- GATE 2: tunggu deteksi awal selesai
+        if not _G.MagnetReady then continue end
 
         local char = plr.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
 
-        ----------------------------------------------------------
-        -- GATE 3: reset ke 1 kalau event baru active
-        --         TAPI skip kalau baru saja toggle ON
-        ----------------------------------------------------------
+        -- GATE 3: event baru aktif → reset (kecuali baru toggle)
         local eventActive = IsMagnetEventActive()
         if eventActive and not wasEventActive and not _G.MagnetJustStarted then
             currentIndex = 1
@@ -3310,23 +3401,39 @@ task.spawn(function()
             task.wait(0.5)
         end
         wasEventActive = eventActive
-        _G.MagnetJustStarted = false   -- konsumsi flag
+        _G.MagnetJustStarted = false
 
-        if currentIndex > #IslandOrder then
-            currentIndex = 1
-            pcall(function() StatusAction:SetDesc("Round complete, restarting...") end)
-            task.wait(1)
+        -- ---- Deteksi pulau sekarang ----
+        local currentIslandName = DetectCurrentIsland()
+
+        if currentIslandName then
+            -- Ada di pulau → proses pulau itu
+            local idx = GetIslandIndex(currentIslandName)
+            if idx then currentIndex = idx end
+
+            StatusAction:SetDesc("Processing current: " .. currentIslandName)
+            ProcessIsland(currentIslandName)
+
+            -- Selesai pulau ini → pindah ke index berikutnya
+            if _G.AutoMagnetEvent then
+                currentIndex = (idx or currentIndex) + 1
+                if currentIndex > #IslandOrder then currentIndex = 1 end
+            end
+        else
+            -- Tidak di pulau mana pun → tween ke pulau urutan berikutnya
+            local nextIsland = IslandOrder[currentIndex]
+            if nextIsland then
+                local centerCF = IslandCenters[nextIsland]
+                if centerCF then
+                    StatusAction:SetDesc("Moving to " .. nextIsland)
+                    FastTween(centerCF, ARRIVE_DIST, 60)
+                end
+                currentIndex = currentIndex + 1
+                if currentIndex > #IslandOrder then currentIndex = 1 end
+            else
+                currentIndex = 1
+            end
         end
-
-        local islandName = IslandOrder[currentIndex]
-        if not islandName then
-            currentIndex = 1
-            continue
-        end
-
-        pcall(function() StatusAction:SetDesc("[" .. currentIndex .. "/" .. #IslandOrder .. "] " .. islandName) end)
-        VisitIsland(islandName)
-        currentIndex = currentIndex + 1
     end
 end)
 
