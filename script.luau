@@ -2695,61 +2695,51 @@ local function EquipMelee()
     end
 end
 
---============ MANUAL TWEEN (Self-Contained) ============
+--============ MANUAL TWEEN (Block-based, no conflict) ============
 local activeTween = nil
 
 local function TweenTo(targetCFrame, distXZ, timeout)
     distXZ = distXZ or ARRIVE_DIST
-    timeout = timeout or 40
+    timeout = timeout or 60
     
     local char = plr.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
     
-    -- Already arrived
+    -- Sudah sampai
     if XZDist(hrp.Position, targetCFrame.Position) <= distXZ then
         return true
     end
     
-    -- Cancel previous tween
+    -- Pastikan block-follow loop aktif (supaya HRP ikut block)
+    shouldTween = true
+    getgenv().OnFarm = true
+    
+    -- Cancel tween sebelumnya
     if activeTween then
         pcall(function() activeTween:Cancel() end)
         activeTween = nil
     end
     
-    -- Anchor HRP biar physics tidak mengganggu tween
-    local wasAnchored = hrp.Anchored
-    hrp.Anchored = true
-    
-    local dist = (targetCFrame.Position - hrp.Position).Magnitude
-    local duration = math.clamp(dist / TWEEN_SPEED, 0.3, 30)
-    
-    local tween = TweenService:Create(
-        hrp,
-        TweenInfo.new(duration, Enum.EasingStyle.Linear),
-        {CFrame = targetCFrame}
-    )
+    -- Pakai _tp bawaan script (tween `block`, bukan HRP)
+    local tween = _tp(targetCFrame)
     activeTween = tween
-    tween:Play()
     
+    -- Tunggu sampai HRP benar-benar sampai di target
     local startT = tick()
-    while tween.PlaybackState == Enum.PlaybackState.Playing do
-        if not _G.AutoMagnetEvent then
-            tween:Cancel()
-            break
+    while _G.AutoMagnetEvent and (tick() - startT) < timeout do
+        task.wait(0.15)
+        local char2 = plr.Character
+        local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
+        if not hrp2 then break end
+        if XZDist(hrp2.Position, targetCFrame.Position) <= distXZ then
+            activeTween = nil
+            return true
         end
-        if (tick() - startT) > timeout then
-            tween:Cancel()
-            break
-        end
-        task.wait(0.1)
     end
     
-    -- Restore
-    hrp.Anchored = wasAnchored
     activeTween = nil
-    
     return XZDist(hrp.Position, targetCFrame.Position) <= distXZ
 end
 
