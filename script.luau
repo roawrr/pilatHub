@@ -2524,10 +2524,12 @@ task.spawn(function()
 end)
 
 --=============================================================
---  MAGNET EVENT — Full
---  Status + Next Event + Auto Farm + Auto Gacha + Open UI
+--  MAGNET EVENT — Fixed
 --=============================================================
 Tabs.Main:AddSection("Magnet Event")
+
+--============ SEA CHECK ============
+local World3 = game.PlaceId == 7449423635 or game.PlaceId == 100117331123089
 
 --============ CONFIG ============
 local BOX_NAME        = "MagnetEventGacha26"
@@ -2597,22 +2599,50 @@ local IslandNPCs = {
     },
 }
 
---============ ISLAND ORDER ============
+--============ ISLAND ORDER (sequential) ============
 local IslandOrder = {
-    { Name = "Port Town",        CFrame = CFrame.new(-610.37, 57.83, 6436.34) },
-    { Name = "Hydra Island",     CFrame = CFrame.new(5298.90, -989.57, 344.72) },
-    { Name = "Floating Turtle",  CFrame = CFrame.new(-12164.61, -548.86, -8454.87) },
-    { Name = "Haunted Castle",   CFrame = CFrame.new(-9530.61, -132.86, 5763.13) },
-    { Name = "Sea of Treats",    CFrame = CFrame.new(-1505.27, 57.84, -10724.06) },
-    { Name = "Tiki Outpost",     CFrame = CFrame.new(-16641.51, 213.31, 435.38) },
-    { Name = "Submerged Island", CFrame = CFrame.new(10641.0918, -1953.92981, 9825.07031) },
+    "Port Town",
+    "Hydra Island",
+    "Floating Turtle",
+    "Haunted Castle",
+    "Sea of Treats",
+    "Tiki Outpost",
+    "Submerged Island",
 }
+
+--============ COMPUTE ISLAND CENTERS FROM NPC ============
+local IslandCenters = {}
+
+local function ComputeIslandCenter(islandName)
+    if islandName == "Submerged Island" then
+        return CFrame.new(10641.0918, -1953.92981, 9825.07031)
+    end
+    local npcData = IslandNPCs[islandName]
+    if not npcData then return nil end
+    local sumX, sumY, sumZ, count = 0, 0, 0, 0
+    local seen = {}
+    for _, cf in pairs(npcData) do
+        local key = string.format("%.0f_%.0f_%.0f", cf.Position.X, cf.Position.Y, cf.Position.Z)
+        if not seen[key] then
+            seen[key] = true
+            sumX = sumX + cf.Position.X
+            sumY = sumY + cf.Position.Y
+            sumZ = sumZ + cf.Position.Z
+            count = count + 1
+        end
+    end
+    if count == 0 then return nil end
+    return CFrame.new(sumX / count, sumY / count, sumZ / count)
+end
+
+for _, name in ipairs(IslandOrder) do
+    IslandCenters[name] = ComputeIslandCenter(name)
+end
 
 --============ SUBMERGED CONFIG ============
 local SubmergedConfig = {
     NPC_CFrame          = CFrame.new(-16271.126, 25.5847301, 1371.98755),
     FirstDrop_CFrame    = CFrame.new(9466, 92, 9498),
-    Drop_CFrame         = CFrame.new(9299, -1554, 9551),
     IslandCenter_CFrame = CFrame.new(10641.0918, -1953.92981, 9825.07031),
     RemoteName          = "RF/SubmarineWorkerSpeak",
     RemoteCommand       = "TravelToSubmergedIsland",
@@ -2621,83 +2651,6 @@ local SubmergedConfig = {
     NPCInteractRadius   = 10,
     NPCTweenSpeed       = 300,
 }
-
---============ SUBMERGED HELPERS ============
-local function isInSubmergedIsland()
-    local char = plr.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    local p = hrp.Position
-    local c = SubmergedConfig.IslandCenter_CFrame.Position
-    local dx = p.X - c.X
-    local dz = p.Z - c.Z
-    return (dx * dx + dz * dz) <= (SubmergedConfig.IslandDetectRadius ^ 2)
-end
-
-local function talkToSubmarineWorker()
-    local char = plr.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    local npcPos = SubmergedConfig.NPC_CFrame
-    local dist = (hrp.Position - npcPos.Position).Magnitude
-    if dist > SubmergedConfig.NPCInteractRadius then
-        local speed = SubmergedConfig.NPCTweenSpeed
-        local part = Instance.new("Part")
-        part.Anchored = true
-        part.CanCollide = false
-        part.Transparency = 1
-        part.Size = Vector3.new(4, 1, 4)
-        part.CFrame = hrp.CFrame
-        part.Parent = workspace
-        local tween = game:GetService("TweenService"):Create(
-            part, TweenInfo.new(dist / speed, Enum.EasingStyle.Linear),
-            { CFrame = npcPos * CFrame.new(0, 3, 0) }
-        )
-        local conn
-        conn = part:GetPropertyChangedSignal("CFrame"):Connect(function()
-            if hrp and hrp.Parent then hrp.CFrame = part.CFrame end
-        end)
-        tween:Play()
-        tween.Completed:Wait()
-        if conn then conn:Disconnect() end
-        part:Destroy()
-        return true
-    end
-    return true
-end
-
-local function enterSubmergedIsland()
-    if isInSubmergedIsland() then return false end
-    talkToSubmarineWorker()
-    task.wait(0.5)
-    local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-    local remote = net:FindFirstChild(SubmergedConfig.RemoteName)
-    if not remote then return false end
-    pcall(function() remote:InvokeServer(SubmergedConfig.BossCheckCommand) end)
-    task.wait(0.5)
-    return pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
-end
-
-local function exitSubmergedIsland()
-    if not isInSubmergedIsland() then return false end
-    local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    hrp.CFrame = SubmergedConfig.FirstDrop_CFrame
-    task.wait(0.5)
-    local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
-    local remote = net:FindFirstChild(SubmergedConfig.RemoteName)
-    if remote then
-        pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
-    end
-    task.wait(1)
-    if isInSubmergedIsland() then
-        talkToSubmarineWorker()
-        task.wait(1)
-    end
-    return true
-end
 
 --============ HELPERS ============
 local function XZDist(p1, p2)
@@ -2739,6 +2692,59 @@ local function EquipMelee()
     end
 end
 
+--============ SUBMERGED HELPERS ============
+local function isInSubmergedIsland()
+    local char = plr.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local p = hrp.Position
+    local c = SubmergedConfig.IslandCenter_CFrame.Position
+    local dx = p.X - c.X
+    local dz = p.Z - c.Z
+    return (dx * dx + dz * dz) <= (SubmergedConfig.IslandDetectRadius ^ 2)
+end
+
+local function talkToSubmarineWorker()
+    local char = plr.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local npcPos = SubmergedConfig.NPC_CFrame
+    local dist = (hrp.Position - npcPos.Position).Magnitude
+    if dist > SubmergedConfig.NPCInteractRadius then
+        TweenTo(npcPos * CFrame.new(0, 3, 0), SubmergedConfig.NPCInteractRadius, 15)
+    end
+    return true
+end
+
+local function enterSubmergedIsland()
+    if isInSubmergedIsland() then return false end
+    talkToSubmarineWorker()
+    task.wait(0.5)
+    local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
+    local remote = net:FindFirstChild(SubmergedConfig.RemoteName)
+    if not remote then return false end
+    pcall(function() remote:InvokeServer(SubmergedConfig.BossCheckCommand) end)
+    task.wait(0.5)
+    return pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
+end
+
+local function exitSubmergedIsland()
+    if not isInSubmergedIsland() then return false end
+    local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    hrp.CFrame = SubmergedConfig.FirstDrop_CFrame
+    task.wait(0.5)
+    local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
+    local remote = net:FindFirstChild(SubmergedConfig.RemoteName)
+    if remote then
+        pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
+    end
+    task.wait(1)
+    return true
+end
+
 --============ TWEEN ============
 local function TweenTo(targetCFrame, distXZ, timeout)
     distXZ = distXZ or ARRIVE_DIST
@@ -2762,28 +2768,42 @@ local function TweenTo(targetCFrame, distXZ, timeout)
     return false
 end
 
---============ NEXT EVENT TIME ============
-local function GetNextEventMinutes()
-    local date = os.date("*t")
-    local nowMin = date.hour * 60 + date.min + date.sec / 60
-    local nextHour = (date.hour + 1) % 24
-    local diff = (nextHour * 60) - nowMin
-    if diff < 0 then diff = diff + 24 * 60 end
-    return diff
-end
-
-local function FormatNextEvent()
-    local mins = GetNextEventMinutes()
-    local date = os.date("*t")
-    local nextHour = (date.hour + 1) % 24
-    return string.format("%d min lagi (%02d:00)", math.floor(mins), nextHour)
+--============ KILL MAGNET IN RADIUS (for toggle ON) ============
+local function KillMagnetInRadius(radius)
+    local E = workspace:FindFirstChild("Enemies")
+    if not E then return 0 end
+    local char = plr.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return 0 end
+    local myPos = char.HumanoidRootPart.Position
+    local killed = 0
+    for _, v in pairs(E:GetChildren()) do
+        if IsMagnetEnemy(v) and v:FindFirstChild("HumanoidRootPart") then
+            local d = (v.HumanoidRootPart.Position - myPos).Magnitude
+            if d <= radius then
+                local kStart = tick()
+                repeat
+                    task.wait(0.08)
+                    shouldTween = true
+                    EquipMelee()
+                    if v.Parent and v:FindFirstChild("HumanoidRootPart") then
+                        _tp(v.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
+                    end
+                    Attack.Kill(v, true)
+                until not _G.AutoMagnetEvent
+                    or not v.Parent
+                    or not v:FindFirstChild("Humanoid")
+                    or v.Humanoid.Health <= 0
+                    or (tick() - kStart) > KILL_TIMEOUT
+                killed = killed + 1
+            end
+        end
+    end
+    return killed
 end
 
 --============ VISIT ISLAND ============
-local function VisitIsland(island)
-    local islandName = island.Name
-
-    -- Exit Submerged kalau target bukan Submerged
+local function VisitIsland(islandName)
+    -- Exit Submerged if target is not Submerged
     if isInSubmergedIsland() and islandName ~= "Submerged Island" then
         StatusAction:SetDesc("Exiting Submerged...")
         exitSubmergedIsland()
@@ -2792,7 +2812,7 @@ local function VisitIsland(island)
 
     if not _G.AutoMagnetEvent then return end
 
-    -- Enter Submerged
+    -- Enter Submerged if target is Submerged
     if islandName == "Submerged Island" then
         if not isInSubmergedIsland() then
             StatusAction:SetDesc("Entering Submerged Island...")
@@ -2808,18 +2828,17 @@ local function VisitIsland(island)
             task.wait(2)
         end
     else
-        StatusAction:SetDesc("Tween to " .. islandName)
-        TweenTo(island.CFrame, ARRIVE_DIST, 40)
+        local centerCF = IslandCenters[islandName]
+        if centerCF then
+            StatusAction:SetDesc("Tween to " .. islandName)
+            TweenTo(centerCF, ARRIVE_DIST, 40)
+        end
     end
 
     if not _G.AutoMagnetEvent then return end
 
-    -- Get NPC data
     local npcData = IslandNPCs[islandName]
-    if not npcData then
-        StatusAction:SetDesc("No NPC data: " .. islandName)
-        return
-    end
+    if not npcData then return end
 
     -- Dedup by CFrame
     local uniqueCFs = {}
@@ -2832,7 +2851,6 @@ local function VisitIsland(island)
         end
     end
 
-    -- Visit NPC spots
     for i, npc in ipairs(uniqueCFs) do
         if not _G.AutoMagnetEvent then break end
         StatusAction:SetDesc("[" .. i .. "/" .. #uniqueCFs .. "] " .. npc.Name .. " @ " .. islandName)
@@ -2845,7 +2863,7 @@ local function VisitIsland(island)
         task.wait(0.3)
         EquipMelee()
 
-        -- Find magnet NPC at this spot
+        -- Kill magnet enemies near this NPC position
         local E = workspace:FindFirstChild("Enemies")
         if E then
             for _, v in pairs(E:GetChildren()) do
@@ -2870,7 +2888,6 @@ local function VisitIsland(island)
                 end
             end
         end
-
         task.wait(0.3)
     end
 end
@@ -2921,31 +2938,81 @@ local function GetMagnetTokens()
     return tokens
 end
 
+--============ NEXT EVENT ============
+local function GetNextEventMinutes()
+    local date = os.date("*t")
+    local nowMin = date.hour * 60 + date.min + date.sec / 60
+    local nextHour = (date.hour + 1) % 24
+    local diff = (nextHour * 60) - nowMin
+    if diff < 0 then diff = diff + 24 * 60 end
+    return diff
+end
+
+local function FormatNextEvent()
+    local mins = GetNextEventMinutes()
+    local date = os.date("*t")
+    local nextHour = (date.hour + 1) % 24
+    return string.format("%d min lagi (%02d:00)", math.floor(mins), nextHour)
+end
+
 --=============================================================
 --  UI
 --=============================================================
 
---============ STATUS ============
 Tabs.Main:AddSection("Status")
 local StatusEvent = Tabs.Main:AddParagraph("Event", "Detecting...")
 local StatusNext  = Tabs.Main:AddParagraph("Next Event", "...")
 
---============ AUTO FARM ============
 Tabs.Main:AddSection("Auto Farm")
 local StatusAction = Tabs.Main:AddParagraph("Action", "Idle")
 
 _G.AutoMagnetEvent = false
+local currentIndex = 1
+local wasEventActive = false
 
 Tabs.Main:AddToggle({
     Name = "Auto Farm Magnet",
-    Description = "Sequential island travel → NPC → kill magnet",
+    Description = "Sea 3 only. Sequential islands, nearest first.",
     Default = false,
     Callback = function(v)
+        if v and not World3 then
+            Window:Notify({ Title = "Error", Content = "Only works in Sea 3", Duration = 5 })
+            return
+        end
         _G.AutoMagnetEvent = v
         if v then
-            EquipMelee()
-            task.wait(0.2)
-            EquipMelee()
+            task.spawn(function()
+                -- Step 1: Equip melee
+                EquipMelee()
+                task.wait(0.3)
+
+                -- Step 2: Check current island NPC first
+                local char = plr.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    StatusAction:SetDesc("Checking magnet NPC nearby...")
+                    local killed = KillMagnetInRadius(500)
+                    if killed > 0 then
+                        StatusAction:SetDesc("Killed " .. killed .. " nearby magnet")
+                        task.wait(1)
+                    end
+
+                    -- Step 3: Determine nearest island
+                    local myPos = char.HumanoidRootPart.Position
+                    local nearestIdx, nearestDist = 1, math.huge
+                    for i, name in ipairs(IslandOrder) do
+                        local center = IslandCenters[name]
+                        if center then
+                            local d = XZDist(center.Position, myPos)
+                            if d < nearestDist then
+                                nearestDist = d
+                                nearestIdx = i
+                            end
+                        end
+                    end
+                    currentIndex = nearestIdx
+                    StatusAction:SetDesc("Starting from: " .. IslandOrder[nearestIdx])
+                end
+            end)
         else
             shouldTween = false
             _B = false
@@ -2963,7 +3030,6 @@ task.spawn(function()
     end
 end)
 
---============ AUTO GACHA ============
 Tabs.Main:AddSection("Auto Magnet Gacha")
 local StatusGacha = Tabs.Main:AddParagraph("Gacha Status", "Idle")
 
@@ -2979,7 +3045,6 @@ Tabs.Main:AddToggle({
     end
 })
 
---============ OPEN UI ============
 Tabs.Main:AddButton({
     Name = "Open UI Magnet Gacha",
     Callback = function()
@@ -2991,7 +3056,6 @@ Tabs.Main:AddButton({
 --  LOOPS
 --=============================================================
 
---============ STATUS LOOP ============
 spawn(function()
     while task.wait(1) do
         pcall(function()
@@ -3003,7 +3067,6 @@ spawn(function()
     end
 end)
 
---============ AUTO GACHA LOOP ============
 task.spawn(function()
     while task.wait(GACHA_DELAY) do
         if not _G.AutoGachaMagnet then continue end
@@ -3019,14 +3082,9 @@ task.spawn(function()
     end
 end)
 
---============ MAIN FARM LOOP ============
-local currentIndex = 1
-local wasEventActive = false
-
 task.spawn(function()
     while task.wait(0.3) do
         if not _G.AutoMagnetEvent then
-            currentIndex = 1
             wasEventActive = false
             continue
         end
@@ -3037,7 +3095,7 @@ task.spawn(function()
         local eventActive = IsMagnetEventActive()
         if eventActive and not wasEventActive then
             currentIndex = 1
-            pcall(function() StatusAction:SetDesc("Event started! Reset to island 1") end)
+            pcall(function() StatusAction:SetDesc("Event started! Restart round") end)
             task.wait(0.5)
         end
         wasEventActive = eventActive
@@ -3048,8 +3106,8 @@ task.spawn(function()
             task.wait(1)
         end
 
-        local island = IslandOrder[currentIndex]
-        if not island then
+        local islandName = IslandOrder[currentIndex]
+        if not islandName then
             currentIndex = 1
             continue
         end
@@ -3062,8 +3120,8 @@ task.spawn(function()
             end
         end)
 
-        pcall(function() StatusAction:SetDesc("[" .. currentIndex .. "/" .. #IslandOrder .. "] " .. island.Name) end)
-        VisitIsland(island)
+        pcall(function() StatusAction:SetDesc("[" .. currentIndex .. "/" .. #IslandOrder .. "] " .. islandName) end)
+        VisitIsland(islandName)
         currentIndex = currentIndex + 1
     end
 end)
@@ -3071,7 +3129,7 @@ end)
 --============ STARTUP ============
 Window:Notify({
     Title = "Magnet Event",
-    Content = "Loaded! " .. #IslandOrder .. " islands.",
+    Content = World3 and ("Loaded! " .. #IslandOrder .. " islands.") or "Not Sea 3 — feature disabled.",
     Duration = 4
 })
 
