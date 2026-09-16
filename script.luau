@@ -2774,15 +2774,30 @@ local function exitSubmergedIsland()
     if not isInSubmergedIsland() then return false end
     local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
+
+    -- Langkah 1: teleport ke permukaan
     hrp.CFrame = SubmergedConfig.FirstDrop_CFrame
     task.wait(0.5)
+
+    -- Langkah 2: invoke remote exit
     local net = game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Net")
     local remote = net:FindFirstChild(SubmergedConfig.RemoteName)
     if remote then
         pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
     end
     task.wait(1)
-    return true
+
+    -- Langkah 3: FALLBACK — kalau masih di submerged, tween manual ke NPC di Tiki
+    if isInSubmergedIsland() then
+        warn("[Magnet] Fallback exit via manual tween")
+        TweenTo(SubmergedConfig.NPC_CFrame * CFrame.new(0, 3, 0), 20, 20)
+        task.wait(1)
+        if remote then
+            pcall(function() remote:InvokeServer(SubmergedConfig.RemoteCommand) end)
+        end
+    end
+
+    return not isInSubmergedIsland()
 end
 
 --============ ATTACK (Manual, tidak pakai Attack.Kill) ============
