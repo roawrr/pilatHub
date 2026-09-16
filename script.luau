@@ -2836,18 +2836,30 @@ local function KillMagnetInRadius(radius)
     return killed
 end
 
---============ VISIT ISLAND ============
+--============ VISIT ISLAND (dengan auto-exit Submerged) ============
 local function VisitIsland(islandName)
-    -- Exit Submerged
+    ---------------------------------------------------------------
+    -- 1. KALAU DI SUBMERGED TAPI TARGET BUKAN SUBMERGED → KELUAR DULU
+    ---------------------------------------------------------------
     if isInSubmergedIsland() and islandName ~= "Submerged Island" then
-        StatusAction:SetDesc("Exiting Submerged...")
-        exitSubmergedIsland()
-        task.wait(2)
+        StatusAction:SetDesc("Exiting Submerged before tween...")
+        local exitStart = tick()
+        repeat
+            exitSubmergedIsland()
+            task.wait(1.5)
+        until not isInSubmergedIsland() or (tick() - exitStart) > 20
+        if isInSubmergedIsland() then
+            StatusAction:SetDesc("Failed to exit Submerged - retrying next loop")
+            return
+        end
+        task.wait(1.5)
     end
 
     if not _G.AutoMagnetEvent then return end
 
-    -- Enter Submerged
+    ---------------------------------------------------------------
+    -- 2. MASUK SUBMERGED KALAU TARGET SUBMERGED
+    ---------------------------------------------------------------
     if islandName == "Submerged Island" then
         if not isInSubmergedIsland() then
             StatusAction:SetDesc("Entering Submerged Island...")
@@ -2863,6 +2875,9 @@ local function VisitIsland(islandName)
             task.wait(2)
         end
     else
+        -----------------------------------------------------------
+        -- 3. TWEEN KE ISLAND LAIN (surface)
+        -----------------------------------------------------------
         local centerCF = IslandCenters[islandName]
         if centerCF then
             StatusAction:SetDesc("Tween to " .. islandName)
@@ -2872,10 +2887,13 @@ local function VisitIsland(islandName)
 
     if not _G.AutoMagnetEvent then return end
 
+    ---------------------------------------------------------------
+    -- 4. CEK NPC DI ISLAND INI
+    ---------------------------------------------------------------
     local npcData = IslandNPCs[islandName]
     if not npcData then return end
 
-    -- Dedup
+    -- Dedup CFrame
     local uniqueCFs = {}
     local seen = {}
     for npcName, npcCF in pairs(npcData) do
@@ -2897,7 +2915,7 @@ local function VisitIsland(islandName)
         task.wait(0.3)
         EquipMelee()
 
-        -- Kill magnet enemies near this NPC
+        -- Kill magnet di sekitar NPC ini
         local E = workspace:FindFirstChild("Enemies")
         if E then
             for _, v in pairs(E:GetChildren()) do
@@ -2919,6 +2937,26 @@ local function VisitIsland(islandName)
             end
         end
         task.wait(0.3)
+    end
+
+    ---------------------------------------------------------------
+    -- 5. AUTO-EXIT SUBMERGED SETELAH SELESAI CEK NPC
+    --    (biar pulau berikutnya tidak tween di dalam air)
+    ---------------------------------------------------------------
+    if islandName == "Submerged Island" and _G.AutoMagnetEvent then
+        StatusAction:SetDesc("Finished Submerged NPCs - exiting...")
+        local exitStart = tick()
+        repeat
+            exitSubmergedIsland()
+            task.wait(1.5)
+        until not isInSubmergedIsland() or (tick() - exitStart) > 20
+
+        if isInSubmergedIsland() then
+            StatusAction:SetDesc("Stuck in Submerged - will retry")
+        else
+            StatusAction:SetDesc("Exited Submerged")
+        end
+        task.wait(1.5)
     end
 end
 
