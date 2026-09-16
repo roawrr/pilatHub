@@ -2990,11 +2990,11 @@ end
 --=============================================================
 
 Tabs.Main:AddSection("Status")
-local StatusEvent = Tabs.Main:AddParagraph("Event", "Detecting...")
-local StatusNext  = Tabs.Main:AddParagraph("Next Event", "...")
+StatusEvent = Tabs.Main:AddParagraph("Event", "Detecting...")
+StatusNext  = Tabs.Main:AddParagraph("Next Event", "...")
 
 Tabs.Main:AddSection("Auto Farm")
-local StatusAction = Tabs.Main:AddParagraph("Action", "Idle")
+StatusAction = Tabs.Main:AddParagraph("Action", "Idle")
 
 _G.AutoMagnetEvent = false
 local currentIndex = 1
@@ -3060,7 +3060,7 @@ task.spawn(function()
 end)
 
 Tabs.Main:AddSection("Auto Magnet Gacha")
-local StatusGacha = Tabs.Main:AddParagraph("Gacha Status", "Idle")
+StatusGacha = Tabs.Main:AddParagraph("Gacha Status", "Idle")
 
 _G.AutoGachaMagnet = false
 
