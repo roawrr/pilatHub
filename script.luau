@@ -2610,7 +2610,35 @@ local IslandOrder = {
     "Tiki Outpost",
     "Submerged Island",
 }
+local startIslandName = nil
+local activeIslandOrder = {}
 
+local function BuildIslandRound(firstIsland)
+    local rest = {}
+
+    for _, name in ipairs(IslandOrder) do
+        if name ~= firstIsland then
+            table.insert(rest, name)
+        end
+    end
+
+    -- Acak urutan pulau selain pulau awal
+    for i = #rest, 2, -1 do
+        local j = math.random(1, i)
+        rest[i], rest[j] = rest[j], rest[i]
+    end
+
+    activeIslandOrder = {}
+
+    -- Pulau awal selalu dikunjungi pertama
+    if firstIsland then
+        table.insert(activeIslandOrder, firstIsland)
+    end
+
+    for _, name in ipairs(rest) do
+        table.insert(activeIslandOrder, name)
+    end
+end
 --============ COMPUTE ISLAND CENTERS ============
 --============ ISLAND POSITIONS (hardcoded, akurat) ============
 local IslandPositions = {
@@ -2713,47 +2741,21 @@ local function EquipMelee()
         end
     end
 end
-
---============ MANUAL TWEEN (Same as Auto Farm Level) ===========
---============ FAST TWEEN (Anti-Rollback) ============
-local FAST_TWEEN_SPEED   = 320          -- studs/detik (default _tp = 200)
-local ROLLBACK_CHECK_SEC = 0.6          -- detik untuk cek rollback
-local ROLLBACK_THRESHOLD = 40           -- studs — kalau balik > ini, dianggap rollback
 local function FastTween(targetCFrame, distXZ, timeout)
-    distXZ  = distXZ  or ARRIVE_DIST
-    timeout = timeout or 60
-
-    local char = plr.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    if XZDist(hrp.Position, targetCFrame.Position) <= distXZ then
-        return true
+    if not _G.AutoMagnetEvent then
+        return false
     end
 
-    -- Panggil _tp bawaan (sama persis dengan Auto Farm Level)
-    local ok, err = pcall(_tp, targetCFrame)
+    local ok, err = pcall(function()
+        _tp(targetCFrame)
+    end)
+
     if not ok then
         warn("[FastTween] _tp error: " .. tostring(err))
         return false
     end
 
-    -- Tunggu sampai HRP benar-benar sampai
-    local startT = tick()
-    while _G.AutoMagnetEvent and (tick() - startT) < timeout do
-        task.wait(0.15)
-        local c2 = plr.Character
-        local h2 = c2 and c2:FindFirstChild("HumanoidRootPart")
-        if not h2 then break end
-        if XZDist(h2.Position, targetCFrame.Position) <= distXZ then
-            return true
-        end
-    end
-
-    local c3 = plr.Character
-    local h3 = c3 and c3:FindFirstChild("HumanoidRootPart")
-    return h3 and XZDist(h3.Position, targetCFrame.Position) <= distXZ or false
+    return true
 end
 
 --============ SUBMERGED HELPERS ============
@@ -3208,12 +3210,14 @@ Tabs.Main:AddToggle({
 
         -- Deteksi island sekarang
         local currentIslandName = DetectCurrentIsland()
-        local idx = currentIslandName and GetIslandIndex(currentIslandName)
+local idx = GetIslandIndex(currentIslandName)
 
-        if idx then
-            currentIndex = idx
-            StatusAction:SetDesc("Start: " .. currentIslandName)
-        else
+if idx then
+    startIslandName = currentIslandName
+    BuildIslandRound(startIslandName)
+    currentIndex = 1
+
+    StatusAction:SetDesc("Start: " .. currentIslandName)
             -- Di laut → cari terdekat
             local myPos = hrp.Position
             local nIdx, nDist = 1, math.huge
@@ -3224,9 +3228,11 @@ Tabs.Main:AddToggle({
                     if d < nDist then nDist = d; nIdx = i end
                 end
             end
-            currentIndex = nIdx
-            StatusAction:SetDesc("Ocean → start: " .. IslandOrder[nIdx])
-        end
+            startIslandName = IslandOrder[nIdx]
+BuildIslandRound(startIslandName)
+currentIndex = 1
+
+StatusAction:SetDesc("Ocean → start: " .. startIslandName)
 
         _G.MagnetJustStarted = true
         _G.MagnetReady = true    -- ← KUNCI!
@@ -3333,7 +3339,7 @@ task.spawn(function()
         ---------------------------------------------------------
         -- TARGET = island yang HARUS dikunjungi (dari urutan)
         ---------------------------------------------------------
-        local targetIsland = IslandOrder[currentIndex]
+        local targetIsland = activeIslandOrder[currentIndex]
         if not targetIsland then
             currentIndex = 1
             continue
@@ -3357,9 +3363,11 @@ task.spawn(function()
             -- Advance ke pulau berikutnya
             if _G.AutoMagnetEvent then
                 currentIndex = currentIndex + 1
-                if currentIndex > #IslandOrder then
-                    currentIndex = 1
-                end
+
+if currentIndex > #activeIslandOrder then
+    BuildIslandRound(startIslandName)
+    currentIndex = 1
+end
                 task.wait(0.5)
             end
         else
