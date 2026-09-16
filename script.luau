@@ -3884,22 +3884,21 @@ local EyeStatus = Tabs.Main:AddParagraph("Check Status Eyes", "")
 
 function Check_Eye()
     local e = workspace.Map.TikiOutpost.IslandModel
+    local chunks = e and e:FindFirstChild("IslandChunks")
+    local chunkE = chunks and chunks:FindFirstChild("E")
     local eyes = {
-        e.Eye1,
-        e.Eye2,
-        e.IslandChunks.E.Eye3,
-        e.IslandChunks.E.Eye4
+        e and e:FindFirstChild("Eye1"),
+        e and e:FindFirstChild("Eye2"),
+        chunkE and chunkE:FindFirstChild("Eye3"),
+        chunkE and chunkE:FindFirstChild("Eye4")
     }
-
     local count = 0
     for _, eye in ipairs(eyes) do
         if eye and eye.Transparency ~= 1 then
             count = count + 1
         end
     end
-
-    local isFull = (count == 4)
-    return count, isFull
+    return count, (count == 4)
 end
 
 task.spawn(function()
