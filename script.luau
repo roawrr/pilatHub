@@ -3232,9 +3232,6 @@ Tabs.Main:AddToggle({
         _G.MagnetReady = true    -- ← KUNCI!
     end)
 end
-                currentIndex = nearestIdx
-                StatusAction:SetDesc("On ocean - starting from: " .. IslandOrder[nearestIdx])
-            end)
         else
             if activeTween then
                 pcall(function() activeTween:Cancel() end)
