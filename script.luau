@@ -3096,29 +3096,36 @@ local function DetectCurrentIsland()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
 
-    local myPos = hrp.Position
-
-    -- Kalau di Submerged (bawah laut)
     if isInSubmergedIsland() then
         return "Submerged Island"
     end
 
-    -- Cari island terdekat dengan radius max
+    local myPos = hrp.Position
     local MAX_DETECT_RADIUS = 2000
     local nearestName, nearestDist = nil, math.huge
+
     for _, name in ipairs(IslandOrder) do
-        local center = IslandCenters[name]
-        if center and name ~= "Submerged Island" then
-            local d = XZDist(center.Position, myPos)
-            if d < nearestDist then
-                nearestDist = d
-                nearestName = name
+        if name ~= "Submerged Island" then
+            local c = IslandCenters[name]
+            if c then
+                local d = XZDist(c.Position, myPos)
+                if d < nearestDist then
+                    nearestDist = d
+                    nearestName = name
+                end
             end
         end
     end
 
     if nearestName and nearestDist <= MAX_DETECT_RADIUS then
         return nearestName
+    end
+    return nil
+end
+
+local function GetIslandIndex(islandName)
+    for i, name in ipairs(IslandOrder) do
+        if name == islandName then return i end
     end
     return nil
 end
@@ -3273,21 +3280,37 @@ end)
 
 task.spawn(function()
     while task.wait(0.3) do
+        ----------------------------------------------------------
+        -- GATE 1: flag OFF → reset
+        ----------------------------------------------------------
         if not _G.AutoMagnetEvent then
             wasEventActive = false
+            _G.MagnetReady = false
+            continue
+        end
+
+        ----------------------------------------------------------
+        -- GATE 2: tunggu deteksi selesai (jangan proses dulu)
+        ----------------------------------------------------------
+        if not _G.MagnetReady then
             continue
         end
 
         local char = plr.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
 
+        ----------------------------------------------------------
+        -- GATE 3: reset ke 1 kalau event baru active
+        --         TAPI skip kalau baru saja toggle ON
+        ----------------------------------------------------------
         local eventActive = IsMagnetEventActive()
-        if eventActive and not wasEventActive then
+        if eventActive and not wasEventActive and not _G.MagnetJustStarted then
             currentIndex = 1
             pcall(function() StatusAction:SetDesc("Event started! Restart round") end)
             task.wait(0.5)
         end
         wasEventActive = eventActive
+        _G.MagnetJustStarted = false   -- konsumsi flag
 
         if currentIndex > #IslandOrder then
             currentIndex = 1
