@@ -1450,7 +1450,7 @@ QuestNeta = function()
     }
 end
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Code4Zaaa/Luau/refs/heads/main/Arcylic.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/ui.luau"))()
 local Window = Library.new("Pilat hub : Blox Fruit", "kontol")
 Window:SetToggleKey(Enum.KeyCode.RightControl)
 
@@ -4329,6 +4329,35 @@ Tabs.Main:CreateToggle({
         if not v then
             _G.MagnetEventSpawnIndex = 1
         end
+    end
+})
+local BOX_NAME = "MagnetEventGacha26"
+
+local function RollGacha()
+    if not GachaClient then return false end
+    local ok, success = pcall(function()
+        return GachaClient.PurchaseGachaAsync(BOX_NAME)
+    end)
+    return ok and success
+end
+
+-- Toggle table
+local AutoGachaMagnet = Tabs.Main:CreateToggle({
+    Name = "Auto Gacha Magnet",
+    Default = false,
+    Flag = "AutoGachaMagnet",
+    Callback = function(state)
+        _G.AutoGachaMagnet = state
+        if not state then return end
+
+        task.spawn(function()
+            while _G.AutoGachaMagnet do
+                pcall(function()
+                    RollGacha()
+                end)
+                task.wait(0.5)
+            end
+        end)
     end
 })
 
@@ -12536,6 +12565,6 @@ StartMainLoops()
 Window:Notify({
   Title = "PilatHub",
   Description = "Pilat Hub Loaded",
-  Icon = "rbxassetid://132684424743910",
+  Icon = "rbxassetid://72511686829950",
   Duration = 5
 })
