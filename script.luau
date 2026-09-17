@@ -1451,7 +1451,7 @@ QuestNeta = function()
 end
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/ui.luau"))()
-local Window = Library.new("Pilat hub : Blox Fruit", "kontol")
+local Window = Library.new("Pilat hub : Blox Fruit", "memek.json")
 Window:SetToggleKey(Enum.KeyCode.RightControl)
 
 local MainSection = Window:CreateSection("Main")
