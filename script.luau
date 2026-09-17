@@ -4332,7 +4332,23 @@ Tabs.Main:CreateToggle({
     end
 })
 local BOX_NAME = "MagnetEventGacha26"
-
+local function OpenMagnetUI()
+    if not GachaWindow or not GachaClient then return false end
+    local config = GetGachaConfig()
+    if not config or not config.ENABLED then return false end
+    if GachaWindow:IsOpen() then
+        GachaWindow:Close(true)
+        task.wait(0.3)
+    end
+    pcall(function() GachaWindow:Open(BOX_NAME, config.ROLL_COST) end)
+    return true
+end
+Tabs.Main:CreateButton({
+    Name = "Open UI Magnet Gacha",
+    Callback = function()
+        OpenMagnetUI()
+    end
+})
 local function PurchaseMagnetGacha()
     local Net = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
     Net = Net and Net:FindFirstChild("Net")
