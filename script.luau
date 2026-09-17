@@ -4333,15 +4333,24 @@ Tabs.Main:CreateToggle({
 })
 local BOX_NAME = "MagnetEventGacha26"
 
-local function RollGacha()
-    if not GachaClient then return false end
-    local ok, success = pcall(function()
-        return GachaClient.PurchaseGachaAsync(BOX_NAME)
+local function PurchaseMagnetGacha()
+    local Net = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
+    Net = Net and Net:FindFirstChild("Net")
+    if not Net then return false end
+
+    local remote = Net:FindFirstChild("RF/GachaNetworkRF")
+    if not remote then return false end
+
+    local ok = pcall(function()
+        remote:InvokeServer({
+            ["Context"] = "Purchase",
+            ["BoxName"] = BOX_NAME
+        })
     end)
-    return ok and success
+    return ok
 end
 
--- Toggle table
+-- Toggle
 local AutoGachaMagnet = Tabs.Main:CreateToggle({
     Name = "Auto Gacha Magnet",
     Default = false,
@@ -4352,9 +4361,7 @@ local AutoGachaMagnet = Tabs.Main:CreateToggle({
 
         task.spawn(function()
             while _G.AutoGachaMagnet do
-                pcall(function()
-                    RollGacha()
-                end)
+                pcall(PurchaseMagnetGacha)
                 task.wait(0.5)
             end
         end)
