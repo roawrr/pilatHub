@@ -35,6 +35,79 @@ do
   Num_self = 25
 end
 
+-- ============================================
+-- AUTO UPDATER
+-- ============================================
+local CONFIG = {
+    VERSION_URL = "https://raw.githubusercontent.com/roawrr/pilatHub/main/version.txt",
+    SCRIPT_URL  = "https://raw.githubusercontent.com/roawrr/pilatHub/main/script.luau",
+    LOCAL_VERSION = "1.0.5", -- ganti manual tiap rilis (atau ambil dari _G)
+    CHECK_INTERVAL = 60,     -- cek tiap 60 detik
+}
+
+local function fetch(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url .. "?t=" .. tick()) -- anti-cache
+    end)
+    return ok and res or nil
+end
+
+local function trim(s)
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function checkAndUpdate()
+    local remoteVer = fetch(CONFIG.VERSION_URL)
+    if not remoteVer then return end
+    remoteVer = trim(remoteVer)
+
+    if remoteVer ~= "" and remoteVer ~= CONFIG.LOCAL_VERSION then
+        local code = fetch(CONFIG.SCRIPT_URL)
+        if not code or #code < 100 then return end
+
+        -- notif ke user (opsional)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "PilatHub Update",
+                Text = "Update ke v" .. remoteVer .. ", reloading...",
+                Duration = 3,
+            })
+        end)
+
+        -- stop semua loop lama
+        _G.StopAll = true
+        for k, v in pairs(getgenv()) do
+            if type(k) == "string" and (k:find("^_G%.") or k:find("Auto") or k:find("Farm")) then
+                pcall(function() getgenv()[k] = false end)
+            end
+        end
+
+        task.wait(0.5)
+
+        -- hapus GUI lama kalau perlu
+        pcall(function()
+            local pg = game.Players.LocalPlayer.PlayerGui
+            if pg:FindFirstChild("PilatHub") then pg.PilatHub:Destroy() end
+        end)
+
+        -- execute versi baru
+        local fn = loadstring(code)
+        if fn then
+            task.spawn(fn)
+        end
+        return true
+    end
+end
+
+-- cek pertama kali
+task.spawn(function()
+    checkAndUpdate()
+    while task.wait(CONFIG.CHECK_INTERVAL) do
+        checkAndUpdate()
+    end
+end)
+-- ============================================
+
 repeat local start = plr.PlayerGui:WaitForChild("Main"):WaitForChild("Loading") and game:IsLoaded() wait() until start
 World1 = game.PlaceId == 2753915549 or game.PlaceId == 85211729168715
 World2 = game.PlaceId == 4442272183 or game.PlaceId == 79091703265657
