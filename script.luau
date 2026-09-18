@@ -4331,6 +4331,9 @@ Tabs.Main:CreateToggle({
         end
     end
 })
+local GachaClient, GachaWindow
+pcall(function() GachaClient = require(replicated.Controllers.GachaClient) end)
+pcall(function() GachaWindow = require(replicated.Controllers.UI.GachaWindow) end)
 local BOX_NAME = "MagnetEventGacha26"
 local function OpenMagnetUI()
     if not GachaWindow or not GachaClient then return false end
@@ -4345,6 +4348,7 @@ local function OpenMagnetUI()
 end
 Tabs.Main:CreateButton({
     Name = "Open UI Magnet Gacha",
+
     Callback = function()
         OpenMagnetUI()
     end
