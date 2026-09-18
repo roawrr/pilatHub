@@ -9,23 +9,36 @@ local hs = game:GetService("HttpService")
 local n = "Pilat"
 
 local c = {
-    Background = Color3.fromRGB(12, 12, 12),
-    Secondary = Color3.fromRGB(20, 20, 20),
-    Border = Color3.fromRGB(39, 39, 39),
+    Background = Color3.fromRGB(9, 6, 16),
+    Secondary = Color3.fromRGB(19, 13, 30),
+    Border = Color3.fromRGB(52, 36, 78),
     Text = Color3.fromRGB(255, 255, 255),
-    TextDark = Color3.fromRGB(120, 120, 120),
-    TextFade = Color3.fromRGB(93, 93, 93),
-    Accent = Color3.fromRGB(255, 255, 255),
+    TextDark = Color3.fromRGB(165, 152, 190),
+    TextFade = Color3.fromRGB(118, 104, 145),
+    Accent = Color3.fromRGB(158, 91, 255),
     Toggle = {
-        Enabled = Color3.fromRGB(255, 255, 255),
-        Disabled = Color3.fromRGB(93, 93, 93),
-        Circle = Color3.fromRGB(50, 50, 50)
+        Enabled = Color3.fromRGB(158, 91, 255),
+        Disabled = Color3.fromRGB(70, 58, 95),
+        Circle = Color3.fromRGB(255, 255, 255)
     },
     Notification = {
-        Background = Color3.fromRGB(11, 11, 11),
-        Border = Color3.fromRGB(26, 26, 26),
-        Timer = Color3.fromRGB(255, 255, 255)
+        Background = Color3.fromRGB(14, 9, 24),
+        Border = Color3.fromRGB(52, 36, 78),
+        Timer = Color3.fromRGB(158, 91, 255)
     }
+}
+
+-- Gradasi "dark void" hitam ke ungu, dipakai di background utama
+local VoidGradient = {
+    Main = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 14, 48)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(13, 8, 24)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 2, 9))
+    }),
+    Card = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 18, 50)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 10, 26))
+    })
 }
 
 local s = {
@@ -120,6 +133,66 @@ local function CreatePadding(parent, top, bottom, left, right)
         PaddingRight = UDim.new(0, right or 0),
         Parent = parent
     })
+end
+
+local function CreateShadow(parent, transparency, expand, yOffset)
+    local shadow = CreateInstance("ImageLabel", {
+        Name = "Shadow",
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://1316045217",
+        ImageColor3 = Color3.fromRGB(0, 0, 0),
+        ImageTransparency = transparency or 0.45,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(10, 10, 118, 118),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, yOffset or 4),
+        Size = UDim2.new(1, expand or 20, 1, expand or 20),
+        ZIndex = 0,
+        Parent = parent
+    })
+    return shadow
+end
+
+local function CreateGradient(parent, colorSequence, rotation)
+    return CreateInstance("UIGradient", {
+        Color = colorSequence or VoidGradient.Main,
+        Rotation = rotation or 90,
+        Parent = parent
+    })
+end
+
+local function AddPressAnimation(clickable, target, minScale)
+    target = target or clickable
+    local scale = target:FindFirstChildOfClass("UIScale")
+    if not scale then
+        scale = CreateInstance("UIScale", {Scale = 1, Parent = target})
+    end
+
+    local function Press()
+        CreateTween(scale, {Scale = minScale or 0.95}, animationspeed.Fast, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    end
+
+    local function Release()
+        CreateTween(scale, {Scale = 1}, animationspeed.Normal, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    end
+
+    clickable.MouseButton1Down:Connect(Press)
+    clickable.MouseButton1Up:Connect(Release)
+    clickable.MouseLeave:Connect(Release)
+    if clickable.InputBegan then
+        clickable.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                Press()
+            end
+        end)
+        clickable.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                Release()
+            end
+        end)
+    end
+
+    return scale
 end
 
 local function CreateListLayout(parent, padding, sortOrder, direction)
@@ -436,13 +509,15 @@ function Library:Notify(config)
         ClipsDescendants = true,
         Parent = NotificationContainer
     })
-    CreateCorner(notification, 4)
+    CreateCorner(notification, 6)
     CreateInstance("UIStroke", {
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Color = c.Notification.Border,
         Thickness = 1.5,
         Parent = notification
     })
+    CreateGradient(notification, VoidGradient.Card, 100)
+    CreateShadow(notification, 0.5, 14, 4)
     local titleLabel = CreateInstance("TextLabel", {
         Name = "Title",
         FontFace = f.Regular,
@@ -597,15 +672,18 @@ function Library:_CreateMainv0rtexd()
     self.container = CreateInstance("Frame", {
         Name = "Container",
         BackgroundColor3 = c.Background,
-        BackgroundTransparency = 0.05,
+        BackgroundTransparency = 0.02,
         Position = UDim2.new(0.5, -s.v0rtexd.Width / 2, 0.5, -s.v0rtexd.Height / 2),
         BorderSizePixel = 0,
         Size = UDim2.new(0, s.v0rtexd.Width, 0, s.v0rtexd.Height),
         ClipsDescendants = false,
         Parent = self.screenGui
     })
-    CreateCorner(self.container, 5)
-    CreateStroke(self.container)
+    CreateCorner(self.container, 8)
+    CreateStroke(self.container, c.Border, 0.2)
+    CreateGradient(self.container, VoidGradient.Main, 100)
+    local containerShadow = CreateShadow(self.container, 0.4, 26, 6)
+    containerShadow.ZIndex = -1
 
     self.topBar = CreateInstance("Frame", {
         Name = "TopBar",
@@ -1170,6 +1248,8 @@ function Library._CreateTab(section, name, icon)
     })
     CreateListLayout(tab.content, 8, Enum.SortOrder.LayoutOrder)
 
+    AddPressAnimation(clickBtn, tabBtn, 0.95)
+
     clickBtn.MouseButton1Click:Connect(function()
         Library._SelectTab(section._library, tab, tabBtn, tabStroke, iconLabel, tabText, textGradient)
     end)
@@ -1248,9 +1328,9 @@ function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient
     
     if lib.currentTab then
         lib.currentTab.content.Visible = false
-        CreateTween(lib.currentTab.button, {BackgroundTransparency = 1}, animationspeed.Fast)
+        CreateTween(lib.currentTab.button, {BackgroundColor3 = c.Secondary, BackgroundTransparency = 1}, animationspeed.Fast)
         CreateTween(lib.currentTab.icon, {ImageColor3 = c.TextDark}, animationspeed.Fast)
-        lib.currentTab.stroke.Transparency = 1
+        CreateTween(lib.currentTab.stroke, {Transparency = 1}, animationspeed.Fast)
         
         if lib.currentTab.textGradient then
             lib.currentTab.textGradient.Enabled = true
@@ -1260,9 +1340,9 @@ function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient
     lib.currentTab = tab
     tab.content.Visible = true
     
-    CreateTween(btn, {BackgroundTransparency = 1}, animationspeed.Fast)
+    CreateTween(btn, {BackgroundColor3 = c.Accent, BackgroundTransparency = 0.85}, animationspeed.Fast)
     CreateTween(icon, {ImageColor3 = c.Text}, animationspeed.Fast)
-    stroke.Transparency = 1  
+    CreateTween(stroke, {Transparency = 0.55, Color = c.Accent}, animationspeed.Fast)
     
     if textGradient then
         textGradient.Enabled = false
@@ -1300,6 +1380,8 @@ function Library._CreateParagraph(tab, config)
     })
     CreateCorner(frame, 5)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
     CreatePadding(frame, 10, 10, 10, 10)
 
     local titleLabel = CreateInstance("TextLabel", {
@@ -1358,6 +1440,8 @@ function Library._CreateSlider(tab, config)
     })
     CreateCorner(frame, 5)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -1470,13 +1554,15 @@ function Library._CreateButton(tab, config)
     local frame = CreateInstance("Frame", {
         Name = "Button_" .. name,
         BackgroundColor3 = c.Secondary,
-        BackgroundTransparency = 0.4,
+        BackgroundTransparency = 0.25,
         BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
-    CreateStroke(frame)
+    CreateCorner(frame, 6)
+    CreateStroke(frame, c.Border, 0.3)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -1512,10 +1598,22 @@ function Library._CreateButton(tab, config)
         Parent = frame
     })
 
+    AddPressAnimation(button, frame, 0.96)
+
+    button.MouseEnter:Connect(function()
+        CreateTween(frame, {BackgroundTransparency = 0.1}, animationspeed.Fast)
+        CreateTween(frame.UIStroke, {Color = c.Accent}, animationspeed.Fast)
+    end)
+
+    button.MouseLeave:Connect(function()
+        CreateTween(frame, {BackgroundTransparency = 0.25}, animationspeed.Fast)
+        CreateTween(frame.UIStroke, {Color = c.Border}, animationspeed.Fast)
+    end)
+
     button.MouseButton1Click:Connect(function()
-        CreateTween(frame, {BackgroundTransparency = 0.2}, animationspeed.Fast)
+        CreateTween(frame, {BackgroundTransparency = 0}, animationspeed.Fast)
         task.wait(0.1)
-        CreateTween(frame, {BackgroundTransparency = 0.4}, animationspeed.Fast)
+        CreateTween(frame, {BackgroundTransparency = 0.1}, animationspeed.Fast)
         callback()
     end)
 
@@ -1536,13 +1634,15 @@ function Library._CreateToggle(tab, config)
     local frame = CreateInstance("Frame", {
         Name = "Toggle_" .. name,
         BackgroundColor3 = c.Secondary,
-        BackgroundTransparency = 0.4,
+        BackgroundTransparency = 0.25,
         BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
-    CreateStroke(frame)
+    CreateCorner(frame, 6)
+    CreateStroke(frame, c.Border, 0.3)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -1577,6 +1677,7 @@ function Library._CreateToggle(tab, config)
         Parent = switchBg
     })
     CreateCorner(switchCircle, 100)
+    CreateShadow(switchCircle, 0.5, 6, 1)
 
     local toggleBtn = CreateInstance("TextButton", {
         Name = "ToggleButton",
@@ -1603,6 +1704,8 @@ function Library._CreateToggle(tab, config)
             CreateTween(switchCircle, {Position = UDim2.new(0, 4, 0.5, 0)}, animationspeed.Normal)
         end
     end
+
+    AddPressAnimation(button, switchBg, 0.9)
 
     button.MouseButton1Click:Connect(function()
         enabled = not enabled
@@ -1663,6 +1766,8 @@ function Library._CreateDropdown(tab, config)
     })
     CreateCorner(frame, 5)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -1885,6 +1990,8 @@ function Library._CreateKeybind(tab, config, lib)
     })
     CreateCorner(frame, 5)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -2012,6 +2119,8 @@ function Library._CreateColorPicker(tab, config)
     })
     CreateCorner(frame, 6)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
@@ -2303,6 +2412,8 @@ function Library._CreateTextBox(tab, config)
     })
     CreateCorner(frame, 5)
     CreateStroke(frame)
+    CreateGradient(frame, VoidGradient.Card, 100)
+    CreateShadow(frame, 0.55, 10, 3)
 
     local nameLabel = CreateInstance("TextLabel", {
         Name = "Name",
