@@ -36,18 +36,18 @@ do
 end
 
 -- ============================================
--- AUTO UPDATER
+-- AUTO UPDATER (Cache-based, no LOCAL_VERSION)
 -- ============================================
 local CONFIG = {
-    VERSION_URL = "https://raw.githubusercontent.com/roawrr/pilatHub/main/version.txt",
-    SCRIPT_URL  = "https://raw.githubusercontent.com/roawrr/pilatHub/main/script.luau",
-    LOCAL_VERSION = "1.0.8", -- ganti manual tiap rilis (atau ambil dari _G)
-    CHECK_INTERVAL = 60,     -- cek tiap 60 detik
+    VERSION_URL    = "https://raw.githubusercontent.com/roawrr/pilatHub/main/version.txt",
+    SCRIPT_URL     = "https://raw.githubusercontent.com/roawrr/pilatHub/main/script.luau",
+    CHECK_INTERVAL = 60,
+    CACHE_FILE     = "pilathub_version.txt",  -- disimpan di workspace exploit
 }
 
 local function fetch(url)
     local ok, res = pcall(function()
-        return game:HttpGet(url .. "?t=" .. tick()) -- anti-cache
+        return game:HttpGet(url .. "?t=" .. tick())
     end)
     return ok and res or nil
 end
@@ -56,50 +56,82 @@ local function trim(s)
     return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local function readCache()
+    local ok, val = pcall(function() return readfile(CONFIG.CACHE_FILE) end)
+    if ok and val then return trim(val) end
+    return ""
+end
+
+local function writeCache(v)
+    pcall(function() writefile(CONFIG.CACHE_FILE, v) end)
+end
+
+local function cleanupOld()
+    -- Matiin semua flag Auto/Farm
+    for k, _ in pairs(getgenv()) do
+        if type(k) == "string" and (k:find("^_G%.") or k:find("Auto") or k:find("Farm")) then
+            pcall(function() getgenv()[k] = false end)
+        end
+    end
+    -- Putus koneksi
+    for _, conn in ipairs(getgenv()._PilatHubConnections or {}) do
+        pcall(function() conn:Disconnect() end)
+    end
+    getgenv()._PilatHubConnections = {}
+    -- Hapus GUI
+    pcall(function()
+        local pg = game.Players.LocalPlayer.PlayerGui
+        if pg:FindFirstChild("PilatHub") then pg.PilatHub:Destroy() end
+    end)
+    -- Hapus part helper
+    pcall(function()
+        local p = workspace:FindFirstChild("Rip_Indra")
+        if p then p:Destroy() end
+    end)
+end
+
 local function checkAndUpdate()
     local remoteVer = fetch(CONFIG.VERSION_URL)
     if not remoteVer then return end
     remoteVer = trim(remoteVer)
+    if remoteVer == "" then return end
 
-    if remoteVer ~= "" and remoteVer ~= CONFIG.LOCAL_VERSION then
-        local code = fetch(CONFIG.SCRIPT_URL)
-        if not code or #code < 100 then return end
+    local cachedVer = readCache()
 
-        -- notif ke user (opsional)
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "PilatHub Update",
-                Text = "Update ke v" .. remoteVer .. ", reloading...",
-                Duration = 3,
-            })
-        end)
-
-        -- stop semua loop lama
-        _G.StopAll = true
-        for k, v in pairs(getgenv()) do
-            if type(k) == "string" and (k:find("^_G%.") or k:find("Auto") or k:find("Farm")) then
-                pcall(function() getgenv()[k] = false end)
-            end
-        end
-
-        task.wait(0.5)
-
-        -- hapus GUI lama kalau perlu
-        pcall(function()
-            local pg = game.Players.LocalPlayer.PlayerGui
-            if pg:FindFirstChild("PilatHub") then pg.PilatHub:Destroy() end
-        end)
-
-        -- execute versi baru
-        local fn = loadstring(code)
-        if fn then
-            task.spawn(fn)
-        end
-        return true
+    -- First run: cache kosong → simpan, jangan reload
+    if cachedVer == "" then
+        writeCache(remoteVer)
+        print("[PilatHub] First run, cached:", remoteVer)
+        return
     end
+
+    -- Versi sama → skip
+    if cachedVer == remoteVer then return end
+
+    -- Versi beda → update
+    print("[PilatHub] Update detected:", cachedVer, "→", remoteVer)
+    local code = fetch(CONFIG.SCRIPT_URL)
+    if not code or #code < 100 then return end
+
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "PilatHub Update",
+            Text = "v" .. cachedVer .. " → v" .. remoteVer,
+            Duration = 3,
+        })
+    end)
+
+    cleanupOld()
+    task.wait(0.5)
+
+    -- ⚠️ PENTING: tulis cache DULU sebelum execute
+    -- Kalau nggak, script baru bakal baca cache lama → loop!
+    writeCache(remoteVer)
+
+    local fn = loadstring(code)
+    if fn then task.spawn(fn) end
 end
 
--- cek pertama kali
 task.spawn(function()
     checkAndUpdate()
     while task.wait(CONFIG.CHECK_INTERVAL) do
