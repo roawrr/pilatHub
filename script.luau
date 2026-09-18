@@ -4450,6 +4450,23 @@ local function MagnetTravel(point)
 
     return MagnetFindTarget() or false
 end
+Tabs.Main:CreateToggle({
+    Name = "Auto Farm Magnet Token",
+    Default = false,
+    Callback = function(v)
+        _G.AutoMagnetToken = v
+        SetMagnetStatus(v and "Starting..." or "Idle")
+        if not v then
+            _G.MagnetEventSpawnIndex = 1
+            if _G.MagnetLevelFallback then
+                _G.Level = false
+            end
+        end
+    end
+})
+
+
+
 -- 🔽 Toggle baru: Farm Level kalau event belum mulai
 Tabs.Main:CreateToggle({
     Name = "Farm Level If No Event",
@@ -4459,18 +4476,6 @@ Tabs.Main:CreateToggle({
         _G.MagnetFallbackLevel = false
         if not v then
             _G.Level = false  -- optional: matiin farm level pas toggle off
-        end
-    end
-})
-
--- 🔽 Toggle baru: Farm Level kalau event belum mulai
-Tabs.Main:CreateToggle({
-    Name = "Farm Level If No Event",
-    Default = false,
-    Callback = function(v)
-        _G.MagnetLevelFallback = v
-        if not v then
-            _G.Level = false  -- matiin farm level saat toggle dimatiin
         end
     end
 })
