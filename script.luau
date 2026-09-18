@@ -4452,7 +4452,7 @@ local function OpenMagnetUI()
     return true
 end
 Tabs.Main:CreateButton({
-    Name = "Open UI Magnet Gacha",
+    Name = "Open Gacha Ui",
 
     Callback = function()
         OpenMagnetUI()
