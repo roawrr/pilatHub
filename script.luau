@@ -4479,6 +4479,138 @@ Tabs.Main:CreateToggle({
         end
     end
 })
+-- 🔽 Toggle Auto Mastery Sword (khusus fallback)
+Tabs.Main:CreateToggle({
+    Name = "Auto Mastery Sword (Fallback)",
+    Default = false,
+    Callback = function(v)
+        _G.AutoMasteryMagnet = v
+        if not v then
+            -- restore weapon selection normal
+            if _G.MasterySavedChooseWP ~= nil then
+                _G.ChooseWP = _G.MasterySavedChooseWP
+                _G.MasterySavedChooseWP = nil
+            end
+            _G.CurrentMasterySword = nil
+        end
+    end
+})
+
+-- 🔽 Status paragraph
+local MasteryStatus = Tabs.Main:CreateParagraph({Title = "Mastery Sword Status", Content = "Idle"})
+
+-- 🔽 Helper: ambil semua sword + mastery-nya
+local function GetSwordList()
+    local list = {}
+    local inventory = replicated.Remotes.CommF_:InvokeServer("getInventory")
+    if type(inventory) ~= "table" then return list end
+    for _, item in pairs(inventory) do
+        if type(item) == "table" and item.Type == "Sword" then
+            if item.Mastery ~= nil then
+                table.insert(list, {
+                    Name = item.Name,
+                    Mastery = tonumber(item.Mastery) or 0
+                })
+            end
+        end
+    end
+    return list
+end
+
+-- 🔽 Helper: cari sword yang belum 600
+local function FindNextUnmaxedSword(excludeName)
+    for _, sword in ipairs(GetSwordList()) do
+        if sword.Mastery < 600 and sword.Name ~= excludeName then
+            return sword.Name, sword.Mastery
+        end
+    end
+    return nil
+end
+
+-- 🔽 Helper: mastery sword yang sedang dipegang
+local function GetEquippedSwordMastery()
+    local char = plr.Character
+    if not char then return nil, nil end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or tool.ToolTip ~= "Sword" then return nil, nil end
+
+    for _, sword in ipairs(GetSwordList()) do
+        if sword.Name == tool.Name then
+            return tool.Name, sword.Mastery
+        end
+    end
+    return tool.Name, 0
+end
+
+-- 🔽 Loop utama
+_G.CurrentMasterySword = nil
+
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            -- Hanya jalan saat fallback + magnet aktif + toggle ON
+            local shouldRun = _G.AutoMasteryMagnet 
+                and _G.MagnetFallbackLevel 
+                and _G.AutoMagnetToken
+
+            if not shouldRun then
+                if _G.CurrentMasterySword then
+                    -- keluar dari mode mastery
+                    if _G.MasterySavedChooseWP ~= nil then
+                        _G.ChooseWP = _G.MasterySavedChooseWP
+                        _G.MasterySavedChooseWP = nil
+                    end
+                    _G.CurrentMasterySword = nil
+                    MasteryStatus:SetContent("Idle (not in fallback mode)")
+                end
+                return
+            end
+
+            -- Simpan ChooseWP original sekali saja
+            if _G.MasterySavedChooseWP == nil then
+                _G.MasterySavedChooseWP = _G.ChooseWP
+                _G.ChooseWP = nil  -- biar dropdown loop gak override
+            end
+
+            -- Cek sword terpasang & mastery
+            local eqName, eqMastery = GetEquippedSwordMastery()
+
+            if not eqName then
+                -- Belum pegang sword, load salah satu yang belum max
+                local nextName, nextM = FindNextUnmaxedSword()
+                if nextName then
+                    replicated.Remotes.CommF_:InvokeServer("LoadItem", nextName)
+                    task.wait(0.5)
+                    _G.SelectWeapon = nextName
+                    _G.CurrentMasterySword = nextName
+                    MasteryStatus:SetContent("Loading: " .. nextName .. " (" .. nextM .. "/600)")
+                else
+                    MasteryStatus:SetContent("❌ Semua sword sudah 600!")
+                end
+                return
+            end
+
+            -- Mastery udah 600 → ganti
+            if eqMastery >= 600 then
+                local nextName, nextM = FindNextUnmaxedSword(eqName)
+                if nextName then
+                    replicated.Remotes.CommF_:InvokeServer("LoadItem", nextName)
+                    task.wait(0.5)
+                    _G.SelectWeapon = nextName
+                    _G.CurrentMasterySword = nextName
+                    MasteryStatus:SetContent("Switched → " .. nextName .. " (" .. nextM .. "/600)")
+                else
+                    MasteryStatus:SetContent("✅ Semua sword sudah 600!")
+                end
+            else
+                -- Masih progress, keep sword ini
+                _G.SelectWeapon = eqName
+                _G.CurrentMasterySword = eqName
+                MasteryStatus:SetContent("Farming: " .. eqName .. " (" .. eqMastery .. "/600)")
+            end
+        end)
+    end
+end)
 
 local GachaClient, GachaWindow
 pcall(function() GachaClient = require(replicated.Controllers.GachaClient) end)
