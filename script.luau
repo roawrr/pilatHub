@@ -4433,9 +4433,25 @@ Tabs.Main:CreateToggle({
         SetMagnetStatus(v and "Starting..." or "Idle")
         if not v then
             _G.MagnetEventSpawnIndex = 1
+            if _G.MagnetLevelFallback then
+                _G.Level = false
+            end
         end
     end
 })
+
+-- 🔽 Toggle baru: Farm Level kalau event belum mulai
+Tabs.Main:CreateToggle({
+    Name = "Farm Level If No Event",
+    Default = false,
+    Callback = function(v)
+        _G.MagnetLevelFallback = v
+        if not v then
+            _G.Level = false  -- matiin farm level saat toggle dimatiin
+        end
+    end
+})
+
 local GachaClient, GachaWindow
 pcall(function() GachaClient = require(replicated.Controllers.GachaClient) end)
 pcall(function() GachaWindow = require(replicated.Controllers.UI.GachaWindow) end)
@@ -4506,8 +4522,29 @@ task.spawn(function()
             continue
         end
 
+        -- 🔽 CEK FALLBACK FARM LEVEL
+        if _G.MagnetLevelFallback then
+            local eventActive = IsMagnetEventActive()
+
+            if not eventActive then
+                -- Event belum mulai → farm level
+                if not _G.Level then
+                    _G.Level = true
+                end
+                SetMagnetStatus("Waiting for Event - Farming Level")
+                task.wait(1)
+                continue
+            else
+                -- Event aktif → stop farm level, lanjut magnet
+                if _G.Level then
+                    _G.Level = false
+                end
+            end
+        end
+        -- 🔽 END CEK FALLBACK
+
         if isFirstRun or #magnetPoints == 0 then
-            magnetPoints = MagnetBuildPoints()
+                       magnetPoints = MagnetBuildPoints()
             if #magnetPoints == 0 then
                 task.wait(5)
                 continue
