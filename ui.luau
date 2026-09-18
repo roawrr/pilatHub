@@ -135,12 +135,12 @@ local function CreatePadding(parent, top, bottom, left, right)
     })
 end
 
-local function CreateShadow(parent, transparency, expand, yOffset)
+local function CreateShadow(parent, transparency, expand, yOffset, color)
     local shadow = CreateInstance("ImageLabel", {
         Name = "Shadow",
         BackgroundTransparency = 1,
         Image = "rbxassetid://1316045217",
-        ImageColor3 = Color3.fromRGB(0, 0, 0),
+        ImageColor3 = color or Color3.fromRGB(0, 0, 0),
         ImageTransparency = transparency or 0.45,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(10, 10, 118, 118),
@@ -202,6 +202,24 @@ local function CreateListLayout(parent, padding, sortOrder, direction)
         FillDirection = direction or Enum.FillDirection.Vertical,
         Parent = parent
     })
+end
+
+local function GetPilatHubVersion()
+    local versionUrl = "https://raw.githubusercontent.com/roawrr/pilatHub/main/version.txt"
+    local ok, result = pcall(function()
+        if game.HttpGet then
+            return game:HttpGet(versionUrl)
+        elseif hs.RequestAsync then
+            local res = hs:RequestAsync({Url = versionUrl, Method = "GET"})
+            return res.Body
+        end
+        return nil
+    end)
+
+    if ok and result and result ~= "" then
+        return (result:gsub("%s+", ""))
+    end
+    return "Unknown"
 end
 
 local function IsMobileDevice()
@@ -718,10 +736,113 @@ function Library:_CreateMainv0rtexd()
 
     self:_CreateContentArea()
     MakeDraggable(self.container, self.topBar)
+    self:_CreateMinimizedBar()
 
     local player = plr.LocalPlayer
     self.screenGui.Parent = player:WaitForChild("PlayerGui")
     self._PilatBlur = PilatBlur.new(self.container)
+end
+
+function Library:_CreateMinimizedBar()
+    local bar = CreateInstance("Frame", {
+        Name = "MinimizedBar",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, -60),
+        Size = UDim2.new(0, 280, 0, 50),
+        Visible = false,
+        ZIndex = 5,
+        Parent = self.screenGui
+    })
+
+    -- Glow ungu di belakang bar (shadow berwarna aksen)
+    local glow = CreateShadow(bar, 0.15, 50, 8, c.Accent)
+    glow.ZIndex = 0
+
+    local box = CreateInstance("Frame", {
+        Name = "Box",
+        BackgroundColor3 = c.Background,
+        BackgroundTransparency = 0.02,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 1,
+        Parent = bar
+    })
+    CreateCorner(box, 8)
+    CreateStroke(box, c.Border, 0.2)
+    CreateGradient(box, VoidGradient.Main, 100)
+
+    local label = CreateInstance("TextLabel", {
+        Name = "Label",
+        FontFace = f.Bold,
+        TextColor3 = c.Text,
+        Text = self.title .. "           Version : ...",
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        BackgroundTransparency = 1,
+        TextSize = textsize.Normal,
+        Position = UDim2.new(0, 10, 0, 0),
+        Size = UDim2.new(1, -20, 1, 0),
+        ZIndex = 2,
+        Parent = bar
+    })
+
+    local clickBtn = CreateInstance("TextButton", {
+        Name = "ClickButton",
+        Text = "",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 3,
+        Parent = bar
+    })
+
+    AddPressAnimation(clickBtn, bar, 0.94)
+
+    local dragging = false
+    local dragStart, startPos
+
+    clickBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = bar.Position
+        end
+    end)
+
+    clickBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                local delta = input.Position - dragStart
+                if delta.Magnitude < 6 then
+                    self:_ToggleMinimize()
+                end
+            end
+            dragging = false
+        end
+    end)
+
+    ui.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            bar.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    self.minimizedBar = bar
+    self.minimizedLabel = label
+
+    task.spawn(function()
+        local version = GetPilatHubVersion()
+        self._version = version
+        if self.minimizedLabel then
+            self.minimizedLabel.Text = self.title .. "           Version : " .. version
+        end
+    end)
 end
 
 function Library:_Createv0rtexdControls()
@@ -897,21 +1018,39 @@ function Library:_ToggleMinimize()
         if self._PilatBlur then
             self._PilatBlur:SetEnabled(false)
         end
-        CreateTween(self.mainContent, {Size = UDim2.new(1, 0, 0, 0)}, animationspeed.Slow)
-        CreateTween(self.container, {Size = UDim2.new(0, self.container.AbsoluteSize.X, 0, 45)}, animationspeed.Slow)
-        if self.resizeBtn then
-            self.resizeBtn.Visible = false
-        end
+
+        CreateTween(self.container, {
+            Size = UDim2.new(0, self.container.AbsoluteSize.X, 0, self.container.AbsoluteSize.Y - 10),
+            Position = self.container.Position - UDim2.new(0, 0, 0, 10)
+        }, animationspeed.Fast)
+
+        task.delay(animationspeed.Fast, function()
+            self.container.Visible = false
+
+            if self.minimizedBar then
+                self.minimizedBar.Visible = true
+                self.minimizedBar.Position = UDim2.new(0.5, 0, 0, -60)
+                CreateTween(self.minimizedBar, {
+                    Position = UDim2.new(0.5, 0, 0, 14)
+                }, animationspeed.Slow, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            end
+        end)
     else
+        if self.minimizedBar then
+            CreateTween(self.minimizedBar, {
+                Position = UDim2.new(0.5, 0, 0, -60)
+            }, animationspeed.Fast, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            task.delay(animationspeed.Fast, function()
+                self.minimizedBar.Visible = false
+            end)
+        end
+
+        self.container.Size = UDim2.new(0, self.container.AbsoluteSize.X, 0, self._originalHeight)
+        self.container.Position = UDim2.new(0.5, -self.container.AbsoluteSize.X / 2, 0.5, -self._originalHeight / 2)
+        self.container.Visible = true
+
         if self._PilatBlur then
             self._PilatBlur:SetEnabled(true)
-        end
-        CreateTween(self.container, {Size = UDim2.new(0, self.container.AbsoluteSize.X, 0, self._originalHeight)}, animationspeed.Slow)
-        task.delay(0.1, function()
-            CreateTween(self.mainContent, {Size = UDim2.new(1, 0, 1, -46)}, animationspeed.Normal)
-        end)
-        if self.resizeBtn then
-            self.resizeBtn.Visible = true
         end
     end
 end
