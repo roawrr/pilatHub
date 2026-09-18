@@ -41,7 +41,7 @@ end
 local CONFIG = {
     VERSION_URL = "https://raw.githubusercontent.com/roawrr/pilatHub/main/version.txt",
     SCRIPT_URL  = "https://raw.githubusercontent.com/roawrr/pilatHub/main/script.luau",
-    LOCAL_VERSION = "1.0.5", -- ganti manual tiap rilis (atau ambil dari _G)
+    LOCAL_VERSION = "1.0.8", -- ganti manual tiap rilis (atau ambil dari _G)
     CHECK_INTERVAL = 60,     -- cek tiap 60 detik
 }
 
