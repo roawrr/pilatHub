@@ -1959,7 +1959,7 @@ end
 
 task.spawn(function()
     while task.wait(Sec) do
-        if _G.Level then
+        if _G.Level or _G.MagnetFallbackLevel then
             pcall(function()
                 local char = plr.Character or plr.CharacterAdded:Wait()
                 local Root = char:WaitForChild("HumanoidRootPart")
@@ -4169,7 +4169,33 @@ local function IsMagnetEventActive()
         and now >= startAt
         and now < endAt
 end
+-- 🔽 Cek yang lebih reliable: pakai enemy real + time window
+local function IsMagnetEventTrulyActive()
+    -- Prioritas 1: ada enemy magnet di workspace?
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies then
+        for _, mob in ipairs(enemies:GetChildren()) do
+            local name = string.lower(tostring(mob.Name))
+            local isMagnet = mob:GetAttribute("MagnetEnemy") == true
+                or name:find("magnetized", 1, true)
+                or name:find("magnet", 1, true)
+            if isMagnet then
+                local hum = mob:FindFirstChild("Humanoid")
+                if hum and hum.Health > 0 then
+                    return true
+                end
+            end
+        end
+    end
 
+    -- Prioritas 2: time window (menit 0-9 = event window)
+    local t = os.date("*t")
+    if t.min >= 0 and t.min < 10 then
+        return true
+    end
+
+    return false
+end
 Tabs.Main:CreateSection("Update 30 / Magnet Token")
 local magnetStatus = Tabs.Main:CreateParagraph({Title = "Magnet Event Status", Content = "Loading..."})
 local magnetPatrolStatus = Tabs.Main:CreateParagraph({Title = "Status", Content = "Idle"})
@@ -4424,18 +4450,15 @@ local function MagnetTravel(point)
 
     return MagnetFindTarget() or false
 end
-
+-- 🔽 Toggle baru: Farm Level kalau event belum mulai
 Tabs.Main:CreateToggle({
-    Name = "Auto Farm Magnet Token",
+    Name = "Farm Level If No Event",
     Default = false,
     Callback = function(v)
-        _G.AutoMagnetToken = v
-        SetMagnetStatus(v and "Starting..." or "Idle")
+        _G.MagnetLevelFallback = v
+        _G.MagnetFallbackLevel = false
         if not v then
-            _G.MagnetEventSpawnIndex = 1
-            if _G.MagnetLevelFallback then
-                _G.Level = false
-            end
+            _G.Level = false  -- optional: matiin farm level pas toggle off
         end
     end
 })
@@ -4518,33 +4541,31 @@ task.spawn(function()
         if not _G.AutoMagnetToken then
             SetMagnetStatus("Idle")
             _G.MagnetEventSpawnIndex = pointIndex
+            _G.MagnetFallbackLevel = false
             task.wait(1)
             continue
         end
 
-        -- 🔽 CEK FALLBACK FARM LEVEL
+        -- 🔽 FALLBACK: kalau event belum aktif → farm level
         if _G.MagnetLevelFallback then
-            local eventActive = IsMagnetEventActive()
-
-            if not eventActive then
-                -- Event belum mulai → farm level
-                if not _G.Level then
-                    _G.Level = true
-                end
-                SetMagnetStatus("Waiting for Event - Farming Level")
+            if not IsMagnetEventTrulyActive() then
+                _G.MagnetFallbackLevel = true
+                SetMagnetStatus("Waiting Event - Farming Level (Fallback)")
+                if not _G.Level then _G.Level = true end
                 task.wait(1)
                 continue
             else
-                -- Event aktif → stop farm level, lanjut magnet
-                if _G.Level then
+                -- Event mulai → stop fallback farm level
+                if _G.MagnetFallbackLevel then
+                    _G.MagnetFallbackLevel = false
                     _G.Level = false
                 end
             end
         end
-        -- 🔽 END CEK FALLBACK
 
+        -- ⬇️ Di bawah ini loop magnet yang lama, gak perlu diubah
         if isFirstRun or #magnetPoints == 0 then
-                       magnetPoints = MagnetBuildPoints()
+            magnetPoints = MagnetBuildPoints()
             if #magnetPoints == 0 then
                 task.wait(5)
                 continue
@@ -4583,7 +4604,6 @@ task.spawn(function()
         end
     end
 end)
-
 
 
 Tabs.Settings:CreateSection("Settings / Configure")
