@@ -416,12 +416,16 @@ function PilatBlur:_Render(distance)
         task.spawn(Update)
     end
 
+    -- Catatan optimasi: sebelumnya ada juga koneksi RunService.RenderStepped yang
+    -- memanggil Update() di SETIAP frame, dobel dengan GetPropertyChangedSignal("CFrame")
+    -- yang sudah otomatis terpanggil tiap kamera bergerak. Ini bikin raycast + CFrame.fromMatrix
+    -- dihitung 2x per frame terus-menerus meski UI tidak sedang disentuh -> sumber lag utama.
+    -- Cukup pakai signal perubahan properti saja (event-driven), tidak polling tiap frame.
     Connections["blur_cframe"] = workspace.CurrentCamera:GetPropertyChangedSignal("CFrame"):Connect(Update)
     Connections["blur_viewport"] = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(Update)
     Connections["blur_fov"] = workspace.CurrentCamera:GetPropertyChangedSignal("FieldOfView"):Connect(Update)
     Connections["blur_pos"] = self._frame:GetPropertyChangedSignal("AbsolutePosition"):Connect(OnChange)
     Connections["blur_size"] = self._frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(OnChange)
-    Connections["blur_render"] = rs.RenderStepped:Connect(Update)
     task.spawn(OnChange)
 end
 
@@ -1496,7 +1500,9 @@ function Library._CreateSlider(tab, config)
         local frameSize = sliderBg.AbsoluteSize
         local relativeX = math.clamp((pos.X - framePos.X) / frameSize.X, 0, 1)
         currentValue = math.floor(min + (max - min) * relativeX)
-        CreateTween(sliderFill, {Size = UDim2.new(relativeX, 0, 1, 0)}, 0.05)
+        -- Assignment langsung (bukan tween) saat drag: menghindari penumpukan
+        -- objek Tween baru di tiap event InputChanged yang bikin drag terasa lag/patah-patah.
+        sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
         valueLabel.Text = tostring(currentValue)
         callback(currentValue)
     end
