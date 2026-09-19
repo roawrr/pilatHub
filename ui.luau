@@ -654,13 +654,16 @@ function Library:_SetupLogoButton()
         ZIndex = 999,
         Parent = self.screenGui
     })
-    CreateCorner(logoButton, 21)
+    CreateCorner(logoButton, 10)
     CreateStroke(logoButton, c.Border, 0.3)
 
     -- lapisan belakang + logo utama, statis (tanpa animasi berputar/aura)
+    -- ScaleType.Fit dipakai supaya gambar TIDAK dipaksa gepeng/melar mengikuti kotak
+    -- kalau proporsi asli gambarnya bukan 1:1 (ini penyebab logo kelihatan "tidak kotak sempurna")
     CreateInstance("ImageLabel", {
         Name = "LogoBack",
         Image = "rbxassetid://135444924921845",
+        ScaleType = Enum.ScaleType.Fit,
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -671,6 +674,7 @@ function Library:_SetupLogoButton()
     CreateInstance("ImageLabel", {
         Name = "LogoFront",
         Image = "rbxassetid://72511686829950",
+        ScaleType = Enum.ScaleType.Fit,
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -679,38 +683,53 @@ function Library:_SetupLogoButton()
         Parent = logoButton
     })
 
+    -- Pola drag resmi ala Roblox: lacak status lepas ('End') lewat input.Changed,
+    -- BUKAN lewat logoButton.InputEnded. logoButton.InputEnded butuh kursor/jari masih
+    -- tepat di atas tombolnya saat dilepas - tapi karena tombolnya ikut berpindah selama
+    -- drag, titik lepas kadang sudah di luar area tombol yang baru, jadi InputEnded gagal
+    -- kepicu dan status "sedang drag" nyangkut true terus -> geser jadi macet.
     local dragging = false
-    local dragStart, startPos
+    local dragInput, dragStart, startPos
+
+    local function updatePosition(input)
+        local delta = input.Position - dragStart
+        logoButton.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
 
     logoButton.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = logoButton.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    if dragging then
+                        local delta = input.Position - dragStart
+                        if delta.Magnitude < 10 then
+                            self:Toggle()
+                        end
+                    end
+                    dragging = false
+                end
+            end)
         end
     end)
 
-    logoButton.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if dragging then
-                local delta = input.Position - dragStart
-                if delta.Magnitude < 10 then
-                    self:Toggle()
-                end
-            end
-            dragging = false
+    logoButton.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
         end
     end)
 
     ui.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            logoButton.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
+        if dragging and input == dragInput then
+            updatePosition(input)
         end
     end)
 
