@@ -1457,7 +1457,7 @@ function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient
         CreateTween(lib.currentTab.icon, {ImageColor3 = c.TextDark}, animationspeed.Fast)
         CreateTween(lib.currentTab.stroke, {Transparency = 1}, animationspeed.Fast)
         if lib.currentTab.auraGradient then
-            CreateTween(lib.currentTab.auraGradient, {Transparency = NumberSequence.new(1)}, animationspeed.Fast)
+            lib.currentTab.auraGradient.Transparency = NumberSequence.new(1)
         end
         
         if lib.currentTab.textGradient then
@@ -1472,7 +1472,7 @@ function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient
     CreateTween(icon, {ImageColor3 = c.Text}, animationspeed.Fast)
     CreateTween(stroke, {Transparency = 0.4, Color = c.Accent}, animationspeed.Fast)
     if auraGradient then
-        CreateTween(auraGradient, {Transparency = NumberSequence.new(0.2)}, animationspeed.Fast)
+        auraGradient.Transparency = NumberSequence.new(0.2)
     end
     
     if textGradient then
@@ -1842,11 +1842,11 @@ function Library._CreateToggle(tab, config)
     local function UpdateToggle()
         if enabled then
             CreateTween(switchBg, {BackgroundColor3 = c.Toggle.Enabled}, animationspeed.Normal)
-            CreateTween(switchGradient, {Transparency = NumberSequence.new(0)}, animationspeed.Normal)
+            switchGradient.Transparency = NumberSequence.new(0)
             CreateTween(switchCircle, {Position = UDim2.new(0, 21, 0.5, 0)}, animationspeed.Normal, Enum.EasingStyle.Back)
         else
             CreateTween(switchBg, {BackgroundColor3 = c.Toggle.Disabled}, animationspeed.Normal)
-            CreateTween(switchGradient, {Transparency = NumberSequence.new(1)}, animationspeed.Normal)
+            switchGradient.Transparency = NumberSequence.new(1)
             CreateTween(switchCircle, {Position = UDim2.new(0, 4, 0.5, 0)}, animationspeed.Normal, Enum.EasingStyle.Back)
         end
     end
