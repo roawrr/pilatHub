@@ -9,36 +9,47 @@ local hs = game:GetService("HttpService")
 local n = "Pilat"
 
 local c = {
-    Background = Color3.fromRGB(9, 6, 16),
-    Secondary = Color3.fromRGB(19, 13, 30),
-    Border = Color3.fromRGB(52, 36, 78),
-    Text = Color3.fromRGB(255, 255, 255),
-    TextDark = Color3.fromRGB(165, 152, 190),
-    TextFade = Color3.fromRGB(118, 104, 145),
-    Accent = Color3.fromRGB(158, 91, 255),
+    Background = Color3.fromRGB(7, 7, 12),
+    Secondary = Color3.fromRGB(15, 14, 22),
+    Border = Color3.fromRGB(46, 43, 66),
+    Text = Color3.fromRGB(247, 246, 255),
+    TextDark = Color3.fromRGB(170, 167, 198),
+    TextFade = Color3.fromRGB(118, 115, 145),
+    Accent = Color3.fromRGB(170, 118, 255),   -- violet (utama)
+    Accent2 = Color3.fromRGB(90, 209, 255),   -- cyan (kedua, buat gradient aura)
+    Accent3 = Color3.fromRGB(255, 112, 199),  -- pink (ketiga, buat gradient aura)
     Toggle = {
-        Enabled = Color3.fromRGB(158, 91, 255),
-        Disabled = Color3.fromRGB(70, 58, 95),
+        Enabled = Color3.fromRGB(170, 118, 255),
+        Disabled = Color3.fromRGB(62, 58, 82),
         Circle = Color3.fromRGB(255, 255, 255)
     },
     Notification = {
-        Background = Color3.fromRGB(14, 9, 24),
-        Border = Color3.fromRGB(52, 36, 78),
-        Timer = Color3.fromRGB(158, 91, 255)
+        Background = Color3.fromRGB(12, 11, 19),
+        Border = Color3.fromRGB(46, 43, 66),
+        Timer = Color3.fromRGB(170, 118, 255)
     }
 }
 
--- Gradasi "dark void" hitam ke ungu, dipakai di background utama
+-- Gradasi "aura" iridescent (violet -> cyan -> pink -> violet), dipakai di border glow yang berputar
+local AuraGradient = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, c.Accent),
+    ColorSequenceKeypoint.new(0.33, c.Accent2),
+    ColorSequenceKeypoint.new(0.66, c.Accent3),
+    ColorSequenceKeypoint.new(1, c.Accent)
+})
+
+-- Gradasi "dark void" hitam ke ungu-glass, dipakai di background utama
 local VoidGradient = {
     Main = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 14, 48)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(13, 8, 24)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 2, 9))
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 16, 46)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(12, 9, 22)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 3, 9))
     }),
     Card = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 18, 50)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 10, 26))
-    })
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 20, 46)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 12, 24))
+    }),
+    Aura = AuraGradient
 }
 
 local s = {
@@ -68,10 +79,10 @@ local textsize = {
 }
 
 local animationspeed = {
-    Fast = 0.1,
-    Normal = 0.15,
-    Slow = 0.2,
-    VerySlow = 0.3
+    Fast = 0.12,
+    Normal = 0.22,
+    Slow = 0.32,
+    VerySlow = 0.5
 }
 
 local Library = {}
@@ -86,7 +97,7 @@ local function CreateTween(instance, properties, duration, easingStyle, easingDi
         instance,
         TweenInfo.new(
             duration or animationspeed.Normal,
-            easingStyle or Enum.EasingStyle.Quad,
+            easingStyle or Enum.EasingStyle.Quint,
             easingDirection or Enum.EasingDirection.Out
         ),
         properties
@@ -159,6 +170,30 @@ local function CreateGradient(parent, colorSequence, rotation)
         Rotation = rotation or 90,
         Parent = parent
     })
+end
+
+-- Border ber-glow iridescent yang berputar pelan terus-menerus.
+-- Dianimasikan lewat satu Tween berulang (ditangani TweenService), BUKAN loop per-frame,
+-- jadi tidak menambah beban seperti masalah RenderStepped yang sudah diperbaiki sebelumnya.
+local function CreateAuraGlow(parent, thickness, cycleSeconds)
+    local stroke = CreateInstance("UIStroke", {
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Thickness = thickness or 1.5,
+        Transparency = 0.15,
+        Parent = parent
+    })
+    local gradient = CreateInstance("UIGradient", {
+        Color = AuraGradient,
+        Rotation = 0,
+        Parent = stroke
+    })
+    local spin = ts:Create(
+        gradient,
+        TweenInfo.new(cycleSeconds or 6, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1, false),
+        {Rotation = 360}
+    )
+    spin:Play()
+    return stroke, gradient, spin
 end
 
 local function AddPressAnimation(clickable, target, minScale)
@@ -495,6 +530,7 @@ function Library.new(title, configFolder)
     self:_CreateMainv0rtexd()
     self:_SetupKeybindListener()
     self:_SetupMobileSupport()
+    self:_SetupLogoButton()
     CreateNotificationContainer(self.screenGui)
     return self
 end
@@ -513,7 +549,7 @@ function Library:Notify(config)
         ClipsDescendants = true,
         Parent = NotificationContainer
     })
-    CreateCorner(notification, 6)
+    CreateCorner(notification, 14)
     CreateInstance("UIStroke", {
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
         Color = c.Notification.Border,
@@ -607,6 +643,82 @@ function Library:SetToggleKey(keyCode)
     self._toggleKey = keyCode
 end
 
+function Library:_SetupLogoButton()
+    local logoButton = CreateInstance("ImageButton", {
+        Name = "LogoToggle",
+        Image = "",
+        BackgroundColor3 = c.Background,
+        BackgroundTransparency = 0.1,
+        Position = UDim2.new(0, 15, 0, 15),
+        Size = UDim2.new(0, 42, 0, 42),
+        ZIndex = 999,
+        Parent = self.screenGui
+    })
+    CreateCorner(logoButton, 21)
+    CreateStroke(logoButton, c.Border, 0.3)
+
+    -- lapisan belakang + logo utama, statis (tanpa animasi berputar/aura)
+    CreateInstance("ImageLabel", {
+        Name = "LogoBack",
+        Image = "rbxassetid://135444924921845",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1, -4, 1, -4),
+        ZIndex = 999,
+        Parent = logoButton
+    })
+    CreateInstance("ImageLabel", {
+        Name = "LogoFront",
+        Image = "rbxassetid://72511686829950",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1, -14, 1, -14),
+        ZIndex = 1000,
+        Parent = logoButton
+    })
+
+    local dragging = false
+    local dragStart, startPos
+
+    logoButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = logoButton.Position
+        end
+    end)
+
+    logoButton.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if dragging then
+                local delta = input.Position - dragStart
+                if delta.Magnitude < 10 then
+                    self:Toggle()
+                end
+            end
+            dragging = false
+        end
+    end)
+
+    ui.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            logoButton.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    AddPressAnimation(logoButton, logoButton, 0.9)
+
+    self._logoButton = logoButton
+end
+
 function Library:_SetupMobileSupport()
     local mobileButton = CreateInstance("ImageButton", {
         Name = "MobileToggle",
@@ -683,10 +795,10 @@ function Library:_CreateMainv0rtexd()
         ClipsDescendants = false,
         Parent = self.screenGui
     })
-    CreateCorner(self.container, 8)
-    CreateStroke(self.container, c.Border, 0.2)
+    CreateCorner(self.container, 18)
+    CreateAuraGlow(self.container, 1.5, 7)
     CreateGradient(self.container, VoidGradient.Main, 100)
-    local containerShadow = CreateShadow(self.container, 0.4, 26, 6)
+    local containerShadow = CreateShadow(self.container, 0.35, 34, 8)
     containerShadow.ZIndex = -1
 
     self.topBar = CreateInstance("Frame", {
@@ -1192,9 +1304,17 @@ function Library._CreateTab(section, name, icon)
         Size = UDim2.new(0, s.Tab.Width, 0, s.Tab.Height),
         Parent = section.tabsContainer
     })
-    CreateCorner(tabBtn, 5)
+    CreateCorner(tabBtn, 12)
 
     local tabStroke = CreateStroke(tabBtn, c.Border, 1)
+    local tabAuraGradient = CreateGradient(tabStroke, AuraGradient, 0)
+    tabAuraGradient.Transparency = NumberSequence.new(1)
+    local tabAuraSpin = ts:Create(
+        tabAuraGradient,
+        TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1, false),
+        {Rotation = 360}
+    )
+    tabAuraSpin:Play()
 
     local iconLabel = CreateInstance("ImageLabel", {
         Name = "Icon",
@@ -1255,7 +1375,7 @@ function Library._CreateTab(section, name, icon)
     AddPressAnimation(clickBtn, tabBtn, 0.95)
 
     clickBtn.MouseButton1Click:Connect(function()
-        Library._SelectTab(section._library, tab, tabBtn, tabStroke, iconLabel, tabText, textGradient)
+        Library._SelectTab(section._library, tab, tabBtn, tabStroke, iconLabel, tabText, textGradient, tabAuraGradient)
     end)
 
     clickBtn.MouseEnter:Connect(function()
@@ -1275,12 +1395,13 @@ function Library._CreateTab(section, name, icon)
     tab.icon = iconLabel
     tab.textLabel = tabText
     tab.textGradient = textGradient
+    tab.auraGradient = tabAuraGradient
     tab._library = section._library
 
     table.insert(section.tabs, tab)
 
     if not section._library.currentTab then
-        Library._SelectTab(section._library, tab, tabBtn, tabStroke, iconLabel, tabText, textGradient)
+        Library._SelectTab(section._library, tab, tabBtn, tabStroke, iconLabel, tabText, textGradient, tabAuraGradient)
     end
 
     local tabMethods = setmetatable({}, {__index = tab})
@@ -1328,13 +1449,16 @@ function Library._CreateTab(section, name, icon)
     return tabMethods
 end
 
-function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient)
+function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient, auraGradient)
     
     if lib.currentTab then
         lib.currentTab.content.Visible = false
         CreateTween(lib.currentTab.button, {BackgroundColor3 = c.Secondary, BackgroundTransparency = 1}, animationspeed.Fast)
         CreateTween(lib.currentTab.icon, {ImageColor3 = c.TextDark}, animationspeed.Fast)
         CreateTween(lib.currentTab.stroke, {Transparency = 1}, animationspeed.Fast)
+        if lib.currentTab.auraGradient then
+            CreateTween(lib.currentTab.auraGradient, {Transparency = NumberSequence.new(1)}, animationspeed.Fast)
+        end
         
         if lib.currentTab.textGradient then
             lib.currentTab.textGradient.Enabled = true
@@ -1346,7 +1470,10 @@ function Library._SelectTab(lib, tab, btn, stroke, icon, textLabel, textGradient
     
     CreateTween(btn, {BackgroundColor3 = c.Accent, BackgroundTransparency = 0.85}, animationspeed.Fast)
     CreateTween(icon, {ImageColor3 = c.Text}, animationspeed.Fast)
-    CreateTween(stroke, {Transparency = 0.55, Color = c.Accent}, animationspeed.Fast)
+    CreateTween(stroke, {Transparency = 0.4, Color = c.Accent}, animationspeed.Fast)
+    if auraGradient then
+        CreateTween(auraGradient, {Transparency = NumberSequence.new(0.2)}, animationspeed.Fast)
+    end
     
     if textGradient then
         textGradient.Enabled = false
@@ -1382,7 +1509,7 @@ function Library._CreateParagraph(tab, config)
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -1442,7 +1569,7 @@ function Library._CreateSlider(tab, config)
         Size = UDim2.new(1, 0, 0, s.Slider.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -1475,13 +1602,14 @@ function Library._CreateSlider(tab, config)
 
     local sliderBg = CreateInstance("Frame", {
         Name = "SliderBackground",
-        BackgroundColor3 = Color3.fromRGB(11, 11, 11),
-        Position = UDim2.new(0, 10, 0, 29),
+        BackgroundColor3 = Color3.fromRGB(16, 14, 22),
+        Position = UDim2.new(0, 10, 0, 28),
         BorderSizePixel = 0,
-        Size = UDim2.new(1, -20, 0, 7),
+        Size = UDim2.new(1, -20, 0, 8),
         Parent = frame
     })
     CreateCorner(sliderBg, 100)
+    CreateStroke(sliderBg, c.Border, 0.5)
 
     local sliderFill = CreateInstance("Frame", {
         Name = "SliderFill",
@@ -1491,6 +1619,7 @@ function Library._CreateSlider(tab, config)
         Parent = sliderBg
     })
     CreateCorner(sliderFill, 100)
+    CreateGradient(sliderFill, AuraGradient, 0)
 
     local dragging = false
 
@@ -1565,7 +1694,7 @@ function Library._CreateButton(tab, config)
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 6)
+    CreateCorner(frame, 12)
     CreateStroke(frame, c.Border, 0.3)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -1645,7 +1774,7 @@ function Library._CreateToggle(tab, config)
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 6)
+    CreateCorner(frame, 12)
     CreateStroke(frame, c.Border, 0.3)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -1672,6 +1801,15 @@ function Library._CreateToggle(tab, config)
         Parent = frame
     })
     CreateCorner(switchBg, 100)
+
+    local switchGradient = CreateGradient(switchBg, AuraGradient, 0)
+    switchGradient.Transparency = enabled and NumberSequence.new(0) or NumberSequence.new(1)
+    local switchSpin = ts:Create(
+        switchGradient,
+        TweenInfo.new(3.5, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1, false),
+        {Rotation = 360}
+    )
+    switchSpin:Play()
 
     local switchCircle = CreateInstance("Frame", {
         Name = "Circle",
@@ -1704,10 +1842,12 @@ function Library._CreateToggle(tab, config)
     local function UpdateToggle()
         if enabled then
             CreateTween(switchBg, {BackgroundColor3 = c.Toggle.Enabled}, animationspeed.Normal)
-            CreateTween(switchCircle, {Position = UDim2.new(0, 21, 0.5, 0)}, animationspeed.Normal)
+            CreateTween(switchGradient, {Transparency = NumberSequence.new(0)}, animationspeed.Normal)
+            CreateTween(switchCircle, {Position = UDim2.new(0, 21, 0.5, 0)}, animationspeed.Normal, Enum.EasingStyle.Back)
         else
             CreateTween(switchBg, {BackgroundColor3 = c.Toggle.Disabled}, animationspeed.Normal)
-            CreateTween(switchCircle, {Position = UDim2.new(0, 4, 0.5, 0)}, animationspeed.Normal)
+            CreateTween(switchGradient, {Transparency = NumberSequence.new(1)}, animationspeed.Normal)
+            CreateTween(switchCircle, {Position = UDim2.new(0, 4, 0.5, 0)}, animationspeed.Normal, Enum.EasingStyle.Back)
         end
     end
 
@@ -1770,7 +1910,7 @@ function Library._CreateDropdown(tab, config)
         ZIndex = 1,
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -1994,7 +2134,7 @@ function Library._CreateKeybind(tab, config, lib)
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -2123,7 +2263,7 @@ function Library._CreateColorPicker(tab, config)
         Size = UDim2.new(1, 0, 0, s.Button.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 6)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
@@ -2416,7 +2556,7 @@ function Library._CreateTextBox(tab, config)
         Size = UDim2.new(1, 0, 0, s.TextBox.Height),
         Parent = tab.content
     })
-    CreateCorner(frame, 5)
+    CreateCorner(frame, 12)
     CreateStroke(frame)
     CreateGradient(frame, VoidGradient.Card, 100)
     CreateShadow(frame, 0.55, 10, 3)
