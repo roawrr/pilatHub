@@ -1,0 +1,247 @@
+
+
+-- =========================================
+-- Services & Setup
+-- =========================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local plr = Players.LocalPlayer
+local v54 = ReplicatedStorage
+local v56 = TweenService
+local v55 = UserInputService
+local v57 = plr
+
+-- =========================================
+-- Egg Rarity list (from original rap.lua)
+-- =========================================
+local EggRarities = {
+    "Admin Egg", "Asteroid Egg", "Aurora Egg", "Blackhole Egg", "Brown Egg",
+    "Cracked Egg", "Crystal Egg", "Devil Fruit Egg", "Diamond Egg", "Dominus Egg",
+    "Dragon Egg", "Easter Egg", "Flaming Egg", "Flower Egg", "Galaxy Egg",
+    "Giant Egg", "Glass Egg", "Golden Egg", "Ice Egg", "Leaf Egg", "Mushroom Egg",
+    "Sinister Egg", "Skull Egg", "Slime Egg", "Soul Egg", "Stone Egg", "White Egg",
+    "Cherub Egg"
+}
+
+-- =========================================
+-- Load UI Library (from script.lua)
+-- =========================================
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/ui.luau"))()
+local Window  = Library.new("Pilat Hub", "pilat..json")
+Window:SetToggleKey(Enum.KeyCode.RightControl)
+
+local MainSection = Window:CreateSection("Main")
+local Tabs = {
+    Farm  = MainSection:CreateTab("Farm",  "rbxassetid://7733960981"),
+    Utils = MainSection:CreateTab("Utils", "rbxassetid://7734053495")
+}
+
+-- =========================================
+-- FARM TAB
+-- =========================================
+Tabs.Farm:CreateSection("Auto Farm Egg")
+
+Tabs.Farm:CreateDropdown({
+    Name = "Select Rarity",
+    Options = EggRarities,
+    Default = "Blackhole Egg",
+    Callback = function(Value)
+        _G.SelectRarity = Value
+    end
+})
+
+Tabs.Farm:CreateToggle({
+    Name = "Auto Farm Egg (By Rarity)",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoFarmEgg = Value
+    end
+})
+
+-- Auto Farm loop (mengikuti rarity yang dipilih)
+task.spawn(function()
+    while task.wait(0.1) do
+        pcall(function()
+            if _G.AutoFarmEgg and _G.SelectRarity then
+                local character = plr.Character
+                if not character then return end
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if not root then return end
+
+                local renderedEggs = workspace:FindFirstChild("RenderedEggs")
+                if not renderedEggs then return end
+
+                -- Cari egg yang cocok dengan rarity yang dipilih
+                local foundEgg = nil
+                for _, egg in ipairs(renderedEggs:GetChildren()) do
+                    if string.find(string.lower(egg.Name), string.lower(_G.SelectRarity)) then
+                        foundEgg = egg
+                        break
+                    end
+                end
+
+                if foundEgg then
+                    local targetPos
+                    if foundEgg:IsA("BasePart") then
+                        targetPos = foundEgg.Position
+                    else
+                        targetPos = foundEgg:GetPivot().Position
+                    end
+
+                    -- Tween ke posisi egg
+                    local tween = TweenService:Create(
+                        root,
+                        TweenInfo.new(0.3, Enum.EasingStyle.Linear),
+                        { CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0)) }
+                    )
+                    tween:Play()
+                end
+            end
+        end)
+    end
+end)
+
+-- =========================================
+-- UTILS TAB
+-- =========================================
+Tabs.Utils:CreateSection("Auto Farm Pets")
+
+-- =========== Auto Collect Cash ===========
+Tabs.Utils:CreateToggle({
+    Name = "Auto Collect Cash",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoCollectEarnings = Value
+        if Value then
+            task.spawn(function()
+                local remoteGame  = v54:WaitForChild("Remotes"):WaitForChild("Game")
+                local petCollect  = remoteGame:WaitForChild("PetCollect")
+
+                while _G.AutoCollectEarnings do
+                    pcall(function()
+                        for _, obj in pairs(workspace:GetDescendants()) do
+                            if obj:IsA("Model") and obj:GetAttribute("OwnerUserId") == v57.UserId then
+                                local petKey = obj:GetAttribute("PetKey")
+                                if petKey then
+                                    petCollect:FireServer(petKey)
+                                end
+                            end
+                        end
+                    end)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end
+})
+
+-- =========== Auto Place ===========
+Tabs.Utils:CreateToggle({
+    Name = "Auto Place",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoPlaceEnabled = Value
+        if Value then
+            task.spawn(function()
+                local v286 = v54:WaitForChild("GameServices")
+                local v287 = require(v286:WaitForChild("General"))
+                local v288 = v54:WaitForChild("Remotes"):WaitForChild("Game")
+                local v289 = v288:WaitForChild("EggPlaced")
+
+                while _G.AutoPlaceEnabled do
+                    pcall(function()
+                        local v306 = v287:GetPlot(v57)
+                        if v306 then
+                            local v317 = v306:FindFirstChild("Nests")
+                            if v317 then
+                                for _, v330 in v317:GetChildren() do
+                                    local v332 = v330:GetAttribute("Unlocked") == true
+                                    local v333 = v330:GetAttribute("Occupied") == true
+                                    local v334 = v306:GetAttribute("NestsOwnerLoaded") == v57.UserId
+                                    if v334 and v332 and not v333 then
+                                        v289:FireServer({ NestId = v330.Name })
+                                        task.wait(0.5)
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+
+-- =========== Auto Hatch ===========
+Tabs.Utils:CreateToggle({
+    Name = "Auto Hatch",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoHatchEnabled = Value
+        if Value then
+            task.spawn(function()
+                local v261 = v54:WaitForChild("GameServices")
+                local v262 = require(v261:WaitForChild("General"))
+                local v263 = v54:WaitForChild("Remotes"):WaitForChild("Game")
+                local v264 = v263:WaitForChild("Hatch")
+
+                while _G.AutoHatchEnabled do
+                    pcall(function()
+                        local v308 = v262:GetPlot(v57)
+                        if v308 then
+                            local v335 = v308:FindFirstChild("Eggs")
+                            if v335 then
+                                for _, v339 in v335:GetChildren() do
+                                    if not v339:HasTag("Hatching") then
+                                        local v354 = v339:GetAttribute("EggKey")
+                                        if v354 then
+                                            v264:FireServer({ EggKey = v354 })
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+
+-- =========== Auto Rebirth ===========
+Tabs.Utils:CreateToggle({
+    Name = "Auto Rebirth",
+    Default = false,
+    Callback = function(Value)
+        _G.AutoRebirthEnabled = Value
+        if Value then
+            task.spawn(function()
+                local remoteGame    = v54:WaitForChild("Remotes"):WaitForChild("Game")
+                local rebirthRemote = remoteGame:WaitForChild("Rebirth")
+
+                while _G.AutoRebirthEnabled do
+                    pcall(function()
+                        rebirthRemote:FireServer()
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+
+-- =========================================
+-- Notify on load
+-- =========================================
+Window:Notify({
+    Title = "Pilat hub",
+    Description = "Loaded successfully!",
+    Icon = "rbxassetid://72511686829950",
+    Duration = 5
+})
