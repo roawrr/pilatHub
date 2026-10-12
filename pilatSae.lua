@@ -10198,9 +10198,9 @@ do
 			p428._instantReturnToken = instantReturnToken
 			p428._flyDeparting = false
 
-			if p428.config.stealMode == "Fly" then
-				p428:_showTreadmillDecoy()
-			end
+			-- Semua mode (Fly, Instant, Instant Beta) pakai decoy di safe zone saat return
+			-- biar kelihatannya kek teleport — real char pergi forest drop-grab, decoy diam di safe
+			p428:_showTreadmillDecoy()
 
 			task.spawn(function()
 				local function v1520()
