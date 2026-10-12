@@ -196,7 +196,7 @@ do
 	__PilatV4TweenRuntimeGeneration = genv.__PilatV4TweenRuntimeGeneration
 	t1 = {
 		KEY = "__PilatV4StealAnEggMovementSpoof",
-		VERSION = 436,
+		VERSION = 457,
 		INTEGRITY_KEY = "__PilatV4StealAnEggIntegritySpoof",
 		SIGNAL = "ClientCharacter: GetDebugSnapshot",
 		HEADROOM = 1.35,
@@ -7008,33 +7008,21 @@ do
 				return
 			end
 
-			-- Instant V2 uses the Fly/High Speed User carry sequence, but its
-			-- approach to the target egg must still use teleportRoot after priming.
-			if p266.config.stealMode ~= "Fly" or p266.config.instantBeta then
-				if (p266.config.stealMode == "Instant" or p266.config.instantBeta) and (p266.config.instantBeta or not p266.lowFpsPrime) then
+			if p266.config.stealMode ~= "Fly" then
+				if p266.config.stealMode == "Instant" and not p266.lowFpsPrime then
 					local Uid = v1089.Uid
 
 					local function v1095()
 						return p266.destroyed or not p266.enabled or p266.instantPhase ~= "hunting" or not p266.activeTarget or p266.activeTarget.Uid ~= Uid
 					end
 
-					-- Instant / Instant Beta: keep the proven carry path. Beta only
-					-- changes the final target movement to teleportRoot.
-					p266:_setStatus(p266.config.instantBeta and "Teleporting to target egg (Instant Beta)" or "Heading to target egg")
-					if p266.config.instantBeta then
-						if not p266:_teleportRoot(HumanoidRootPart, Humanoid, v1093) then
-							if not v1095() then
-								p266:_finish("Could not teleport to the egg — retrying")
-							end
-							return
+					-- Instant: move straight to the resolved egg destination, then request carry immediately.
+					p266:_setStatus("Heading to target egg")
+					if not p266:_glideRoot(v1093, v1095) then
+						if not v1095() then
+							p266:_finish("Could not reach the egg — retrying")
 						end
-					else
-						if not p266:_glideRoot(v1093, v1095) then
-							if not v1095() then
-								p266:_finish("Could not reach the egg — retrying")
-							end
-							return
-						end
+						return
 					end
 
 					if v1095() then
@@ -9794,9 +9782,7 @@ do
 					end
 
 					if (HumanoidRootPart.Position - v1458.Position).Magnitude > 10 then
-						-- Instant Beta must ALWAYS use teleportRoot for every approach to the egg.
-						-- High Speed movement is only for the return/home phase.
-						if not p414 and not p412.config.instantBeta then
+						if not p414 then
 							p412:_setStatus("Re-approaching egg")
 
 							local u1459 = false
@@ -9820,7 +9806,7 @@ do
 							continue
 						end
 
-						p412:_setStatus(p412.config.instantBeta and "Teleporting back to egg" or "Re-stealing egg")
+						p412:_setStatus("Re-stealing egg")
 
 						if not p412:_teleportRoot(HumanoidRootPart, Humanoid2, v1458) then
 							p412:_finish("Re-steal failed — retrying")
@@ -10191,8 +10177,6 @@ do
 			p428._instantReturnToken = instantReturnToken
 			p428._flyDeparting = false
 
-			-- Return behavior is selected by the original High Speed User (Fly) mode.
-			-- Instant V2 maps to Fly, so it reuses the same return/decoy path as Normal.
 			if p428.config.stealMode == "Fly" then
 				p428:_showTreadmillDecoy()
 			end
@@ -10282,7 +10266,6 @@ do
 
 				p428:_clearArrivalHold(p429)
 
-				-- Keep the original High Speed User return movement profile.
 				local treeRegrabMode = p428.treeBoostedUid == p429 and (p428.treeRegrabMode or "walk") or "glide"
 
 				local function v1537()
@@ -10883,7 +10866,7 @@ do
 					return
 				end
 
-				if p448.config.stealMode == "Fly" or p448.config.stealMode == "Instant" and not p448.config.instantBeta then
+				if p448.config.stealMode == "Instant" or p448.config.stealMode == "Fly" then
 					local uid = p448.carry.uid or p448.activeTarget and p448.activeTarget.Uid
 
 					if not uid then
@@ -11596,10 +11579,20 @@ do
 
 			p460.safeStarting = false
 
-			-- Instant V2 follows the same primer/grab sequence as Normal.
-			-- The only difference is using teleportRoot instead of glide/tween when
-			-- approaching the primer egg; keep the existing carry and return logic.
+			if p460.config.stealMode == "Fly" then
+				p460.instantPhase = "priming"
+				p460.primerUid = nil
+				p460.targetUid = v1655.Uid
+				p460.activeTarget = v1655
+				p460._flyDeparting = false
+				p460.lowFpsPrime = false
+				p460:_installGuardHitDistanceBoost()
+				p460:_startMovementProtection()
+				p460.stats.lastResult = "High Speed departing"
+				p460:_startPrimerTargetHunt()
 
+				return
+			end
 
 			local v1668 = p460:_choosePrimerEgg(v1655.Uid)
 
@@ -11642,9 +11635,7 @@ do
 				return
 			end
 
-			-- Instant Beta must never fall back to the low-FPS tween path.
-			-- It always uses the same immediate root teleport mechanism.
-			if p460.lowFpsPrime and not p460.config.instantBeta then
+			if p460.lowFpsPrime then
 				p460:_setStatus("Preparing steal")
 				p460:_tweenRoot(v1669, function()
 					if p460.instantPhase == "priming" and p460.primerUid == v1668.Uid then
@@ -11660,7 +11651,7 @@ do
 				return
 			end
 
-			if p460.config.stealMode == "Fly" and not p460.config.instantBeta then
+			if p460.config.stealMode == "Fly" then
 				p460:_setStatus("Preparing steal")
 
 				if not p460:_glideRoot(v1669, function()
@@ -11679,11 +11670,13 @@ do
 				return
 			end
 
-			p460:_setStatus(p460.config.instantBeta and "Moving to primer egg (Instant V2)" or "Preparing steal")
+			p460:_setStatus(p460.config.instantBeta and "Moving to egg (Instant Beta)" or "Preparing steal")
 
 			if p460.config.instantBeta then
-				-- Instant V2: use teleportRoot to approach the primer, while preserving priming and grab logic.
-				if not p460:_teleportRoot(HumanoidRootPart, Humanoid, v1669) then
+				local reached = p460:_glideRoot(v1669, function()
+					return p460.destroyed or not p460.enabled or p460.instantPhase ~= "priming" or p460.primerUid ~= v1668.Uid
+				end)
+				if not reached then
 					if p460.instantPhase == "priming" and p460.primerUid == v1668.Uid then p460:_finish("Steal unavailable — retrying") end
 					return
 				end
@@ -25511,7 +25504,7 @@ do
 			end
 
 			v4034("Instant", "Instant")
-			v4034("Normal", "Fly")
+			v4034("High Speed User", "Fly")
 
 			local ScrollingFrame2 = Instance.new("ScrollingFrame")
 
@@ -29076,13 +29069,13 @@ do
 			end
 			v4536 = function(p991)
 				local v4692 = type(p991) == "string" and p991 or ""
-				local stealMode = (v4692 == "Normal" or v4692 == "Instant V2") and "Fly" or "Instant"
-				local instantBeta = v4692 == "Instant V2"
-				local flyAerial = false
+				local instantBeta = v4692 == "Instant Beta"
+				local stealMode = (v4692:find("Fly") or v4692:find("High")) and "Fly" or "Instant"
+				local flyAerial = stealMode == "Fly" and (v4692:find("%(Fly%)") ~= nil or v4692:lower():find("aerial") ~= nil)
 
 				pilatV4Config.StealMode = stealMode
 				pilatV4Config.InstantBeta = instantBeta
-				pilatV4Config.FlyAerial = flyAerial
+					pilatV4Config.FlyAerial = flyAerial
 
 				if v612 then
 					v612:setStealMode(stealMode, flyAerial, false, instantBeta)
@@ -29865,14 +29858,15 @@ do
 			})
 			t216.stealMode = v4794:AddDropdown({
 				Title = "Steal Mode",
-				Content = "Instant uses the standard method. Instant V2 uses teleportRoot to go straight to the target egg and keeps the existing grab/return flow. Normal keeps the original High Speed User logic.",
+				Content = "Instant Beta: the real character glides to the egg without a clone, then uses Instant Return.",
 				Options = {
 					"Instant",
-					"Instant V2",
-					"Normal"
+					"Instant Beta",
+					"High Speed User",
+					"High Speed User (Fly)"
 				},
-				MaxVisible = 3,
-				Default = "Normal",
+				MaxVisible = 4,
+				Default = "High Speed User",
 				Multi = false,
 				Callback = v4732(v4536)
 			})
@@ -30739,7 +30733,7 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 			t216.startupBoost = Performance:AddToggle({
 				Title = "Startup Boost",
 				Content = "Lowers graphics when the script starts. Turn it off to get the graphics back; hidden pets and eggs return after a rejoin.",
-				Default = true,
+				Default = false,
 				Callback = v4732(v4717)
 			})
 			t216.boostFps = Performance:AddToggle({
