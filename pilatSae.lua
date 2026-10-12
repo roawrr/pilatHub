@@ -29728,7 +29728,7 @@ do
 				Folder = "PilatSAEv4",
 				Version = 1,
 				Color = Color3.fromRGB(232, 232, 238),
-				Image = "rbxassetid://72511686829950"
+				Image = "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png"
 			})
 			v4779(v4742)
 			t216 = {}
@@ -31156,21 +31156,7 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 			end
 		end
 
-		v4742:AddTab({
-			Name = "Live Chat",
-			Icon = "chat"
-		}):AddSection("Global Chat", true):AddLiveChat({
-			Title = "Live Chat",
-			Height = 300
-		})
 
-		if type(v4742.AddForum) == "function" then
-			v4742:AddForum({
-				Name = "Forum",
-				Icon = "forum",
-				Section = "Config Forum"
-			})
-		end
 
 		do
 			local __PilatV4Visual = genv.__PilatV4Visual
@@ -31394,10 +31380,6 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 			})
 		end
 
-		v4742:AddTab({
-			Name = "Donate",
-			Icon = "donator"
-		}):AddSection("Support Pilat", true):AddSupportCard({})
 
 		do
 			local function v4904(p1104, p1105)

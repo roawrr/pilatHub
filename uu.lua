@@ -352,7 +352,7 @@ if getgenv().ChloeX_Running then
 		sv.sg:SetCore("SendNotification", {
 			Title = "Pilat Already Opened",
 			Text = "Destroy and Re-Open Pilat?",
-			Icon = "rbxassetid://72511686829950",
+			Icon = "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png",
 			Duration = 10,
 			Button1 = "Re-Open",
 			Button2 = "Cancel",
@@ -3501,9 +3501,9 @@ function Chloex:Window(guiconfig)
 		end
 		if toggleStr:match("^https?://") then
 			local url = toggleStr
-			mainbutton.Image = urlimage(url, true) or "rbxassetid://72511686829950"
+			mainbutton.Image = urlimage(url, true) or "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png"
 			task.spawn(function()
-				if not mainbutton.Image:match("^rbxassetid://72511686829950") then
+				if not mainbutton.Image:match("^https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png") then
 					return
 				end
 				local asset = urlimage(url)
