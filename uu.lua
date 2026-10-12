@@ -2814,7 +2814,7 @@ function Chloex:Window(guiconfig)
 
 	local dropshadow = instance.imagelabel(dropshadowholder)
 	dropshadow.Name = "DropShadow"
-	dropshadow.Image = "rbxassetid://6015897843"
+	dropshadow.Image = "rbxassetid://72511686829950"
 	dropshadow.ImageColor3 = Color3.fromRGB(15, 15, 15)
 	dropshadow.ImageTransparency = 1
 	dropshadow.ScaleType = Enum.ScaleType.Slice
@@ -3797,7 +3797,7 @@ function Chloex:Window(guiconfig)
 
 	local dropshadow1 = instance.imagelabel(dropshadowholder1)
 	dropshadow1.Name = "DropShadow"
-	dropshadow1.Image = "rbxassetid://6015897843"
+	dropshadow1.Image = "rbxassetid://72511686829950"
 	dropshadow1.ImageColor3 = Color3.fromRGB(0, 0, 0)
 	dropshadow1.ImageTransparency = 1
 	dropshadow1.ScaleType = Enum.ScaleType.Slice

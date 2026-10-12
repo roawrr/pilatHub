@@ -27206,7 +27206,7 @@ do
 			ImageLabel.Position = UDim2.fromScale(0.5, 0.5)
 			ImageLabel.Size = UDim2.new(1, 40, 1, 40)
 			ImageLabel.BackgroundTransparency = 1
-			ImageLabel.Image = "rbxassetid://6015897843"
+			ImageLabel.Image = "rbxassetid://72511686829950"
 			ImageLabel.ImageColor3 = t166.shadow
 			ImageLabel.ImageTransparency = 0.52
 			ImageLabel.ScaleType = Enum.ScaleType.Slice
