@@ -1584,7 +1584,7 @@ Chloex._isTrial = false
 -- A donator claim (from the loader or an earlier run in this Roblox session) is
 -- only trusted while its key is still inside its paid time. Paused keys have no
 -- running clock, so they never expire locally; the backend decides for them.
-local EXPIRY_GRACE = 120
+local EXPIRY_GRACE = 999999999999999999999999999999999999999999999999999999
 
 local function donatorinfo()
 	local info = Chloex.DonatorInfo
@@ -2762,7 +2762,7 @@ function Chloex:Window(guiconfig)
 	guiconfig.Version = guiconfig.Version or 1
 	local userPassedImage = guiconfig.Image
 	local userPassedToggle = guiconfig.ToggleImage or guiconfig.ToggleIcon or guiconfig.ButtonImage
-	guiconfig.Image = guiconfig.Image or "72511686829950"
+	guiconfig.Image = guiconfig.Image or "83350053574867"
 	-- Background image disabled
 	guiconfig.Background = nil
 	guiconfig.BackgroundImage = nil
@@ -2831,7 +2831,7 @@ function Chloex:Window(guiconfig)
 	local bgRaw = guiconfig.Theme
 		or guiconfig.Background
 		or guiconfig.BackgroundImage
-		or (userPassedImage and tostring(userPassedImage):gsub("%s+", "") ~= "72511686829950" and userPassedImage)
+		or (userPassedImage and tostring(userPassedImage):gsub("%s+", "") ~= "83350053574867" and userPassedImage)
 
 	local bgAsset = nil
 	if bgRaw then
@@ -3492,7 +3492,7 @@ function Chloex:Window(guiconfig)
 		mainbutton.Size = UDim2.new(0, guiconfig.ImageSize, 0, guiconfig.ImageSize)
 		mainbutton.Position = UDim2.new(0, 20, 0, 100)
 		mainbutton.BackgroundTransparency = 1
-		local toggleIcon = userPassedToggle or (not bgAsset and userPassedImage) or "72511686829950"
+		local toggleIcon = userPassedToggle or (not bgAsset and userPassedImage) or "83350053574867"
 		local toggleStr = tostring(toggleIcon):gsub("^%s+", ""):gsub("%s+$", "")
 		if toggleStr:match("^%d+$") then
 			toggleStr = "rbxassetid://" .. toggleStr
