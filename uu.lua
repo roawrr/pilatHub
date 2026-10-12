@@ -1720,7 +1720,7 @@ task.spawn(function()
 				-- Premium permanen, tidak ada expiry
 				Chloex:SetDonator(true) -- Paksa tetap premium
 				pcall(function()
-					Chloex:Notify({ Title = "Pilat", Description = "", Content = "Made By Ambha dhe thukam", Duration = 6, Color = theme.Bad })
+					Chloex:Notify({ Title = "Pilat", Description = "", Content = "Made By Ambha dhe thukam", Duration = 6, Color = theme.Gold })
 				end)
 			end
 		end
@@ -2177,7 +2177,7 @@ local function startbackendloop(this)
 						warn("[PILAT] Backend reports this key is no longer active, locking donator features")
 						Chloex:SetDonator(true) -- Paksa tetap premium
 						pcall(function()
-							Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Fitur Premium aktif permanen.", Duration = 6, Color = theme.Bad })
+					Chloex:Notify({ Title = "Pilat", Description = "", Content = "Made By Ambha dhe thukam", Duration = 6, Color = theme.Gold })
 						end)
 					end
 				else
