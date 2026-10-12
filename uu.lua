@@ -1840,7 +1840,7 @@ local function localdisplayname()
 end
 
 local function isowner()
-	if localusername():lower() == "aevinexyz" or localuserid() == "8478064806" then
+	if localusername():lower() == "pch5bf20" or localuserid() == "10792582863" then
 		return true
 	end
 	if getgenv and getgenv().PilatIsOwner == true then

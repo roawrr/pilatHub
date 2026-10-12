@@ -29728,7 +29728,6 @@ do
 				Folder = "PilatSAEv4",
 				Version = 1,
 				Color = Color3.fromRGB(232, 232, 238),
-				Image = "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilat.png"
 			})
 			v4779(v4742)
 			t216 = {}
