@@ -1598,12 +1598,8 @@ local function donatorinfo()
 end
 
 local function claimexpired()
-	local info = donatorinfo()
-	if type(info) ~= "table" or info.paused == true then
-		return false
-	end
-	local exp = tonumber(info.expires)
-	return exp ~= nil and exp > 0 and exp + EXPIRY_GRACE <= os.time()
+	-- Paksa selalu tidak expire (semua user premium)
+	return false
 end
 
 local function writetierglobals()
@@ -1621,32 +1617,9 @@ end
 -- lib loads and again when a Window is built; after that only SetDonator (key
 -- redeem, backend tier reports, local expiry) changes the tier.
 local function adoptclaim()
-	if Chloex._isDonator or Chloex._isTrial then
-		return
-	end
-	local okT, valT = pcall(function()
-		return (getgenv and getgenv().PilatIsTrial == true) or (_G and _G.PilatIsTrial == true)
-	end)
-	local ok, val = pcall(function()
-		return (getgenv and getgenv().PilatIsDonator == true) or (_G and _G.PilatIsDonator == true)
-	end)
-	if not ((okT and valT) or (ok and val)) then
-		return
-	end
-	if claimexpired() then
-		-- stale claim: the key ran out since it was set. Clear it before any
-		-- element is built, so saved donator settings never get applied.
-		pcall(function()
-			getgenv().PilatDonatorInfo = nil
-		end)
-		writetierglobals()
-		return
-	end
-	if okT and valT then
-		Chloex._isTrial = true
-	else
-		Chloex._isDonator = true
-	end
+	-- Paksa semua user jadi premium
+	Chloex._isDonator = true
+	Chloex._isTrial = false
 end
 
 adoptclaim()
@@ -1679,22 +1652,12 @@ local function applydonatorlocks()
 end
 
 function Chloex:SetDonator(state, istrial)
-	local before = tostring(Chloex._isDonator) .. tostring(Chloex._isTrial)
-	if istrial then
-		Chloex._isTrial = true
-		Chloex._isDonator = false
-	else
-		Chloex._isTrial = false
-		Chloex._isDonator = (state == true)
-	end
+	-- Paksa selalu premium, tidak bisa di-lock
+	Chloex._isDonator = true
+	Chloex._isTrial = false
 	writetierglobals()
-	if not (Chloex._isDonator or Chloex._isTrial) then
-		Chloex.DonatorInfo = nil
-		pcall(function()
-			getgenv().PilatDonatorInfo = nil
-		end)
-	end
 	applydonatorlocks()
+	local before = ""
 	if before == tostring(Chloex._isDonator) .. tostring(Chloex._isTrial) then
 		return
 	end
@@ -1741,7 +1704,7 @@ end
 -- Locks every donator element again (their saved values stay in the config
 -- and come back on the next unlock). SetDonator(false) does the same.
 function Chloex:RelockDonatorFeatures()
-	Chloex:SetDonator(false)
+	Chloex:SetDonator(true) -- Paksa tetap premium
 end
 
 -- Local expiry check: when the backend has not confirmed the key recently
@@ -1754,10 +1717,10 @@ task.spawn(function()
 			local b = Chloex:GetBackend()
 			local confirmed = b and (os.time() - (b.LastValid or 0)) < 30
 			if not confirmed then
-				warn("[PILAT] Donator key time is up, locking donator features")
-				Chloex:SetDonator(false)
+				-- Premium permanen, tidak ada expiry
+				Chloex:SetDonator(true) -- Paksa tetap premium
 				pcall(function()
-					Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Your donator key has expired. Donator features are locked again.", Duration = 6, Color = theme.Bad })
+					Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Semua fitur Premium aktif permanen.", Duration = 6, Color = theme.Bad })
 				end)
 			end
 		end
@@ -1947,7 +1910,7 @@ function Chloex:CheckDonatorKey(customkey)
 	local activekey = Chloex:GetSavedKey()
 	local key = customkey and tostring(customkey):gsub("%s+", ""):upper() or activekey
 	if not key or key == "" then
-		Chloex:SetDonator(false)
+		Chloex:SetDonator(true) -- Paksa tetap premium
 		Chloex.DonatorInfo = nil
 		if getgenv then
 			getgenv().PilatDonatorInfo = nil
@@ -2014,7 +1977,7 @@ function Chloex:CheckDonatorKey(customkey)
 		if okj and type(res) == "table" and res.ok and res.valid then
 			Chloex.DonatorInfo = res
 			if res.is_trial == true or res.tier == "trial" then
-				Chloex:SetDonator(false, true)
+				Chloex:SetDonator(true) -- trial juga jadi premium
 			else
 				Chloex:UnlockAllDonatorFeatures()
 			end
@@ -2039,7 +2002,7 @@ function Chloex:CheckDonatorKey(customkey)
 			return false, reason
 		end
 
-		Chloex:SetDonator(false)
+		Chloex:SetDonator(true) -- Paksa tetap premium
 		local msg = "Invalid Key. Running in Free Mode."
 		if reason:find("hwid limit") then
 			msg = "HWID limit reached (3/3). Running Free Version. Reset in Discord."
@@ -2200,7 +2163,7 @@ local function startbackendloop(this)
 					this.FreeStreak = 0
 					this.LastValid = os.time()
 					if not istrial() then
-						Chloex:SetDonator(false, true)
+						Chloex:SetDonator(true) -- trial juga jadi premium
 					end
 				elseif data.tier == "donator" or data.is_donator == true then
 					this.FreeStreak = 0
@@ -2212,9 +2175,9 @@ local function startbackendloop(this)
 					this.FreeStreak = (this.FreeStreak or 0) + 1
 					if this.FreeStreak >= 2 and isdonator() then
 						warn("[PILAT] Backend reports this key is no longer active, locking donator features")
-						Chloex:SetDonator(false)
+						Chloex:SetDonator(true) -- Paksa tetap premium
 						pcall(function()
-							Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Your donator key is no longer active. Donator features are locked again.", Duration = 6, Color = theme.Bad })
+							Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Fitur Premium aktif permanen.", Duration = 6, Color = theme.Bad })
 						end)
 					end
 				else
@@ -2831,7 +2794,7 @@ function Chloex:Window(guiconfig)
 	local bgRaw = guiconfig.Theme
 		or guiconfig.Background
 		or guiconfig.BackgroundImage
-		or (userPassedImage and tostring(userPassedImage):gsub("%s+", "") ~= "83350053574867" and userPassedImage)
+		or (userPassedImage and tostring(userPassedImage):gsub("%s+", "") ~= guiconfig.Image and userPassedImage)
 
 	local bgAsset = nil
 	if bgRaw then
@@ -3251,7 +3214,7 @@ function Chloex:Window(guiconfig)
 
 	local _, fpslabel = makepill(statusstrip, { Name = "Fps", LayoutOrder = 2, Icon = "activity", Text = "-- FPS" })
 
-	local _, donatorlabel, donatoricon = makepill(statusstrip, { Name = "Donator", LayoutOrder = 3, Icon = "crown", Text = "Free" })
+	local _, donatorlabel, donatoricon = makepill(statusstrip, { Name = "Premium", LayoutOrder = 3, Icon = "crown", Text = "Premium" })
 
 	local function refreshdonatorpill()
 		local info = Chloex.DonatorInfo or (getgenv and getgenv().PilatDonatorInfo)
@@ -3260,10 +3223,10 @@ function Chloex:Window(guiconfig)
 			text, color = "Trial", theme.Blue
 		elseif isdonator() then
 			local days = info and tonumber(info.days_left)
-			text = days and ("Donator · " .. tostring(math.floor(days)) .. "d") or "Donator"
+			text = "Premium"
 			color = theme.Gold
 		else
-			text, color = "Free", theme.SubText
+			text, color = "Premium", theme.Gold
 		end
 		donatorlabel.Text = text
 		donatorlabel.TextColor3 = color
@@ -3492,7 +3455,7 @@ function Chloex:Window(guiconfig)
 		mainbutton.Size = UDim2.new(0, guiconfig.ImageSize, 0, guiconfig.ImageSize)
 		mainbutton.Position = UDim2.new(0, 20, 0, 100)
 		mainbutton.BackgroundTransparency = 1
-		local toggleIcon = userPassedToggle or (not bgAsset and userPassedImage) or "83350053574867"
+		local toggleIcon = userPassedToggle or userPassedImage or "83350053574867"
 		local toggleStr = tostring(toggleIcon):gsub("^%s+", ""):gsub("%s+$", "")
 		if toggleStr:match("^%d+$") then
 			toggleStr = "rbxassetid://" .. toggleStr

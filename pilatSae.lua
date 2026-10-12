@@ -7009,6 +7009,8 @@ do
 			end
 
 			if p266.config.stealMode ~= "Fly" then
+				-- Instant & Instant Beta: ikutin alur High Speed (_instantReturn)
+				-- Setelah requestCarry, _returnToSafe panggil _instantReturn otomatis
 				if p266.config.stealMode == "Instant" and not p266.lowFpsPrime then
 					local Uid = v1089.Uid
 
@@ -7016,26 +7018,45 @@ do
 						return p266.destroyed or not p266.enabled or p266.instantPhase ~= "hunting" or not p266.activeTarget or p266.activeTarget.Uid ~= Uid
 					end
 
-					-- Instant: move straight to the resolved egg destination, then request carry immediately.
-					p266:_setStatus("Heading to target egg")
-					if not p266:_glideRoot(v1093, v1095) then
-						if not v1095() then
-							p266:_finish("Could not reach the egg — retrying")
+					if p266.config.instantBeta then
+						-- Instant Beta: glide ke egg (smooth, seperti Fly priming)
+						p266:_setStatus("Menuju target egg (Instant Beta)")
+						if not p266:_glideRoot(v1093, v1095) then
+							if not v1095() then
+								p266:_finish("Tidak bisa mencapai egg — mencoba lagi")
+							end
+							return
 						end
-						return
+					else
+						-- Instant: teleport langsung ke egg
+						p266:_setStatus("Mengambil target egg (Instant)")
+						local Character_ = LocalPlayer2.Character
+						local HRP_ = Character_ and Character_:FindFirstChild("HumanoidRootPart")
+						local Hum_ = Character_ and Character_:FindFirstChildOfClass("Humanoid")
+						if not HRP_ or not Hum_ then
+							p266:_finish("Character tidak tersedia")
+							return
+						end
+						if not p266:_teleportRoot(HRP_, Hum_, v1093) then
+							p266:_finish("Teleport gagal — mencoba lagi")
+							return
+						end
 					end
 
 					if v1095() then
 						return
 					end
 
+					-- Alur return sama persis dengan High Speed/Fly:
+					-- setArrivalHold -> requestCarry -> _returnToSafe -> _instantReturn
 					p266:_setArrivalHold(v1093, Uid)
-					p266:_setStatus("Grabbing target egg")
+					p266:_setStatus("Mengamankan target egg")
 					p266:_requestCarry(v1089, true)
 					return
 				end
 
-				p266:_setStatus("Heading to target egg")
+				-- lowFpsPrime fallback: tween biasa
+				p266:_setStatus("Menuju target egg")
 				p266:_tweenRoot(v1093, function()
 					if p266.instantPhase == "hunting" and p266.activeTarget and p266.activeTarget.Uid == v1089.Uid then
 						p266:_requestCarry(v1089, false)
