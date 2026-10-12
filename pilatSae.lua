@@ -17787,14 +17787,14 @@ local function v2528()
 				writefile("autoexec/Pilat_StealAnEgg.lua", [[repeat task.wait(0.5) until game:IsLoaded()
 task.wait(1.5)
 if getgenv then getgenv().SNE_AutoExecute = true end
-loadstring(game:HttpGet("https://senahub.xyz/raw/saev2"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilatSae.lua"))()
 ]])
 			end)
 			pcall(function()
 				writefile("autoexecute/Pilat_StealAnEgg.lua", [[repeat task.wait(0.5) until game:IsLoaded()
 task.wait(1.5)
 if getgenv then getgenv().SNE_AutoExecute = true end
-loadstring(game:HttpGet("https://senahub.xyz/raw/saev2"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilatSae.lua"))()
 ]])
 			end)
 		end
@@ -17807,7 +17807,7 @@ loadstring(game:HttpGet("https://senahub.xyz/raw/saev2"))()
 			queue_on_teleport_([[repeat task.wait(0.5) until game:IsLoaded()
 task.wait(1.5)
 if getgenv then getgenv().SNE_AutoExecute = true end
-loadstring(game:HttpGet("https://senahub.xyz/raw/saev2"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/pilatSae.lua"))()
 ]])
 		end)
 	end
@@ -27536,7 +27536,7 @@ do
 		do
 			if type(PilatLibOverride) ~= "table" then
 				local ok, result = pcall(function()
-					return loadstring(game:HttpGet("https://senahub.xyz/raw/libsenuy"))()
+					return loadstring(game:HttpGet("https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/uu.lua"))()
 				end)
 
 				PilatLibOverride = ok and type(result) == "table" and result or nil
@@ -29679,10 +29679,12 @@ do
 				"AddKeybind",
 				"AddColorPicker",
 				"AddActionList",
+				"AddLiveChat",
 				"AddSupportCard",
 				"AddSubSection",
 				"AddSection",
-				"AddTab"
+				"AddTab",
+				"AddForum"
 			}
 
 			local function v4779(p1068)
@@ -31154,8 +31156,21 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 			end
 		end
 
+		v4742:AddTab({
+			Name = "Live Chat",
+			Icon = "chat"
+		}):AddSection("Global Chat", true):AddLiveChat({
+			Title = "Live Chat",
+			Height = 300
+		})
 
-
+		if type(v4742.AddForum) == "function" then
+			v4742:AddForum({
+				Name = "Forum",
+				Icon = "forum",
+				Section = "Config Forum"
+			})
+		end
 
 		do
 			local __PilatV4Visual = genv.__PilatV4Visual
@@ -31378,6 +31393,20 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 				end)
 			})
 		end
+
+		v4742:AddTab({
+			Name = "Donate",
+			Icon = "donator"
+		}):AddSection("Support Pilat", true):AddSupportCard({})
+
+		do
+			local function v4904(p1104, p1105)
+				v4730()
+
+				if type(p1104) == "table" and p1104.Value ~= nil then
+					pcall(p1105, p1104.Value)
+				end
+			end
 
 			v4731 = false
 			v4904(t216.speed, v4537)
