@@ -5064,6 +5064,7 @@ do
 				obj:_hideTreadmillDecoy()
 				obj._forestDropInProgress = nil
 				obj._instantReturnToken = nil
+				obj._instantReturnCarryUid = nil
 
 				local carry = obj.carry
 
@@ -6962,6 +6963,14 @@ do
 			p266:_setInstantAnchored(false)
 			p266.instantPhase = "hunting"
 			p266:_clearArrivalHold()
+
+			-- Fix: invalidate stale _instantReturnToken dari cycle sebelumnya saat masuk hunting phase baru.
+			-- Tanpa ini, spam steal menyebabkan token lama memblokir _instantReturn cycle baru.
+			if p266._instantReturnToken ~= nil then
+				p266._instantReturnToken = nil
+				p266._instantReturnCarryUid = nil
+				p266._forestDropInProgress = nil
+			end
 
 			local carry = p266.carry
 
@@ -10190,12 +10199,24 @@ do
 		end
 		t46._instantReturn = function(p428, p429)
 			if p428._instantReturnToken ~= nil then
-				return
+				-- Stale token check: jika carry uid berbeda dari sesi token ini,
+				-- ini adalah cycle steal baru — invalidate token lama supaya return path bisa jalan.
+				-- Ini fix utama untuk bug "return rusak saat spam steal Instant/Instant Beta".
+				if p428._instantReturnCarryUid ~= nil and p428._instantReturnCarryUid ~= p429 then
+					-- Token lama dari cycle sebelumnya, invalidate paksa
+					p428._instantReturnToken = nil
+					p428._instantReturnCarryUid = nil
+					p428._forestDropInProgress = nil
+				else
+					-- Token masih valid untuk carry uid yang sama, skip duplikat
+					return
+				end
 			end
 
 			local instantReturnToken = {}
 
 			p428._instantReturnToken = instantReturnToken
+			p428._instantReturnCarryUid = p429  -- track carry uid untuk stale token detection
 			p428._flyDeparting = false
 
 			-- Semua mode (Fly, Instant, Instant Beta) pakai decoy di safe zone saat return
@@ -10263,6 +10284,7 @@ do
 
 					v1533(p433 == nil or p433 == "Safe return complete")
 					p428._instantReturnToken = nil
+					p428._instantReturnCarryUid = nil
 					p428._forestDropInProgress = nil
 
 					local _externalDeliver = p428._externalDeliver
@@ -10425,6 +10447,7 @@ do
 					if not v1558 then
 						if p428._instantReturnToken == instantReturnToken then
 							p428._instantReturnToken = nil
+							p428._instantReturnCarryUid = nil
 						end
 
 						p428._forestDropInProgress = nil
@@ -10457,6 +10480,7 @@ do
 						local _externalDeliver = p428._externalDeliver
 
 						p428._instantReturnToken = nil
+						p428._instantReturnCarryUid = nil
 						p428._externalDeliver = nil
 
 						if p428.enabled then
@@ -10670,6 +10694,7 @@ do
 					if p441._externalDeliver then
 						p441._externalDeliver = nil
 						p441._instantReturnToken = nil
+					p441._instantReturnCarryUid = nil
 						p441.carry.active = false
 						p441.carry.uid = nil
 					end
@@ -11310,6 +11335,7 @@ do
 			p457:_hideTreadmillDecoy()
 			p457._forestDropInProgress = nil
 			p457._instantReturnToken = nil
+					p457._instantReturnCarryUid = nil
 			p457.boostedUid = nil
 			p457:_invalidateCarryWorker()
 			p457.planGeneration += 1
@@ -11801,6 +11827,7 @@ do
 
 							p463._externalDeliver = nil
 							p463._instantReturnToken = nil
+					p463._instantReturnCarryUid = nil
 							p463.carry.active = false
 							p463.carry.uid = nil
 							p463.activeTarget = nil
@@ -11826,6 +11853,7 @@ do
 					p463:_invalidateCarryWorker()
 					p463._forestDropInProgress = nil
 					p463._instantReturnToken = nil
+					p463._instantReturnCarryUid = nil
 					p463.carry.active = false
 					p463.carry.uid = nil
 					p463.tweenRecoveryUid = nil
