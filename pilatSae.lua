@@ -27206,7 +27206,7 @@ do
 			ImageLabel.Position = UDim2.fromScale(0.5, 0.5)
 			ImageLabel.Size = UDim2.new(1, 40, 1, 40)
 			ImageLabel.BackgroundTransparency = 1
-			ImageLabel.Image = "rbxassetid://72511686829950"
+			ImageLabel.Image = "rbxassetid://6015897843"
 			ImageLabel.ImageColor3 = t166.shadow
 			ImageLabel.ImageTransparency = 0.52
 			ImageLabel.ScaleType = Enum.ScaleType.Slice
@@ -29679,12 +29679,10 @@ do
 				"AddKeybind",
 				"AddColorPicker",
 				"AddActionList",
-				"AddLiveChat",
 				"AddSupportCard",
 				"AddSubSection",
 				"AddSection",
-				"AddTab",
-				"AddForum"
+				"AddTab"
 			}
 
 			local function v4779(p1068)
@@ -29728,7 +29726,7 @@ do
 				Folder = "PilatSAEv4",
 				Version = 1,
 				Color = Color3.fromRGB(232, 232, 238),
-				Image = "http://56.10.112.179:8080/visual/pilat_bg.jpg"
+				Image = "rbxassetid://72511686829950"
 			})
 			v4779(v4742)
 			t216 = {}
@@ -31156,21 +31154,8 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 			end
 		end
 
-		v4742:AddTab({
-			Name = "Live Chat",
-			Icon = "chat"
-		}):AddSection("Global Chat", true):AddLiveChat({
-			Title = "Live Chat",
-			Height = 300
-		})
 
-		if type(v4742.AddForum) == "function" then
-			v4742:AddForum({
-				Name = "Forum",
-				Icon = "forum",
-				Section = "Config Forum"
-			})
-		end
+
 
 		do
 			local __PilatV4Visual = genv.__PilatV4Visual
@@ -31393,20 +31378,6 @@ Missing: %s]], __PilatV4ScrambleTradeIn.banner, __PilatV4ScrambleTradeIn.status,
 				end)
 			})
 		end
-
-		v4742:AddTab({
-			Name = "Donate",
-			Icon = "donator"
-		}):AddSection("Support Pilat", true):AddSupportCard({})
-
-		do
-			local function v4904(p1104, p1105)
-				v4730()
-
-				if type(p1104) == "table" and p1104.Value ~= nil then
-					pcall(p1105, p1104.Value)
-				end
-			end
 
 			v4731 = false
 			v4904(t216.speed, v4537)
