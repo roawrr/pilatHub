@@ -208,7 +208,7 @@ do
 		DEF_INPUT = 60,
 		MIN_SPEED = 200,
 		MAX_SPEED = 1000,
-		DEF_SPEED = 600,
+		DEF_SPEED = 900,
 		FIELDS = {
 			"LastObservedSample",
 			"LastSample",
@@ -4904,7 +4904,7 @@ do
 				stealMode = "Fly",
 				flyAerial = false,
 				flyZigzag = false,
-				speed = 600,
+				speed = 900,
 				antiTrap = true,
 				heaviestFirst = false,
 				highestValueFirst = false,
@@ -7744,13 +7744,21 @@ do
 			return _legitWsCache
 		end
 
+		-- ============================================================
+		-- EDIT GLIDE HERE (no UI) — ubah angka di bawah saja
+		-- PILAT_GLIDE_SPEED   = stud/detik saat glide (Instant Beta + return)
+		-- PILAT_GLIDE_TIMEOUT = detik max per 1x _glideRoot
+		-- ============================================================
+		local PILAT_GLIDE_SPEED = 900
+		local PILAT_GLIDE_TIMEOUT = 60
+
 		do
 			t46._activeGlideSpeed = function(p308)
 				if p308.config.stealMode == "Fly" and p308._flyDeparting then
 					return p308:_legitWalkSpeed()
 				end
 
-				return 5000
+				return PILAT_GLIDE_SPEED
 			end
 		end
 
@@ -7785,7 +7793,7 @@ do
 				end)
 			end
 
-			local v1198 = os.clock() + math.clamp((Position - HumanoidRootPart.Position).Magnitude / math.max(v1191, 1) * 1.6 + 6, 15, 120)
+			local v1198 = os.clock() + PILAT_GLIDE_TIMEOUT
 
 			while true do
 				if not (os.clock() < v1198) then
@@ -10382,6 +10390,136 @@ do
 
 				if v1555 then
 					p428._forestDropInProgress = p429
+
+					-- ============================================================
+					-- Instant / Instant Beta RETURN (Chilli V2 style — like high speed)
+					-- Bukan forest-drop ritual. Langsung high-speed ke line/safe.
+					-- EDIT: PILAT_V2_CARRY_SPEED / HEIGHT / STEP di bawah.
+					-- ============================================================
+					if p428.config.stealMode == "Instant" or p428.config.instantBeta == true then
+						local PILAT_V2_CARRY_SPEED = 4500
+						local PILAT_V2_MAX_STEP = 90
+						local PILAT_V2_CARRY_HEIGHT = 40
+						local PILAT_V2_DESCEND_DIST = 60
+						local PILAT_V2_TIMEOUT = 20
+
+						local function v2Root()
+							return v1521()
+						end
+						local function v2Tp(hrp, pos)
+							if not hrp or typeof(pos) ~= "Vector3" then
+								return
+							end
+							pcall(function()
+								hrp.CFrame = CFrame.new(pos) * (hrp.CFrame.Rotation)
+								hrp.AssemblyLinearVelocity = Vector3.zero
+								hrp.AssemblyAngularVelocity = Vector3.zero
+							end)
+						end
+						-- Fuse biome / sky island: turun dulu kalau Y ekstrem
+						do
+							local hrp = v2Root()
+							if hrp and hrp.Position.Y > 10000 then
+								p428:_setStatus("Leaving high island (instantReturn V2)")
+								local safeCf = v1531()
+								if safeCf then
+									v2Tp(hrp, safeCf.Position + Vector3.new(0, 8, 0))
+								end
+							end
+						end
+						-- Target: safe zone (vector32) — sama fallback Chilli
+						local home = vector32
+						local safeCf = v1531()
+						if safeCf then
+							home = safeCf.Position
+						end
+						-- Line di depan wall (X ~ safe + gap) biar mirip high-speed line drop
+						local lineTarget = Vector3.new(home.X + 45, home.Y + 3.35, math.clamp(home.Z, -425, -300))
+						local hrp0 = v2Root()
+						if hrp0 then
+							lineTarget = Vector3.new(lineTarget.X, lineTarget.Y, math.clamp(hrp0.Position.Z, -425, -300))
+						end
+
+						local function flyTo(target, label)
+							local deadline = os.clock() + PILAT_V2_TIMEOUT
+							while v1520() and v1524() and os.clock() < deadline do
+								local hrp = v2Root()
+								if not hrp then
+									return false
+								end
+								p428:_setStatus(label)
+								local horiz = Vector3.new(target.X - hrp.Position.X, 0, target.Z - hrp.Position.Z)
+								local elevated = horiz.Magnitude > PILAT_V2_DESCEND_DIST
+								local goal = elevated and (target + Vector3.new(0, PILAT_V2_CARRY_HEIGHT, 0)) or target
+								local delta = goal - hrp.Position
+								local step = math.min(PILAT_V2_CARRY_SPEED / 60, PILAT_V2_MAX_STEP)
+								if delta.Magnitude <= step then
+									v2Tp(hrp, goal)
+									if not elevated then
+										return true
+									end
+								else
+									v2Tp(hrp, hrp.Position + delta.Unit * step)
+								end
+								RunService2.Heartbeat:Wait()
+							end
+							local hrp = v2Root()
+							if hrp then
+								v2Tp(hrp, target)
+							end
+							return v1524()
+						end
+
+						if not v1520() or not v1524() then
+							return
+						end
+						flyTo(lineTarget, "instantReturn V2: to line")
+						if not v1520() then
+							return
+						end
+						if not v1524() then
+							-- slip mid-air: quick regrab like Chilli
+							p428:_setStatus("instantReturn V2: regrab")
+							local worker = p428:_claimCarryWorker("instant-v2-regrab", p429)
+							if worker then
+								p428:_regrabBurst(worker, p429, 1.2)
+							end
+						end
+						if v1524() then
+							flyTo(home, "instantReturn V2: to safe")
+						end
+						if not v1520() then
+							return
+						end
+						-- Finalize di safe
+						p428._forestDropInProgress = nil
+						local hrp = v2Root()
+						if hrp and p428:_isInSafeArea(hrp) and v1524() then
+							local worker = p428:_claimCarryWorker("instant-v2-finish", p429)
+							if worker then
+								p428:_finalizeReturn(worker)
+							else
+								p428:_finish("Returned (instantReturn V2)")
+							end
+						elseif v1524() then
+							-- belum safe tapi masih bawa: finalize paksa
+							local worker = p428:_claimCarryWorker("instant-v2-finish", p429)
+							if worker then
+								p428:_finalizeReturn(worker)
+							else
+								p428:_finish("Returned (instantReturn V2)")
+							end
+						else
+							if p428._instantReturnToken == instantReturnToken then
+								p428._instantReturnToken = nil
+								p428._instantReturnCarryUid = nil
+							end
+							p428:_finish("Carry lost on V2 return — retrying")
+						end
+						return
+					end
+
+					-- Fly / non-Instant: path lama forest drop + glide
 					p428:_setStatus("Bringing egg home")
 					p428:_glideRoot(cFrame, function()
 						return not v1520() or not v1524()
@@ -10912,7 +11050,8 @@ do
 					return
 				end
 
-				if p448.config.stealMode == "Instant" or p448.config.stealMode == "Fly" then
+				-- Always use fast instantReturn for Instant / Instant Beta / Fly / High Speed
+				if p448.config.stealMode == "Instant" or p448.config.stealMode == "Fly" or p448.config.instantBeta == true then
 					local uid = p448.carry.uid or p448.activeTarget and p448.activeTarget.Uid
 
 					if not uid then
