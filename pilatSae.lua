@@ -892,7 +892,7 @@ local function fn30(character)
 end
 
 localPlayer.CharacterAdded:Connect(fn30)
-local pilatV4Config = {AutoSteal = false, HelpFriend = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
+local pilatV4Config = {AutoSteal = false, HelpFriend = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = false, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
 local EggState = require(game:GetService("ReplicatedStorage").Client.EggState)
 EggState.GetAreaEggSnapshot = EggState.ReadFieldEggs
 EggState.GetAreaEggRecord = EggState.ReadFieldEgg
@@ -4354,7 +4354,7 @@ local v8 = (function()
 		obj.hitTimer = nil
 		obj.guardHitBoostInstalled = false
 		obj.stats = {status = obj.resetBlocked and "Reset wall closed" or "Ready", available = 0, matching = 0, lastTarget = "None", lastResult = "Idle"}
-		obj.config = {stealMode = "Instant", flyAerial = false, flyZigzag = false, speed = n15, antiTrap = true, heaviestFirst = false, highestValueFirst = false, minWeightKg = 0, espEnabled = false, espRarity = true, espName = true, espKg = true, espMutation = true, espValue = true, espPlaced = false, espIcon = true, espMinRank = 0, espMinValue = 0, minValuePerSec = 0, rarityEnabled = false, rarities = {}, nameEnabled = false, names = {}, areaEnabled = false, areas = {}, mutationEnabled = false, mutations = {}}
+		obj.config = {stealMode = "Instant", instantBeta = false, flyAerial = false, flyZigzag = false, speed = n15, antiTrap = true, heaviestFirst = false, highestValueFirst = false, minWeightKg = 0, espEnabled = false, espRarity = true, espName = true, espKg = true, espMutation = true, espValue = true, espPlaced = false, espIcon = true, espMinRank = 0, espMinValue = 0, minValuePerSec = 0, rarityEnabled = false, rarities = {}, nameEnabled = false, names = {}, areaEnabled = false, areas = {}, mutationEnabled = false, mutations = {}}
 		obj.gameAntiAfkDisabled = fn72()
 
 		if localPlayer2.Character then
@@ -5457,6 +5457,96 @@ local v8 = (function()
 		arg.treadmillManager = treadmillManager
 	end
 
+	index._BETA_SCALE_MIN = 0.4
+	index._BETA_SCALE_START = 0.5
+
+	-- beta is only active for plain Instant mode, never during capture objectives
+	index._beta = function(arg)
+		return arg.config.instantBeta == true and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
+	end
+
+	-- turbo extras (tight polling, short relay settle) switch off once the self-tuner has backed
+	-- all the way off to full settle, so a bad connection degrades to normal Instant behaviour
+	index._betaTurbo = function(arg)
+		return arg:_beta() and (arg._betaScale or index._BETA_SCALE_START) < 1
+	end
+
+	index._betaSettleScale = function(arg)
+		return arg._betaScale or index._BETA_SCALE_START
+	end
+
+	index.setInstantBeta = function(arg, enabled)
+		enabled = enabled == true
+
+		if arg.config.instantBeta == enabled then
+			return enabled
+		end
+
+		arg.config.instantBeta = enabled
+		arg._betaScale = index._BETA_SCALE_START
+		arg._betaWins = 0
+		arg._relaySettle_s = nil
+
+		return enabled
+	end
+
+	-- failed: +0.2 settle scale and +0.15s relay settle immediately; success: -0.05 every 3 clean steals
+	index._betaNote = function(arg, failed)
+		local scale = arg._betaScale or index._BETA_SCALE_START
+
+		if failed then
+			arg._betaWins = 0
+			arg._betaScale = math.min(1, scale + 0.2)
+
+			if arg._relaySettle_s then
+				arg._relaySettle_s = math.min(2, arg._relaySettle_s + 0.15)
+			end
+		else
+			arg._betaWins = (arg._betaWins or 0) + 1
+
+			if arg._betaWins >= 3 then
+				arg._betaWins = 0
+				arg._betaScale = math.max(index._BETA_SCALE_MIN, scale - 0.05)
+			end
+		end
+	end
+
+	index._carryWait = function(arg, confirmOnly)
+		if arg:_betaTurbo() then
+			if confirmOnly then
+				RunService2.Heartbeat:Wait()
+			else
+				task.wait(0.1)
+			end
+		else
+			task.wait(n35)
+		end
+	end
+
+	-- ===== BETA: FUSE-BIOME PORTAL TIMING (edit these) =====
+	-- Only used by Instant Steal Beta when "Boost For Instant Steal" sends you through the fuse biome.
+	-- Values below are the original timings, except BETA_EXIT_WAIT_RAGDOLL (now false: keep touching ExitPart instead of waiting).
+	index.BETA_EXIT_TIMEOUT = 8          -- max seconds spent trying to get out through ExitPart
+	index.BETA_EXIT_TOUCH_GAP = 0.1      -- seconds between ExitPart touch attempts
+	index.BETA_EXIT_POLL = 0.05          -- loop tick while exiting (0 = every frame)
+	index.BETA_EXIT_WAIT_RAGDOLL = false -- true = wait out the server ragdoll timer before touching ExitPart (original behaviour)
+	index.BETA_EXIT_POST_WAIT = 0.35     -- wait after leaving the biome, before the carry request
+	index.BETA_USE_DECOY = true          -- true = copy-character decoy like normal Instant, false = no clone (also a toggle in the Steal Mode panel)
+	index.BETA_LOG_TIMING = true         -- print how long ExitPart took and how much of it was ragdoll wait (F9 console)
+	index.BETA_ENTER_WAIT_SCALE = 1      -- multiplier on the wait before entering the portal (0.3-1s, ping based)
+
+	-- beta return leg knobs: hop length / pin time per hop (normal: 500 studs, 0.15s)
+	index._BETA_HOP_STUDS = 500
+	index._BETA_HOP_GAP = 0.1
+
+	index._returnPoll = function(arg)
+		if arg:_betaTurbo() then
+			RunService2.Heartbeat:Wait()
+		else
+			task.wait(0.1)
+		end
+	end
+
 	index.getStealMode = function(arg)
 		return arg.config.stealMode == "Fly" and "Fly" or "Instant"
 	end
@@ -5901,14 +5991,20 @@ local v8 = (function()
 		return math.max(n59, n58 * ((11 - math.clamp(arg2, 1, 10)) / 6))
 	end
 
-	index._resolveSettleSeconds = function(arg, arg2)
+	index._resolveSettleSeconds = function(arg, arg2, useBeta)
 		local n58 = math.clamp(tonumber(pilatV4Config.StealHoldSeconds) or 5, 1, 10)
 		local flag5 = arg.settleBonus and type(arg2) == "table" and arg.settleBonus[arg2.Uid]
 		local seconds = flag5 and flag5.untilAt > os.clock() and flag5.seconds or 0
 		local v8 = fn3()
 		seconds = if v8 > 0 then if v8 < 12 then seconds + 2 else seconds else seconds
 		local v9 = if genv.__PilatV4NetPing() > 300 then seconds + 1 else seconds
-		return fn87(type(arg2) == "table" and arg2.AreaId, n58) + v9
+		local baseSettle = fn87(type(arg2) == "table" and arg2.AreaId, n58)
+
+		if useBeta and arg:_beta() then
+			baseSettle = baseSettle * arg:_betaSettleScale()
+		end
+
+		return baseSettle + v9
 	end
 
 	index._startPrimerTargetHunt = function(arg)
@@ -6066,14 +6162,17 @@ local v8 = (function()
 
 	index._hoverSettleCarry = function(arg, arg2, arg3, cFrame, arg4)
 		arg:_startHoverPad()
-		local v8 = arg:_resolveSettleSeconds(arg2)
+		local v8 = arg:_resolveSettleSeconds(arg2, true)
 		local n58 = os.clock() + v8
 
 		while os.clock() < n58 do
 			if arg4() then
 				return
 			end
-			arg:_setStatus(string.format("Securing target egg (%.1fs)", math.max(0, n58 - os.clock())))
+			if not arg:_betaTurbo() or os.clock() - (arg._betaStatusAt or 0) >= 0.1 then
+				arg._betaStatusAt = os.clock()
+				arg:_setStatus(string.format("Securing target egg (%.1fs)", math.max(0, n58 - os.clock())))
+			end
 			local character = localPlayer2.Character
 			local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -6094,7 +6193,11 @@ local v8 = (function()
 				end)
 			end
 
-			task.wait(0.1)
+			if arg:_betaTurbo() then
+				RunService2.Heartbeat:Wait()
+			else
+				task.wait(0.1)
+			end
 		end
 
 		if arg4() then
@@ -6298,6 +6401,11 @@ local v8 = (function()
 		if arg.treadmillDecoy and arg.treadmillDecoy.Parent then
 			return true
 		end
+
+		-- instant beta with decoy off: no character clone, no hidden real character, no camera swap
+		if arg:_beta() and not arg.BETA_USE_DECOY then
+			return true
+		end
 		arg:_hideTreadmillDecoy()
 		local character = localPlayer2.Character
 		if not character then
@@ -6491,8 +6599,8 @@ local v8 = (function()
 		arg.treadmillDecoy = nil
 	end
 
-	index._restoreTreadmillVisualAtSafe = function(arg)
-		if not arg.treadmillDecoy then
+	index._restoreTreadmillVisualAtSafe = function(arg, forceSafeTeleport)
+		if not arg.treadmillDecoy and not (forceSafeTeleport and arg:_beta() and not arg.BETA_USE_DECOY) then
 			arg:_hideTreadmillDecoy()
 			return true
 		end
@@ -6585,7 +6693,7 @@ local v8 = (function()
 			return false, v9
 		end
 		arg:_setStatus("Positioning at safe area")
-		if not arg:_restoreTreadmillVisualAtSafe() then
+		if not arg:_restoreTreadmillVisualAtSafe(true) then
 			return false, "Safe teleport failed"
 		end
 
@@ -6835,7 +6943,8 @@ local v8 = (function()
 				n65 = localPlayer2:GetNetworkPing() or 0.05
 			end)
 
-			arg._relaySettle_s = math.clamp(0.5 + n65 * 4, index.HOP.safeWait, 2)
+			local turbo = arg:_betaTurbo()
+			arg._relaySettle_s = math.clamp((turbo and 0.25 or 0.5) + n65 * (turbo and 3 or 4), turbo and 0.4 or index.HOP.safeWait, 2)
 			arg._relayGood = 0
 		end
 
@@ -6853,7 +6962,7 @@ local v8 = (function()
 
 			if arg._relayGood >= 5 then
 				arg._relayGood = 0
-				arg._relaySettle_s = math.max(v8 - 0.05, index.HOP.safeWait)
+				arg._relaySettle_s = math.max(v8 - 0.05, arg:_betaTurbo() and 0.4 or index.HOP.safeWait)
 			end
 		end
 	end
@@ -6863,6 +6972,8 @@ local v8 = (function()
 			return false
 		end
 		local hop = index.HOP
+		local hopStuds = arg:_betaTurbo() and index._BETA_HOP_STUDS or hop.studs
+		local hopGap = arg:_betaTurbo() and index._BETA_HOP_GAP or hop.gap
 		local character = localPlayer2.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
@@ -6924,14 +7035,14 @@ local v8 = (function()
 			end
 			local position2 = humanoidRootPart.Position
 			local vector3 = Vector3.new(position.X - position2.X, 0, position.Z - position2.Z)
-			if vector3.Magnitude <= hop.studs then
+			if vector3.Magnitude <= hopStuds then
 				fn92(arg2)
 				return true
 			end
-			local n67 = Vector3.new(position2.X, n65, position2.Z) + vector3.Unit * hop.studs
+			local n67 = Vector3.new(position2.X, n65, position2.Z) + vector3.Unit * hopStuds
 			local cframe2 = CFrame.new(n67, n67 + vector3.Unit)
 			fn92(cframe2)
-			local n68 = os.clock() + hop.gap
+			local n68 = os.clock() + hopGap
 
 			while os.clock() < n68 do
 				RunService2.Heartbeat:Wait()
@@ -8646,7 +8757,7 @@ local v8 = (function()
 					end
 
 					arg:_setStatus("Confirming carry record")
-					task.wait(n35)
+					arg:_carryWait(true)
 					continue
 				end
 
@@ -8668,7 +8779,7 @@ local v8 = (function()
 				if v8.State == AreaEggs.States.Carried then
 					if v8.CarrierUserId == localPlayer2.UserId then
 						arg:_setStatus("Confirming carry state")
-						task.wait(n35)
+						arg:_carryWait(true)
 						continue
 					end
 
@@ -8725,7 +8836,7 @@ local v8 = (function()
 							if not ((if destroyed2 then not destroyed2 else arg.enabled) and arg.carryAttemptToken == carryAttemptToken and not arg:_hasConfirmedCarry(uid) and not flag5) then
 								break
 							end
-							task.wait(n35)
+							arg:_carryWait(false)
 						end
 
 						continue
@@ -8748,7 +8859,7 @@ local v8 = (function()
 				n68 = n68 or os.clock() + n69
 				arg.stats.lastResult = "Carry requested"
 				arg:_setStatus(v12 and "Waiting for carry \194\183 " .. v12 or "Waiting for carry confirmation")
-				task.wait(n35)
+				arg:_carryWait(false)
 			end
 		end)
 	end
@@ -8941,6 +9052,7 @@ local v8 = (function()
 	end
 
 	index._crossPortal = function(arg, arg2, arg3, arg4)
+		local betaExit = type(arg) == "table" and arg:_beta() and arg2 ~= nil and arg2.Name == "ExitPart"
 		arg = localPlayer2.Character
 		local humanoidRootPart = arg and arg:FindFirstChild("HumanoidRootPart")
 
@@ -8951,7 +9063,8 @@ local v8 = (function()
 		end
 
 		local position = humanoidRootPart.Position
-		local n70 = os.clock() + (arg4 or 8)
+		local n70 = os.clock() + (betaExit and index.BETA_EXIT_TIMEOUT or arg4 or 8)
+		local exitStart, ragdollFirst, ragdollLast = os.clock(), nil, nil
 		local n71 = n70 + 6
 		local n72 = 0
 
@@ -8967,17 +9080,23 @@ local v8 = (function()
 
 			if (humanoidRootPart.Position - position).Magnitude >= n68 then
 				if position.Y > n69 ~= (humanoidRootPart.Position.Y > n69) then
+					if betaExit and index.BETA_LOG_TIMING then
+						warn(string.format("[Pilat Beta] ExitPart: out in %.2fs (ragdoll wait %.2fs)", os.clock() - exitStart, ragdollFirst and ragdollLast - ragdollFirst or 0))
+					end
+
 					return true
 				end
 				position = humanoidRootPart.Position
 			end
 
-			local v8 = fn92()
+			local v8 = (betaExit and not index.BETA_EXIT_WAIT_RAGDOLL) and 0 or fn92()
 
 			if v8 > 0 then
+				ragdollFirst = ragdollFirst or os.clock()
+				ragdollLast = os.clock()
 				n70 = math.min(math.max(n70, os.clock() + v8 + 1), n71)
 			else
-				if os.clock() - n72 >= 0.1 then
+				if os.clock() - n72 >= (betaExit and index.BETA_EXIT_TOUCH_GAP or 0.1) then
 					n72 = os.clock()
 
 					pcall(function()
@@ -8988,7 +9107,11 @@ local v8 = (function()
 				end
 			end
 
-			task.wait(0.05)
+			if betaExit and index.BETA_EXIT_POLL <= 0 then
+				RunService2.Heartbeat:Wait()
+			else
+				task.wait(betaExit and index.BETA_EXIT_POLL or 0.05)
+			end
 		end
 
 		return false
@@ -9633,7 +9756,7 @@ local v8 = (function()
 			n70 = localPlayer2:GetNetworkPing() or 0.1
 		end)
 
-		task.wait(math.clamp(0.15 + n70 * 2.5, 0.3, 1))
+		task.wait(math.clamp(0.15 + n70 * 2.5, 0.3, 1) * (arg:_beta() and index.BETA_ENTER_WAIT_SCALE or 1))
 		if fn94() then
 			return
 		end
@@ -9687,7 +9810,7 @@ local v8 = (function()
 		arg:_setArrivalHold(v13, uid)
 		arg.boostedUid = uid
 		arg:_setStatus("Securing target egg")
-		task.wait(0.35)
+		task.wait(arg:_beta() and index.BETA_EXIT_POST_WAIT or 0.35)
 		if fn94() then
 			return
 		end
@@ -10364,7 +10487,7 @@ local v8 = (function()
 							end
 						end
 
-						task.wait(0.1)
+						arg:_returnPoll()
 					end
 
 					if not fn94() then
@@ -10532,7 +10655,7 @@ local v8 = (function()
 					end
 				end
 
-				task.wait(0.1)
+				arg:_returnPoll()
 			end
 
 			fn101(fn98() and "Safe return complete" or "Bank not confirmed \226\128\148 retrying")
@@ -12162,6 +12285,15 @@ local v8 = (function()
 	index._noteLowSpeedOutcome = function(arg, arg2)
 		local flag5 = arg._untrustedSeen == true
 		arg._untrustedSeen = nil
+
+		if arg:_beta() then
+			local betaFailed = tbl19[tostring(arg2)] == true or flag5
+
+			if betaFailed or arg2 == "Safe return complete" then
+				arg:_betaNote(betaFailed)
+			end
+		end
+
 		if arg.config.stealMode ~= "Instant" then
 			return
 		end
@@ -17648,6 +17780,7 @@ do
 end
 
 v13:setStealMode(pilatV4Config.StealMode == "Semi Teleport" and "Instant" or pilatV4Config.StealMode)
+v13:setInstantBeta(pilatV4Config.InstantBeta == true)
 v13:setSpeed(pilatV4Config.TweenSpeedMultiplier or 60)
 
 if pilatV4Config.StealMinValue and pilatV4Config.StealMinValue > 0 then
@@ -27304,7 +27437,7 @@ local function fn65()
 		return tbl30
 	end
 
-	local tbl30 = {{"Instant Steal (Recommended)", "Instant"}, {"High Speed User Normal", "High"}, {"High Speed User (Fly)", "High Fly"}, {"Zig-Zag High Speed User", "Zig-Zag"}}
+	local tbl30 = {{"Instant Steal (Recommended)", "Instant"}, {"High Speed User Normal", "High"}, {"High Speed User (Fly)", "High Fly"}, {"Zig-Zag High Speed User", "Zig-Zag"}, {"Instant Steal Beta (Not Recommended)", "Beta"}}
 
 	local function fn92()
 		local flag6 = type(pilatPanels.getStealMode) == "function" and pilatPanels.getStealMode() or nil
@@ -32306,6 +32439,8 @@ local function fn66()
 		local str5 = str4:lower()
 		local flag11 = str5:find("zig") ~= nil
 		local stealMode = (str4:find("Fly") or str4:find("High") or flag11) and "Fly" or "Instant"
+		local instantBeta = stealMode == "Instant" and str5:find("beta") ~= nil
+		pilatV4Config.InstantBeta = instantBeta
 		local flyAerial = stealMode == "Fly" and not flag11 and (str4:find("%(Fly%)") ~= nil or str5:find("aerial") ~= nil)
 		local flyZigzag = flag11 and stealMode == "Fly"
 		pilatV4Config.StealMode = stealMode
@@ -32314,8 +32449,10 @@ local function fn66()
 
 		if v13 and v13.captureObjectiveEnabled then
 			v13._modeBeforeCapture = {stealMode, flyAerial, flyZigzag}
+			v13:setInstantBeta(instantBeta)
 		elseif v13 then
 			v13:setStealMode(stealMode, flyAerial, flyZigzag)
+			v13:setInstantBeta(instantBeta)
 		end
 	end
 
@@ -33124,11 +33261,17 @@ local function fn66()
 
 	tbl24.godMode = v40:AddToggle({Title = "Aura Bat", Content = "", Default = false, Callback = fn144(fn80)})
 
-	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal", Options = {"Instant Steal (Recommended)", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 4, Default = "Instant Steal (Recommended)", Multi = false, Callback = fn144(function(arg)
+	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal. Instant Steal Beta is experimental: shorter settle that tunes itself, may fail more often.", Options = {"Instant Steal (Recommended)", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User", "Instant Steal Beta (Not Recommended)"}, MaxVisible = 5, Default = "Instant Steal (Recommended)", Multi = false, Callback = fn144(function(arg)
 		fn89(arg)
 
 		if type(pilatPanels.syncStealMode) == "function" then
 			pilatPanels.syncStealMode()
+		end
+	end)})
+
+	tbl24.betaDecoy = v40:AddToggle({Title = "Beta Decoy", Content = "Instant Steal Beta only. ON = copy-character decoy like normal Instant. OFF = no clone, your real character stays visible.", Default = true, Callback = fn144(function(arg)
+		if v13 then
+			v13.BETA_USE_DECOY = arg == true
 		end
 	end)})
 
@@ -34326,6 +34469,11 @@ local function fn66()
 	flag12 = false
 	fn157(tbl24.speed, fn90)
 	fn157(tbl24.stealMode, fn89)
+	fn157(tbl24.betaDecoy, function(arg)
+		if v13 then
+			v13.BETA_USE_DECOY = arg == true
+		end
+	end)
 	fn157(tbl24.antiTreadmill, fn83)
 	fn157(tbl24.autoTreadmill, fn82)
 	fn157(tbl24.treadmillUpgrade, fn88)
