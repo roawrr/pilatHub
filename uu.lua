@@ -1,3 +1,15 @@
+local PILAT_LOGO = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png"
+-- Builder Sans (Roblox's own UI face) where the client has it: it stays crisp at
+-- 11-13 px, where legacy Gotham renders thin and pixelated. Gotham is the fallback.
+local function pickfont(name, fallback)
+	local ok, font = pcall(function()
+		return Enum.Font[name]
+	end)
+	return ok and font or fallback
+end
+local FONT_BOLD = pickfont("BuilderSansBold", Enum.Font.GothamBold)
+local FONT_MEDIUM = pickfont("BuilderSansMedium", Enum.Font.GothamMedium)
+
 local sv = {
 	http = game:GetService("HttpService"),
 	uis = game:GetService("UserInputService"),
@@ -11,7 +23,7 @@ local sv = {
 local theme = {
 	Accent = Color3.fromRGB(232, 232, 238),
 	AccentText = Color3.fromRGB(14, 14, 17),
-	Backdrop = Color3.fromRGB(9, 9, 11),
+	Backdrop = Color3.fromRGB(0, 0, 0),
 	Sidebar = Color3.fromRGB(13, 13, 16),
 	Card = Color3.fromRGB(19, 19, 23),
 	Element = Color3.fromRGB(27, 27, 32),
@@ -69,6 +81,17 @@ local function textheight(text, size, font, width, maxheight)
 		return math.min(maxheight or 100000, math.ceil(bounds.Y) + 2)
 	end
 	return size
+end
+
+-- One-line width of plain text, for controls that must size to their label.
+local function textwidth(text, size, font)
+	local ok, bounds = pcall(function()
+		return sv.textservice:GetTextSize(tostring(text or ""), size, font, Vector2.new(100000, 100000))
+	end)
+	if ok and bounds and bounds.X > 0 then
+		return math.ceil(bounds.X)
+	end
+	return math.ceil(#tostring(text or "") * size * 0.6)
 end
 
 local function escaperich(text)
@@ -352,7 +375,7 @@ if getgenv().ChloeX_Running then
 		sv.sg:SetCore("SendNotification", {
 			Title = "Pilat Already Opened",
 			Text = "Destroy and Re-Open Pilat?",
-			Icon = "rbxassetid://83350053574867",
+			Icon = urlimage(PILAT_LOGO, true) or "",
 			Duration = 10,
 			Button1 = "Re-Open",
 			Button2 = "Cancel",
@@ -556,8 +579,8 @@ local draggable = {
 	startsize = nil,
 	minx = 420,
 	miny = 260,
-	defx = 640,
-	defy = 400,
+	defx = 720,
+	defy = 460,
 }
 
 local sliderDrag = { active = nil, lastUpdateTime = 0 }
@@ -935,12 +958,39 @@ function safesize(width, height)
 	return UDim2.new(x, 0, y, 0)
 end
 
+-- The one place the window size is decided: the viewer's last size (saved when
+-- they finish resizing), else the default, always clamped to the screen.
+local WINDOW_SIZE_FILE = "Pilat/window_size.txt"
+
+local function savedwindowsize()
+	if isMobile or type(isfile) ~= "function" or type(readfile) ~= "function" then
+		return nil
+	end
+	local ok, raw = pcall(function()
+		return isfile(WINDOW_SIZE_FILE) and readfile(WINDOW_SIZE_FILE) or nil
+	end)
+	local w, h = tostring(ok and raw or ""):match("^(%d+)x(%d+)")
+	if w and h then
+		return tonumber(w), tonumber(h)
+	end
+	return nil
+end
+
+local function clampwindowsize(width, height)
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+	local maxw = math.max(draggable.minx, math.floor(viewport.X * 0.94))
+	local maxh = math.max(draggable.miny, math.floor(viewport.Y * 0.9))
+	return math.clamp(width, draggable.minx, maxw), math.clamp(height, draggable.miny, maxh)
+end
+
 function makedraggable(topbar, object)
 	if isMobile then
 		draggable.defx, draggable.defy = 470, 270
 	end
 
-	object.Size = UDim2.new(0, draggable.defx, 0, draggable.defy)
+	local startw, starth = savedwindowsize()
+	startw, starth = clampwindowsize(startw or draggable.defx, starth or draggable.defy)
+	object.Size = UDim2.new(0, startw, 0, starth)
 
 	local resize = instance.frame(object)
 	resize.Name = "resize"
@@ -1012,6 +1062,9 @@ function makedraggable(topbar, object)
 					draggable.resizing = false
 					resizeConnection:Disconnect()
 					resizeConnection = nil
+					if not isMobile and type(writefile) == "function" then
+						pcall(writefile, WINDOW_SIZE_FILE, string.format("%dx%d", object.Size.X.Offset, object.Size.Y.Offset))
+					end
 				end
 			end)
 		end),
@@ -1127,7 +1180,7 @@ local function buildnotify(cfg, top)
 	local textsize = tonumber(cfg.TextSize) or 13
 	local headersize = tonumber(cfg.HeaderSize) or 14
 
-	local bodyheight = math.max(textsize, textheight(cfg.Content, textsize, Enum.Font.GothamBold, width - 48, textsize * 8))
+	local bodyheight = math.max(textsize, textheight(cfg.Content, textsize, FONT_MEDIUM, width - 48, textsize * 8))
 	local height = math.max(65, bodyheight + 40)
 
 	local notifyframe = instance.frame(holder)
@@ -1165,12 +1218,12 @@ local function buildnotify(cfg, top)
 
 	local titlewidth = 0
 	pcall(function()
-		titlewidth = sv.textservice:GetTextSize(cfg.Title, headersize, Enum.Font.GothamBold, Vector2.new(1000, 100)).X
+		titlewidth = sv.textservice:GetTextSize(cfg.Title, headersize, FONT_BOLD, Vector2.new(1000, 100)).X
 	end)
 	titlewidth = math.ceil(titlewidth)
 
 	local title = instance.textlabel(topbar)
-	title.Font = Enum.Font.GothamBold
+	title.Font = FONT_BOLD
 	title.Text = cfg.Title
 	title.TextSize = headersize
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -1181,7 +1234,7 @@ local function buildnotify(cfg, top)
 
 	local descx = 38 + titlewidth + 8
 	local desc = instance.textlabel(topbar)
-	desc.Font = Enum.Font.GothamBold
+	desc.Font = FONT_BOLD
 	desc.Text = cfg.Description
 	desc.TextSize = headersize
 	desc.TextXAlignment = Enum.TextXAlignment.Left
@@ -1200,16 +1253,21 @@ local function buildnotify(cfg, top)
 	close.BorderSizePixel = 0
 
 	local closeicon = instance.imagelabel(close)
-	closeicon.Image = "rbxassetid://9886659671"
 	closeicon.BackgroundTransparency = 1
-	closeicon.Size = UDim2.new(1, -8, 1, -8)
+	closeicon.ImageColor3 = theme.SubText
+	closeicon.Size = UDim2.new(0, 14, 0, 14)
+	applyicon(closeicon, "x", 48)
 	closeicon.Position = UDim2.new(0.5, 0, 0.5, 0)
 	closeicon.AnchorPoint = Vector2.new(0.5, 0.5)
 
+	-- Body is regular weight and ends in "..." past 8 lines instead of spilling
+	-- out of the card (the card clips as a second guard).
+	notifyframereal.ClipsDescendants = true
 	local content = instance.textlabel(notifyframereal)
-	content.Font = Enum.Font.GothamBold
+	content.Font = FONT_MEDIUM
 	content.Text = cfg.Content
 	content.TextWrapped = true
+	content.TextTruncate = Enum.TextTruncate.AtEnd
 	content.TextXAlignment = Enum.TextXAlignment.Left
 	content.TextYAlignment = Enum.TextYAlignment.Top
 	content.TextSize = textsize
@@ -1298,8 +1356,418 @@ function Chloex:Notify(notifyconfig)
 end
 
 local AnnounceGui, AnnounceHolder
--- Announcement UI disabled
-function Chloex:Announce(announceconfig) return { Close = function() end } end
+local announcesound = "rbxassetid://84088708071202"
+local ANNOUNCE_WIDTH = 420
+
+local function ensureannouncegui()
+	if AnnounceGui and AnnounceGui.Parent then
+		return AnnounceGui, AnnounceHolder
+	end
+
+	local parent = sv.coregui
+	pcall(function()
+		local ok, hidden = pcall(function()
+			return gethui()
+		end)
+		if ok and hidden then
+			parent = hidden
+		end
+	end)
+
+	pcall(function()
+		for _, name in ipairs({ "AnnounceGui", "PilatAnnounce" }) do
+			local old = parent:FindFirstChild(name) or sv.coregui:FindFirstChild(name)
+			if old then
+				pcall(function()
+					old:Destroy()
+				end)
+			end
+		end
+	end)
+
+	AnnounceGui = instance.screengui(parent)
+	AnnounceGui.Name = "AnnounceGui"
+	AnnounceGui.AutoLocalize = false
+	AnnounceGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	AnnounceGui.ResetOnSpawn = false
+	AnnounceGui.DisplayOrder = 10000
+
+	pcall(function()
+		if syn and syn.protect_gui then
+			syn.protect_gui(AnnounceGui)
+		elseif protect_gui then
+			protect_gui(AnnounceGui)
+		end
+	end)
+
+	AnnounceHolder = instance.frame(AnnounceGui)
+	AnnounceHolder.Name = "Holder"
+	AnnounceHolder.AnchorPoint = Vector2.new(0.5, 0)
+	AnnounceHolder.Position = UDim2.new(0.5, 0, 0, 24)
+	AnnounceHolder.Size = UDim2.new(0, ANNOUNCE_WIDTH, 1, -48)
+	AnnounceHolder.BackgroundTransparency = 1
+	AnnounceHolder.BorderSizePixel = 0
+
+	local list = instance.uilistlayout(AnnounceHolder)
+	list.Padding = UDim.new(0, 8)
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	list.VerticalAlignment = Enum.VerticalAlignment.Top
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+
+	return AnnounceGui, AnnounceHolder
+end
+
+local function playannouncesound(id)
+	pcall(function()
+		elevate()
+		local sound = Instance.new("Sound")
+		sound.Name = "AnnounceSound"
+		sound.SoundId = id or announcesound
+		sound.Volume = 0.7
+		sound.Parent = AnnounceGui or sv.coregui
+
+		local ss = game:GetService("SoundService")
+		local played = false
+		if ss then
+			pcall(function()
+				ss:PlayLocalSound(sound)
+				played = true
+			end)
+		end
+		if not played then
+			sound:Play()
+		end
+
+		task.delay(6, function()
+			pcall(function()
+				sound:Destroy()
+			end)
+		end)
+	end)
+end
+
+local function resolveannouncesound(value)
+	if value == false then
+		return nil
+	end
+	local text = tostring(value == nil and "default" or value):lower()
+	if text == "off" or text == "none" or text == "false" or text == "0" then
+		return nil
+	end
+	if text == "default" or text == "true" or text == "" then
+		return announcesound
+	end
+	local id = tostring(value):gsub("^%s+", ""):gsub("%s+$", "")
+	if id:match("^%d+$") then
+		return "rbxassetid://" .. id
+	end
+	return id
+end
+
+local function countannouncelines(text, width, font, textSize, maxLines)
+	text = tostring(text or "")
+	if text == "" then
+		return 0
+	end
+	maxLines = maxLines or 6
+	width = math.floor(tonumber(width) or 0)
+
+	local lines
+	if width >= 20 then
+		local ok, bounds = pcall(function()
+			return sv.textservice:GetTextSize(text, textSize, font, Vector2.new(width, 100000))
+		end)
+		if ok and bounds and bounds.Y > 0 then
+			lines = math.ceil(bounds.Y / (textSize + 2))
+		end
+	end
+
+	if not lines then
+		local perLine = math.max(10, math.floor((width > 0 and width or 200) / (textSize * 0.52)))
+		lines = 0
+		for segment in (text .. "\n"):gmatch("(.-)\n") do
+			lines = lines + math.max(1, math.ceil(#segment / perLine))
+		end
+	end
+
+	return math.clamp(lines, 1, maxLines)
+end
+
+function Chloex:Announce(announceconfig)
+	announceconfig = announceconfig or {}
+	local content = tostring(
+		announceconfig.Content or announceconfig.Text or announceconfig.Description or announceconfig[2] or ""
+	)
+	local duration = tonumber(announceconfig.Duration or announceconfig.Time or announceconfig[3]) or 15
+	local soundid = resolveannouncesound(announceconfig.Sound)
+	local iconName = announceconfig.Icon or "rbxassetid://114954261913892"
+	if iconName == "megaphone" then
+		iconName = "rbxassetid://114954261913892"
+	end
+
+	local title
+	if announceconfig.Title or announceconfig[1] then
+		title = tostring(announceconfig.Title or announceconfig[1])
+		if announceconfig.Name and tostring(announceconfig.Name) ~= "" and not title:lower():find(tostring(announceconfig.Name):lower(), 1, true) then
+			title = tostring(announceconfig.Name) .. " " .. title
+		end
+	else
+		title = tostring(announceconfig.Name or "Pilat") .. " Announcements"
+	end
+
+	ensureannouncegui()
+
+	local PAD, BADGE, GAP = 14, 32, 12
+	local textLeft = PAD + BADGE + GAP
+	local textWidth = ANNOUNCE_WIDTH - textLeft - PAD - 28
+	local lines = content ~= "" and countannouncelines(content, textWidth, FONT_BOLD, 13, 8) or 0
+	local bodyH = lines > 0 and (lines * 17) or 0
+	-- who sent it (set by the server): "From Pilat [OWNER]" / "From Reyzanzu [STAFF]"
+	local sender = tostring(announceconfig.From or "")
+	local senderRole = tostring(announceconfig.Role or "")
+	local fromH = sender ~= "" and 16 or 0
+	local contentH = math.max(BADGE, 18 + fromH + (bodyH > 0 and (4 + bodyH) or 0))
+	local height = PAD + contentH + 14 + 4 + 8
+
+	local slot = instance.frame(AnnounceHolder)
+	slot.Name = "Slot"
+	slot.BackgroundTransparency = 1
+	slot.BorderSizePixel = 0
+	slot.Size = UDim2.new(1, 0, 0, height)
+	slot.ClipsDescendants = false
+
+	local card = instance.frame(slot)
+	card.Name = "Announcement"
+	card.BackgroundColor3 = theme.Card
+	card.BorderSizePixel = 0
+	card.AnchorPoint = Vector2.new(0.5, 0)
+	card.Position = UDim2.new(0.5, 0, 0, -height - 40)
+	card.Size = UDim2.new(1, 0, 1, 0)
+	card.BackgroundTransparency = 1
+	instance.uicorner(card).CornerRadius = UDim.new(0, 10)
+
+	local cardStroke = instance.uistroke(card)
+	cardStroke.Color = theme.Stroke
+	cardStroke.Thickness = 1
+	cardStroke.Transparency = 1
+
+	local scale = instance.uiscale(card)
+	scale.Scale = 0.96
+
+	local badge = instance.frame(card)
+	badge.Name = "Badge"
+	badge.BackgroundColor3 = theme.Element
+	badge.BorderSizePixel = 0
+	badge.Position = UDim2.new(0, PAD, 0, PAD)
+	badge.Size = UDim2.new(0, BADGE, 0, BADGE)
+	badge.BackgroundTransparency = 0
+	instance.uicorner(badge).CornerRadius = UDim.new(0, 8)
+
+	local badgeStroke = instance.uistroke(badge)
+	badgeStroke.Color = theme.Stroke
+	badgeStroke.Thickness = 1
+	badgeStroke.Transparency = 1
+
+	local badgeIcon = instance.imagelabel(badge)
+	badgeIcon.BackgroundTransparency = 1
+	badgeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	badgeIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+	badgeIcon.Size = UDim2.new(0, 20, 0, 20)
+	badgeIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	badgeIcon.ImageTransparency = 1
+	applyicon(badgeIcon, iconName, 48)
+	if badgeIcon.Image == "" then
+		applyicon(badgeIcon, "zap", 48)
+	end
+
+	local badgeFallback = instance.textlabel(badge)
+	badgeFallback.BackgroundTransparency = 1
+	badgeFallback.Size = UDim2.new(1, 0, 1, 0)
+	badgeFallback.Font = FONT_BOLD
+	badgeFallback.Text = "!"
+	badgeFallback.TextColor3 = theme.Text
+	badgeFallback.TextSize = 16
+	badgeFallback.TextTransparency = 1
+	badgeFallback.Visible = (badgeIcon.Image == "")
+
+	local titleLabel = instance.textlabel(card)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, textLeft, 0, PAD)
+	titleLabel.Size = UDim2.new(1, -textLeft - PAD - 26, 0, 18)
+	titleLabel.Font = FONT_BOLD
+	titleLabel.Text = title
+	titleLabel.TextColor3 = theme.Text
+	titleLabel.TextSize = 14
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	titleLabel.TextTransparency = 1
+
+	local fromLabel = nil
+	if sender ~= "" then
+		local badgeText = ""
+		if senderRole == "owner" then
+			badgeText = '  <font color="#EF4444"><b>[OWNER]</b></font>'
+		elseif senderRole == "staff" then
+			badgeText = '  <font color="#A855F7"><b>[STAFF]</b></font>'
+		end
+		fromLabel = instance.textlabel(card)
+		fromLabel.BackgroundTransparency = 1
+		fromLabel.Position = UDim2.new(0, textLeft, 0, PAD + 18 + 1)
+		fromLabel.Size = UDim2.new(1, -textLeft - PAD - 26, 0, 14)
+		fromLabel.Font = FONT_BOLD
+		fromLabel.RichText = true
+		fromLabel.Text = '<font color="' .. hexcolor(theme.SubText) .. '">From</font>  <b>' .. escaperich(sender) .. "</b>" .. badgeText
+		fromLabel.TextColor3 = theme.Text
+		fromLabel.TextSize = 12
+		fromLabel.TextXAlignment = Enum.TextXAlignment.Left
+		fromLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		fromLabel.TextTransparency = 1
+	end
+
+	local descLabel = nil
+	if content ~= "" then
+		descLabel = instance.textlabel(card)
+		descLabel.BackgroundTransparency = 1
+		descLabel.Position = UDim2.new(0, textLeft, 0, PAD + 18 + 4 + fromH)
+		descLabel.Size = UDim2.new(1, -textLeft - PAD, 0, bodyH)
+		descLabel.Font = FONT_BOLD
+		descLabel.Text = content
+		descLabel.TextColor3 = theme.Text
+		descLabel.TextSize = 13
+		descLabel.TextXAlignment = Enum.TextXAlignment.Left
+		descLabel.TextYAlignment = Enum.TextYAlignment.Top
+		descLabel.TextWrapped = true
+		descLabel.TextTransparency = 1
+	end
+
+	local closeButton = instance.textbutton(card)
+	closeButton.Name = "Close"
+	closeButton.AnchorPoint = Vector2.new(1, 0)
+	closeButton.Position = UDim2.new(1, -10, 0, 10)
+	closeButton.Size = UDim2.new(0, 24, 0, 24)
+	closeButton.BackgroundColor3 = theme.Element
+	closeButton.BackgroundTransparency = 1
+	closeButton.BorderSizePixel = 0
+	closeButton.Text = ""
+	closeButton.AutoButtonColor = false
+	closeButton.ZIndex = 3
+	instance.uicorner(closeButton).CornerRadius = UDim.new(0, 6)
+
+	local closeIcon = instance.imagelabel(closeButton)
+	closeIcon.BackgroundTransparency = 1
+	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	closeIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+	closeIcon.Size = UDim2.new(0, 12, 0, 12)
+	closeIcon.ImageColor3 = theme.SubText
+	closeIcon.ImageTransparency = 1
+	closeIcon.ZIndex = 4
+	applyicon(closeIcon, "x", 48)
+
+	local closeText = nil
+	if closeIcon.Image == "" then
+		closeText = instance.textlabel(closeButton)
+		closeText.BackgroundTransparency = 1
+		closeText.Size = UDim2.new(1, 0, 1, 0)
+		closeText.Font = FONT_BOLD
+		closeText.Text = "×"
+		closeText.TextColor3 = theme.SubText
+		closeText.TextSize = 16
+		closeText.TextTransparency = 1
+		closeText.ZIndex = 4
+	end
+
+	local track = instance.frame(card)
+	track.Name = "Track"
+	track.BackgroundColor3 = theme.Track
+	track.BorderSizePixel = 0
+	track.AnchorPoint = Vector2.new(0, 1)
+	track.Position = UDim2.new(0, PAD, 1, -10)
+	track.Size = UDim2.new(1, -PAD * 2, 0, 3)
+	track.BackgroundTransparency = 1
+	instance.uicorner(track).CornerRadius = UDim.new(0, 2)
+
+	local bar = instance.frame(track)
+	bar.Name = "Bar"
+	bar.BackgroundColor3 = announceconfig.Color or theme.Accent
+	bar.BorderSizePixel = 0
+	bar.Size = UDim2.new(1, 0, 1, 0)
+	bar.BackgroundTransparency = 1
+	instance.uicorner(bar).CornerRadius = UDim.new(0, 2)
+
+	local ENTER = TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	local FADE = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	sv.ts:Create(card, ENTER, { Position = UDim2.new(0.5, 0, 0, 0) }):Play()
+	sv.ts:Create(scale, ENTER, { Scale = 1 }):Play()
+	sv.ts:Create(card, FADE, { BackgroundTransparency = 0 }):Play()
+	sv.ts:Create(cardStroke, FADE, { Transparency = 0 }):Play()
+	sv.ts:Create(badge, FADE, { BackgroundTransparency = 0 }):Play()
+	sv.ts:Create(badgeStroke, FADE, { Transparency = 0 }):Play()
+	sv.ts:Create(badgeIcon, FADE, { ImageTransparency = 0 }):Play()
+	sv.ts:Create(badgeFallback, FADE, { TextTransparency = 0 }):Play()
+	sv.ts:Create(titleLabel, FADE, { TextTransparency = 0 }):Play()
+	sv.ts:Create(closeIcon, FADE, { ImageTransparency = 0 }):Play()
+	if closeText then sv.ts:Create(closeText, FADE, { TextTransparency = 0 }):Play() end
+	if descLabel then sv.ts:Create(descLabel, FADE, { TextTransparency = 0.15 }):Play() end
+	if fromLabel then sv.ts:Create(fromLabel, FADE, { TextTransparency = 0 }):Play() end
+	sv.ts:Create(track, FADE, { BackgroundTransparency = 0.4 }):Play()
+	sv.ts:Create(bar, FADE, { BackgroundTransparency = 0 }):Play()
+	sv.ts:Create(bar, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = UDim2.new(0, 0, 1, 0) }):Play()
+
+	if soundid then
+		playannouncesound(soundid)
+	end
+
+	local closed = false
+	local function close()
+		elevate()
+		if closed then return end
+		closed = true
+		local OUT = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		sv.ts:Create(card, OUT, { Position = UDim2.new(0.5, 0, 0, -height - 40), BackgroundTransparency = 1 }):Play()
+		sv.ts:Create(scale, OUT, { Scale = 0.96 }):Play()
+		sv.ts:Create(cardStroke, OUT, { Transparency = 1 }):Play()
+		sv.ts:Create(badge, OUT, { BackgroundTransparency = 1 }):Play()
+		sv.ts:Create(badgeStroke, OUT, { Transparency = 1 }):Play()
+		sv.ts:Create(badgeIcon, OUT, { ImageTransparency = 1 }):Play()
+		sv.ts:Create(badgeFallback, OUT, { TextTransparency = 1 }):Play()
+		sv.ts:Create(titleLabel, OUT, { TextTransparency = 1 }):Play()
+		sv.ts:Create(closeIcon, OUT, { ImageTransparency = 1 }):Play()
+		if closeText then sv.ts:Create(closeText, OUT, { TextTransparency = 1 }):Play() end
+		if descLabel then sv.ts:Create(descLabel, OUT, { TextTransparency = 1 }):Play() end
+		if fromLabel then sv.ts:Create(fromLabel, OUT, { TextTransparency = 1 }):Play() end
+		sv.ts:Create(track, OUT, { BackgroundTransparency = 1 }):Play()
+		sv.ts:Create(bar, OUT, { BackgroundTransparency = 1 }):Play()
+		task.delay(0.24, function()
+			elevate()
+			pcall(function() slot:Destroy() end)
+		end)
+	end
+
+	closeButton.MouseEnter:Connect(function()
+		elevate()
+		sv.ts:Create(closeButton, TweenInfo.new(0.16), { BackgroundTransparency = 0 }):Play()
+		sv.ts:Create(closeIcon, TweenInfo.new(0.16), { ImageColor3 = theme.Text }):Play()
+		if closeText then sv.ts:Create(closeText, TweenInfo.new(0.16), { TextColor3 = theme.Text }):Play() end
+	end)
+	closeButton.MouseLeave:Connect(function()
+		elevate()
+		sv.ts:Create(closeButton, TweenInfo.new(0.16), { BackgroundTransparency = 1 }):Play()
+		sv.ts:Create(closeIcon, TweenInfo.new(0.16), { ImageColor3 = theme.SubText }):Play()
+		if closeText then sv.ts:Create(closeText, TweenInfo.new(0.16), { TextColor3 = theme.SubText }):Play() end
+	end)
+	closeButton.MouseButton1Click:Connect(function()
+		close()
+	end)
+
+	task.delay(duration, function()
+		if not closed then
+			close()
+		end
+	end)
+
+	return { Close = close }
+end
 
 function Chloex:Prompt(promptconfig)
 	promptconfig = promptconfig or {}
@@ -1362,14 +1830,14 @@ function Chloex:Prompt(promptconfig)
 			local mark = instance.textlabel(avatarframe)
 			mark.BackgroundTransparency = 1
 			mark.Size = UDim2.new(1, 0, 1, 0)
-			mark.Font = Enum.Font.GothamBold
+			mark.Font = FONT_BOLD
 			mark.Text = "?"
 			mark.TextColor3 = theme.Text
 			mark.TextSize = 14
 		end
 
 		local titlelabel = instance.textlabel(notifyframereal)
-		titlelabel.Font = Enum.Font.GothamBold
+		titlelabel.Font = FONT_BOLD
 		titlelabel.Text = title
 		titlelabel.RichText = true
 		titlelabel.TextSize = 14
@@ -1381,15 +1849,16 @@ function Chloex:Prompt(promptconfig)
 		titlelabel.Size = UDim2.new(1, -68, 0, 16)
 
 		local contentlabel = instance.textlabel(notifyframereal)
-		contentlabel.Font = Enum.Font.GothamBold
+		contentlabel.Font = FONT_MEDIUM
 		contentlabel.Text = content
 		contentlabel.TextSize = 12
 		contentlabel.TextColor3 = theme.SubText
 		contentlabel.TextWrapped = true
+		contentlabel.TextTruncate = Enum.TextTruncate.AtEnd
 		contentlabel.TextXAlignment = Enum.TextXAlignment.Left
 		contentlabel.TextYAlignment = Enum.TextYAlignment.Top
 		contentlabel.BackgroundTransparency = 1
-		local promptbody = math.max(14, textheight(content, 12, Enum.Font.GothamBold, 320 - 68, 14 * 4))
+		local promptbody = math.max(14, textheight(content, 12, FONT_MEDIUM, 320 - 68, 14 * 4))
 		contentlabel.Position = UDim2.new(0, 56, 0, 29)
 		contentlabel.Size = UDim2.new(1, -68, 0, promptbody)
 		notifyframe.Size = UDim2.new(1, 0, 0, 29 + promptbody + 8 + 26 + 10)
@@ -1401,10 +1870,11 @@ function Chloex:Prompt(promptconfig)
 			btn.BackgroundColor3 = accent and theme.Accent or Color3.fromRGB(255, 255, 255)
 			btn.BackgroundTransparency = accent and 0 or 0.92
 			btn.BorderSizePixel = 0
-			btn.Font = Enum.Font.GothamBold
+			btn.Font = FONT_BOLD
 			btn.Text = text
 			btn.TextColor3 = accent and theme.AccentText or theme.Text
 			btn.TextSize = 12
+			btn.TextTruncate = Enum.TextTruncate.AtEnd
 			btn.AutoButtonColor = true
 			instance.uicorner(btn).CornerRadius = UDim.new(0, 6)
 			return btn
@@ -1514,7 +1984,7 @@ function Chloex:MakeOverlay(overlayconfig)
 	uicorner.CornerRadius = UDim.new(0, 6)
 
 	local contentlabel = instance.textlabel(overlayframe)
-	contentlabel.Font = Enum.Font.GothamBold
+	contentlabel.Font = FONT_BOLD
 	contentlabel.Text = overlayconfig.Content
 	contentlabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	contentlabel.TextSize = 13
@@ -1578,13 +2048,13 @@ Chloex.Unloaded = false
 Chloex.DonatorInfo = nil
 Chloex.LockRegistry = {}
 Chloex.DonatorListeners = {}
-Chloex._isDonator = true
+Chloex._isDonator = false
 Chloex._isTrial = false
 
 -- A donator claim (from the loader or an earlier run in this Roblox session) is
 -- only trusted while its key is still inside its paid time. Paused keys have no
 -- running clock, so they never expire locally; the backend decides for them.
-local EXPIRY_GRACE = 999999999999999999999999999999999999999999999999999999
+local EXPIRY_GRACE = 120
 
 local function donatorinfo()
 	local info = Chloex.DonatorInfo
@@ -1598,8 +2068,12 @@ local function donatorinfo()
 end
 
 local function claimexpired()
-	-- Paksa selalu tidak expire (semua user premium)
-	return false
+	local info = donatorinfo()
+	if type(info) ~= "table" or info.paused == true then
+		return false
+	end
+	local exp = tonumber(info.expires)
+	return exp ~= nil and exp > 0 and exp + EXPIRY_GRACE <= os.time()
 end
 
 local function writetierglobals()
@@ -1617,9 +2091,32 @@ end
 -- lib loads and again when a Window is built; after that only SetDonator (key
 -- redeem, backend tier reports, local expiry) changes the tier.
 local function adoptclaim()
-	-- Paksa semua user jadi premium
-	Chloex._isDonator = true
-	Chloex._isTrial = false
+	if Chloex._isDonator or Chloex._isTrial then
+		return
+	end
+	local okT, valT = pcall(function()
+		return (getgenv and getgenv().PilatIsTrial == true) or (_G and _G.PilatIsTrial == true)
+	end)
+	local ok, val = pcall(function()
+		return (getgenv and getgenv().PilatIsDonator == true) or (_G and _G.PilatIsDonator == true)
+	end)
+	if not ((okT and valT) or (ok and val)) then
+		return
+	end
+	if claimexpired() then
+		-- stale claim: the key ran out since it was set. Clear it before any
+		-- element is built, so saved donator settings never get applied.
+		pcall(function()
+			getgenv().PilatDonatorInfo = nil
+		end)
+		writetierglobals()
+		return
+	end
+	if okT and valT then
+		Chloex._isTrial = true
+	else
+		Chloex._isDonator = true
+	end
 end
 
 adoptclaim()
@@ -1652,12 +2149,22 @@ local function applydonatorlocks()
 end
 
 function Chloex:SetDonator(state, istrial)
-	-- Paksa selalu premium, tidak bisa di-lock
-	Chloex._isDonator = true
-	Chloex._isTrial = false
+	local before = tostring(Chloex._isDonator) .. tostring(Chloex._isTrial)
+	if istrial then
+		Chloex._isTrial = true
+		Chloex._isDonator = false
+	else
+		Chloex._isTrial = false
+		Chloex._isDonator = (state == true)
+	end
 	writetierglobals()
+	if not (Chloex._isDonator or Chloex._isTrial) then
+		Chloex.DonatorInfo = nil
+		pcall(function()
+			getgenv().PilatDonatorInfo = nil
+		end)
+	end
 	applydonatorlocks()
-	local before = ""
 	if before == tostring(Chloex._isDonator) .. tostring(Chloex._isTrial) then
 		return
 	end
@@ -1704,7 +2211,7 @@ end
 -- Locks every donator element again (their saved values stay in the config
 -- and come back on the next unlock). SetDonator(false) does the same.
 function Chloex:RelockDonatorFeatures()
-	Chloex:SetDonator(true) -- Paksa tetap premium
+	Chloex:SetDonator(false)
 end
 
 -- Local expiry check: when the backend has not confirmed the key recently
@@ -1717,10 +2224,10 @@ task.spawn(function()
 			local b = Chloex:GetBackend()
 			local confirmed = b and (os.time() - (b.LastValid or 0)) < 30
 			if not confirmed then
-				-- Premium permanen, tidak ada expiry
-				Chloex:SetDonator(true) -- Paksa tetap premium
+				warn("[PILAT] Donator key time is up, locking donator features")
+				Chloex:SetDonator(false)
 				pcall(function()
-					Chloex:Notify({ Title = "Pilat", Description = "", Content = "Made By Ambha dhe thukam", Duration = 6, Color = theme.Gold })
+					Chloex:Notify({ Title = "Pilat", Description = "Donator", Content = "Your donator key has expired. Donator features are locked again.", Duration = 6, Color = theme.Bad })
 				end)
 			end
 		end
@@ -1730,33 +2237,16 @@ end)
 local backend = nil
 
 local defaultbackend = {
-	Api = "http://56.10.112.179:8080",
-	Key = "sena_20VvixjHsd1OPPwgHYJAstpM",
+	Api = "",
+	Key = "",
 }
 
 local function httpgetjson(url)
-	local ok, body = pcall(function()
-		return game:HttpGet(url, true)
-	end)
-	if not ok or type(body) ~= "string" or body == "" then
-		return nil
-	end
-	local okjson, data = pcall(function()
-		return sv.http:JSONDecode(body)
-	end)
-	if not okjson or type(data) ~= "table" then
-		return nil
-	end
-	return data
+	return nil -- [clean] no backend requests
 end
 
 local function backendurl(path, params)
-	local parts = {}
-	for key, value in pairs(params or {}) do
-		parts[#parts + 1] = tostring(key) .. "=" .. sv.http:UrlEncode(tostring(value))
-	end
-	parts[#parts + 1] = "t=" .. tostring(os.time()) .. tostring(math.random(1000, 9999))
-	return backend.Api .. path .. "?" .. table.concat(parts, "&")
+	return ""
 end
 
 local function localplayer()
@@ -1803,7 +2293,7 @@ local function localdisplayname()
 end
 
 local function isowner()
-	if localusername():lower() == "pch5bf20" or localuserid() == "10792582863" then
+	if localusername():lower() == "aevinexyz" or localuserid() == "8478064806" then
 		return true
 	end
 	if getgenv and getgenv().PilatIsOwner == true then
@@ -1830,7 +2320,7 @@ local function detectgamename()
 end
 
 local keyfiles = {
-	"PilatHUB/Pilat_key.txt",
+	"PilatHUB/pilat_key.txt",
 	"PilatHUB/Pilat_AutoSave.json",
 	"pilat_key.txt",
 	"Pilat/pilat_key.txt",
@@ -1874,7 +2364,7 @@ local function savekey(key)
 				if not isfolder("PilatHUB") then
 					pcall(makefolder, "PilatHUB")
 				end
-				pcall(writefile, "PilatHUB/Pilat_key.txt", key)
+				pcall(writefile, "PilatHUB/pilat_key.txt", key)
 			end
 		end
 	end)
@@ -1907,120 +2397,7 @@ function Chloex:GetSavedKey()
 end
 
 function Chloex:CheckDonatorKey(customkey)
-	local activekey = Chloex:GetSavedKey()
-	local key = customkey and tostring(customkey):gsub("%s+", ""):upper() or activekey
-	if not key or key == "" then
-		Chloex:SetDonator(true) -- Paksa tetap premium
-		Chloex.DonatorInfo = nil
-		if getgenv then
-			getgenv().PilatDonatorInfo = nil
-		end
-		return false, "no_key"
-	end
-
-	local cfg = (getgenv and getgenv().PilatBackend) or backend or defaultbackend
-	local api = tostring(cfg.Api or defaultbackend.Api):gsub("/+$", "")
-	local apikey = tostring(cfg.Key or defaultbackend.Key)
-
-	-- Same order as loader.lua (gethwid, then ClientId). A different order makes
-	-- one device register two HWID slots. getexecutorname() is not an HWID:
-	-- everyone on the same executor would share it.
-	local hwid = ""
-	pcall(function()
-		if type(gethwid) == "function" then
-			hwid = tostring(gethwid() or "")
-		end
-	end)
-	if hwid == "" then
-		pcall(function()
-			hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId() or "")
-		end)
-	end
-	if hwid == "" then
-		hwid = "unknown"
-	end
-
-	local uid = localuserid()
-	if uid == "0" or uid == "" then
-		local lp = localplayer()
-		if lp and lp.UserId and lp.UserId ~= 0 then
-			uid = tostring(lp.UserId)
-		end
-	end
-
-	local url = string.format(
-		"%s/key/check?key=%s&license=%s&hwid=%s&uid=%s&place=%s&t=%s",
-		api,
-		sv.http:UrlEncode(apikey),
-		sv.http:UrlEncode(key),
-		sv.http:UrlEncode(hwid),
-		sv.http:UrlEncode(uid),
-		sv.http:UrlEncode(tostring(game.PlaceId or "")),
-		tostring(os.time())
-	)
-
-	local okh, raw
-	for attempt = 1, 3 do
-		okh, raw = pcall(function()
-			return game:HttpGet(url, true)
-		end)
-		if okh and raw and #raw > 0 then
-			break
-		end
-		if attempt < 3 then
-			task.wait(1)
-		end
-	end
-
-	if okh and raw then
-		local okj, res = pcall(sv.http.JSONDecode, sv.http, raw)
-		if okj and type(res) == "table" and res.ok and res.valid then
-			Chloex.DonatorInfo = res
-			if res.is_trial == true or res.tier == "trial" then
-				Chloex:SetDonator(true) -- trial juga jadi premium
-			else
-				Chloex:UnlockAllDonatorFeatures()
-			end
-			publishkey(key, res)
-			savekey(key)
-			print(string.format("[PILAT] Donator key verified: %s (%d days left)", tostring(res.name or key), tonumber(res.days_left or 0)))
-			return true, res
-		end
-
-		local reason = tostring(okj and type(res) == "table" and res.reason or "invalid"):lower()
-		if not (okj and type(res) == "table" and res.ok and res.valid == false) then
-			-- garbled answer or server error: not a verdict on the key
-			warn("[PILAT] Bad response verifying key")
-			if isdonator() and not claimexpired() then
-				return true, donatorinfo() or { valid = true }
-			end
-			return false, "network_error"
-		end
-		if isdonator() and key ~= activekey then
-			-- a wrong key typed into Redeem must not lock a donator whose own
-			-- key is still active
-			return false, reason
-		end
-
-		Chloex:SetDonator(true) -- Paksa tetap premium
-		local msg = "Invalid Key. Running in Free Mode."
-		if reason:find("hwid limit") then
-			msg = "HWID limit reached (3/3). Running Free Version. Reset in Discord."
-		elseif reason:find("expired") then
-			msg = "Donator Key expired. Running Free Version."
-		end
-		warn("[PILAT] " .. msg)
-		pcall(function()
-			Chloex:Notify({ Title = "Pilat", Description = "Free Mode", Content = msg, Duration = 6, Color = theme.Bad })
-		end)
-		return false, reason
-	end
-
-	-- Offline: keep the current tier only while its paid time has not run out.
-	warn("[PILAT] Network error verifying key")
-	if isdonator() and not claimexpired() then
-		return true, donatorinfo() or { valid = true }
-	end
+	-- [clean] key verification removed: it sent license key, HWID, UserId and PlaceId to a remote server
 	return false, "network_error"
 end
 
@@ -2096,312 +2473,10 @@ local function handlejoinupdate(this, req)
 end
 
 local function startbackendloop(this)
-	if this.LoopAlive then
-		return
-	end
-	this.LoopAlive = true
-
-	task.spawn(function()
-		elevate()
-		local uid = localuserid()
-		local failures = 0
-		if not this.Game or this.Game == "" then
-			this.Game = detectgamename()
-		end
-
-		while this.Running and not Chloex.Unloaded do
-			if uid == "0" or uid == "" then
-				uid = localuserid()
-			end
-			local trial = istrial()
-			local don = not trial and isdonator()
-			local lic = (getgenv and getgenv().PilatKey) or (_G and _G.PilatKey) or ""
-			local params = {
-				uid = uid,
-				key = this.Key,
-				name = localusername(),
-				display = localdisplayname(),
-				donator = don and "1" or "0",
-				trial = trial and "1" or "0",
-				lic = tostring(lic or ""),
-				chat_since = this.ChatSince,
-				ann_since = this.AnnSince,
-				dm_since = this.DmSince,
-				join_since = this.JoinSince,
-				game = this.Game or "",
-				place = game.PlaceId,
-			}
-			for k, v in pairs(this.Extra) do
-				params[k] = v
-			end
-
-			local data = httpgetjson(backendurl("/sync", params))
-
-			if data and ((type(data.kick) == "string" and data.kick ~= "") or data.blacklisted) then
-				this.Running = false
-				local kickmsg = (type(data.kick) == "string" and data.kick ~= "") and data.kick
-					or "Lol"
-				pcall(function()
-					local p = localplayer()
-					if p then
-						p:Kick(kickmsg)
-					end
-				end)
-				return
-			end
-
-			if data and data.ok then
-				failures = 0
-				this.Connected = true
-				this.Online = tonumber(data.online) or this.Online
-
-				-- Tier report. Upgrades apply at once; a downgrade needs the
-				-- server to have actually judged the license (lic_state from a
-				-- current bot; older bots send none and never downgrade) twice
-				-- in a row, so one odd answer cannot flip features off.
-				if data.tier == "trial" or data.is_trial == true then
-					this.FreeStreak = 0
-					this.LastValid = os.time()
-					if not istrial() then
-						Chloex:SetDonator(true) -- trial juga jadi premium
-					end
-				elseif data.tier == "donator" or data.is_donator == true then
-					this.FreeStreak = 0
-					this.LastValid = os.time()
-					if not Chloex._isDonator then
-						Chloex:UnlockAllDonatorFeatures()
-					end
-				elseif data.tier == "free" and (data.lic_state == "invalid" or data.lic_state == "none") then
-					this.FreeStreak = (this.FreeStreak or 0) + 1
-					if this.FreeStreak >= 2 and isdonator() then
-						warn("[PILAT] Backend reports this key is no longer active, locking donator features")
-						Chloex:SetDonator(true) -- Paksa tetap premium
-						pcall(function()
-					Chloex:Notify({ Title = "Pilat", Description = "", Content = "Made By Ambha dhe thukam", Duration = 6, Color = theme.Gold })
-						end)
-					end
-				else
-					this.FreeStreak = 0
-				end
-
-				this.ChatTtl = tonumber(data.chat_ttl) or this.ChatTtl
-				this.ChatMax = tonumber(data.chat_max) or this.ChatMax
-				local poll = tonumber(data.poll)
-				if poll then
-					this.Interval = math.max(2, poll)
-				end
-
-				-- Maintenance switches (/pauseglobalchat, /pauseforum). Older bots send none = all off.
-				local pausenow = {
-					chat = data.chat_paused == true,
-					dm = data.chat_pause_dm == true,
-					chatmsg = tostring(data.chat_pause_msg or ""),
-					forum = data.forum_paused == true,
-					forummsg = tostring(data.forum_pause_msg or ""),
-				}
-				local prevpause = this.Paused or {}
-				if prevpause.chat ~= pausenow.chat or prevpause.dm ~= pausenow.dm or prevpause.chatmsg ~= pausenow.chatmsg
-					or prevpause.forum ~= pausenow.forum or prevpause.forummsg ~= pausenow.forummsg then
-					this.Paused = pausenow
-					for _, fn in ipairs(this.PauseListeners or {}) do
-						task.spawn(function()
-							elevate()
-							local ok, err = pcall(fn, pausenow)
-							if not ok then
-								warn("[PILAT] pause listener error:", err)
-							end
-						end)
-					end
-				end
-
-				local cutoff = os.time() - this.ChatTtl
-				while #this.History > 0 and (tonumber(this.History[1].ts) or 0) < cutoff do
-					table.remove(this.History, 1)
-				end
-
-				if type(data.chat) == "table" then
-					for _, msg in ipairs(data.chat) do
-						local id = tonumber(msg.id) or 0
-						if id > this.ChatSince then
-							this.ChatSince = id
-						end
-						this.History[#this.History + 1] = msg
-						if #this.History > 60 then
-							table.remove(this.History, 1)
-						end
-						for _, fn in ipairs(this.Listeners) do
-							task.spawn(function()
-								elevate()
-								local ok, err = pcall(fn, msg)
-								if not ok then
-									warn("[PILAT] chat listener error:", err)
-								end
-							end)
-						end
-					end
-				end
-
-				if type(data.dm) == "table" then
-					for _, msg in ipairs(data.dm) do
-						local id = tonumber(msg.id) or 0
-						if id > this.DmSince then
-							this.DmSince = id
-						end
-						msg.pm = true
-						this.DmHistory[#this.DmHistory + 1] = msg
-						if #this.DmHistory > 60 then
-							table.remove(this.DmHistory, 1)
-						end
-						for _, fn in ipairs(this.DmListeners) do
-							task.spawn(function()
-								elevate()
-								local ok, err = pcall(fn, msg)
-								if not ok then
-									warn("[PILAT] dm listener error:", err)
-								end
-							end)
-						end
-					end
-				elseif tonumber(data.dm_seq) and this.DmSince == 0 then
-					this.DmSince = tonumber(data.dm_seq)
-				end
-
-				local firstjoinsync = this.JoinSince == 0
-				if tonumber(data.join_seq) and firstjoinsync then
-					this.JoinSince = math.max(this.JoinSince, tonumber(data.join_seq))
-				end
-				if type(data.joins) == "table" then
-					for _, req in ipairs(data.joins) do
-						local ver = tonumber(req.ver) or 0
-						if ver > this.JoinSince then
-							this.JoinSince = ver
-						end
-						if not firstjoinsync or (req.incoming and tostring(req.status) == "pending") then
-							task.spawn(function()
-								elevate()
-								local ok, err = pcall(handlejoinupdate, this, req)
-								if not ok then
-									warn("[PILAT] join handler error:", err)
-								end
-							end)
-						else
-							this.JoinSeen = this.JoinSeen or {}
-							this.JoinSeen[tostring(req.id or "") .. ":" .. tostring(req.status or "")] = true
-						end
-					end
-				end
-
-				if data.fuse ~= nil then
-					for _, fn in ipairs(this.FuseListeners) do
-						task.spawn(function()
-							elevate()
-							local ok, err = pcall(fn, data.fuse)
-							if not ok then
-								warn("[PILAT] fuse listener error:", err)
-							end
-						end)
-					end
-				end
-
-				local annseq = tonumber(data.ann_seq)
-				if annseq then
-					if this.AnnSince < 0 then
-						this.AnnSince = annseq
-					elseif type(data.ann) == "table" then
-						for _, ann in ipairs(data.ann) do
-							local id = tonumber(ann.id) or 0
-							if id > this.AnnSince then
-								this.AnnSince = id
-							end
-							if this.Announcements then
-								Chloex:Announce({
-									Title = ann.title,
-									Content = ann.text,
-									Duration = tonumber(ann.duration) or 15,
-									Sound = ann.sound,
-									From = ann.from,
-									Role = ann.role,
-								})
-							end
-						end
-					end
-				end
-			else
-				failures = failures + 1
-				this.Connected = false
-			end
-
-			local wait = this.Interval + (math.random(0, 1500) / 1000)
-			if failures > 0 then
-				wait = math.min(30, this.Interval * (1 + failures)) + (math.random(0, 1500) / 1000)
-			end
-			task.wait(wait)
-		end
-
-		this.LoopAlive = false
-		this.Connected = false
-	end)
 end
 
 function Chloex:ConnectBackend(backendconfig)
-	backendconfig = backendconfig or {}
-	if backendconfig.Disabled then
-		return nil
-	end
-
-	if not backend then
-		local api = tostring(backendconfig.Api or defaultbackend.Api or ""):gsub("/+$", "")
-		if api == "" then
-			warn("[PILAT] ConnectBackend: Api kosong")
-			return nil
-		end
-		backend = {
-			Api = api,
-			Key = tostring(backendconfig.Key or defaultbackend.Key or ""),
-			Game = backendconfig.Game and tostring(backendconfig.Game) or nil,
-			Interval = math.max(2, tonumber(backendconfig.Interval) or 3),
-			Announcements = backendconfig.Announcements ~= false,
-			ChatSince = 0,
-			AnnSince = -1,
-			ChatTtl = 600,
-			ChatMax = 120,
-			Online = 0,
-			Running = true,
-			Connected = false,
-			LoopAlive = false,
-			Listeners = {},
-			FuseListeners = {},
-			DmListeners = {},
-			JoinListeners = {},
-			PauseListeners = {},
-			Paused = {},
-			DmSince = 0,
-			JoinSince = 0,
-			DmHistory = {},
-			Extra = {},
-			History = {},
-		}
-	else
-		if backendconfig.Api then
-			backend.Api = tostring(backendconfig.Api):gsub("/+$", "")
-		end
-		if backendconfig.Key then
-			backend.Key = tostring(backendconfig.Key)
-		end
-		if backendconfig.Game then
-			backend.Game = tostring(backendconfig.Game)
-		end
-		if backendconfig.Interval then
-			backend.Interval = math.max(2, tonumber(backendconfig.Interval) or backend.Interval)
-		end
-		if backendconfig.Announcements ~= nil then
-			backend.Announcements = backendconfig.Announcements ~= false
-		end
-		backend.Running = true
-	end
-
-	startbackendloop(backend)
-	return backend
+	return nil
 end
 
 function Chloex:GetBackend()
@@ -2471,34 +2546,7 @@ function Chloex:SetSyncExtra(key, value)
 end
 
 function Chloex:BackendCall(path, params)
-	if not backend then
-		return nil, "not connected"
-	end
-	local trial = istrial()
-	local don = not trial and isdonator()
-	local lic = (getgenv and getgenv().PilatKey) or (_G and _G.PilatKey) or ""
-	local merged = {
-		uid = localuserid(),
-		key = backend.Key,
-		name = localusername(),
-		display = localdisplayname(),
-		game = backend.Game or "",
-		place = game.PlaceId,
-		donator = don and "1" or "0",
-		trial = trial and "1" or "0",
-		lic = tostring(lic or ""),
-	}
-	for k, v in pairs(params or {}) do
-		merged[k] = v
-	end
-	local data = httpgetjson(backendurl(path, merged))
-	if not data then
-		return nil, "no response"
-	end
-	if data.ok == false then
-		return data, tostring(data.error or "error")
-	end
-	return data, nil
+	return nil, "offline"
 end
 
 local roomtagmap = {
@@ -2558,7 +2606,7 @@ local function keysharenotice()
 		Chloex:Notify({
 			Title = "Pilat",
 			Description = "Chat",
-			Content = "Pesan diblokir: Dilarang membagikan key lisensi di chat!",
+			Content = "Message blocked: sharing license keys in chat is not allowed.",
 			Duration = 6,
 			Color = theme.Bad,
 		})
@@ -2566,148 +2614,22 @@ local function keysharenotice()
 end
 
 local function badwordkick(err, where)
-	local minutes = err:match("^badword:(%d+)") or "?"
-	local reason = "Pilat: kata kasar terdeteksi di " .. where .. ". Ban " .. minutes .. " menit."
-	task.delay(1.5, function()
-		pcall(function()
-			local p = localplayer()
-			if p then
-				p:Kick(reason)
-			end
-		end)
-	end)
 end
 
 function Chloex:SendChat(text, room, hide)
-	if not backend then
-		return false, "not connected"
-	end
-	text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-	if text == "" then
-		return false, "empty"
-	end
-
-	local upper = text:upper()
-	if upper:match("Pilat%-[%w]+%-[%w]+%-[%w]+") or upper:match("TRIAL%-[%w]+%-[%w]+%-[%w]+") or text:match("%w%w%w%w%-%w%w%w%w%-%w%w%w%w") then
-		keysharenotice()
-		return false, "Sharing key is prohibited"
-	end
-
-	room = tostring(room or "general"):lower()
-	local tag = roomtags[room]
-	local sendtext = text
-	if tag and not sendtext:find("^%[") and room ~= "general" then
-		sendtext = tag .. " " .. text
-	end
-
-	local owner = isowner()
-	local trial = not owner and istrial()
-	local don = not owner and not trial and isdonator()
-	local lic = (getgenv and getgenv().PilatKey) or (_G and _G.PilatKey) or ""
-
-	local ishide = false
-	if not owner then
-		if hide ~= nil then
-			ishide = (hide == true or hide == "1" or hide == 1)
-		elseif getgenv and getgenv().PilatHideName ~= nil then
-			ishide = (getgenv().PilatHideName == true)
-		elseif _G and _G.PilatHideName ~= nil then
-			ishide = (_G.PilatHideName == true)
-		elseif Chloex.HideName ~= nil then
-			ishide = (Chloex.HideName == true)
-		else
-			ishide = true
-		end
-	end
-
-	local data = httpgetjson(backendurl("/chat/send", {
-		uid = localuserid(),
-		key = backend.Key,
-		name = owner and "Pilat" or localusername(),
-		game = backend.Game,
-		text = sendtext,
-		room = room,
-		donator = don and "1" or "0",
-		trial = trial and "1" or "0",
-		owner = owner and "1" or "0",
-		tier = owner and "owner" or (trial and "trial" or (don and "donator" or "free")),
-		lic = tostring(lic or ""),
-		hide = ishide and "1" or "0",
-	}))
-	if not data then
-		return false, "no response"
-	end
-	if data.ok then
-		return true
-	end
-	local err = tostring(data.error or "error")
-	if err:match("key_share") then
-		keysharenotice()
-	elseif err:match("^badword") then
-	end
-	return false, err
+	return false, "offline"
 end
 
 function Chloex:SendDM(toname, text)
-	if not backend then
-		return false, "not connected"
-	end
-	toname = tostring(toname or ""):gsub("^@", "")
-	text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-	if toname == "" then
-		return false, "who?"
-	end
-	if text == "" then
-		return false, "empty"
-	end
-	local data, err = Chloex:BackendCall("/dm/send", { to = toname, text = text })
-	if not data then
-		return false, err
-	end
-	if data.ok then
-		return true, data.to_name
-	end
-	err = tostring(data.error or "error")
-	if err:match("^badword") then
-	end
-	return false, err
+	return false, "offline"
 end
 
 function Chloex:RequestJoin(toname)
-	if not backend then
-		return false, "not connected"
-	end
-	toname = tostring(toname or ""):gsub("^@", "")
-	if toname == "" then
-		return false, "who?"
-	end
-	local data, err = Chloex:BackendCall("/join/request", { to = toname })
-	if not data then
-		return false, err
-	end
-	if data.ok then
-		return true, data.to_name
-	end
-	return false, tostring(data.error or "error")
+	return false, "offline"
 end
 
 function Chloex:AnswerJoin(id, accept)
-	if not backend then
-		return false, "not connected"
-	end
-	local data, err = Chloex:BackendCall("/join/answer", {
-		id = tostring(id),
-		accept = accept and "1" or "0",
-		place = tostring(game.PlaceId),
-		job = tostring(game.JobId),
-	})
-	if not data then
-		return false, err
-	end
-	if data.ok then
-		return true
-	end
-	return false, tostring(data.error or "error")
+	return false, "offline"
 end
 
 function Chloex:Window(guiconfig)
@@ -2722,14 +2644,13 @@ function Chloex:Window(guiconfig)
 	guiconfig.Footer = guiconfig.Footer or "Pilat"
 	guiconfig.Color = guiconfig.Color or theme.Accent
 	guiconfig["Tab Width"] = guiconfig["Tab Width"] or 120
+	-- On phones the sidebar is icon-only (44 px) so the page gets that width back.
+	local compactsidebar = isMobile and guiconfig.CompactSidebar ~= false
+	local tabwidth = compactsidebar and 44 or guiconfig["Tab Width"]
 	guiconfig.Version = guiconfig.Version or 1
 	local userPassedImage = guiconfig.Image
 	local userPassedToggle = guiconfig.ToggleImage or guiconfig.ToggleIcon or guiconfig.ButtonImage
-	guiconfig.Image = guiconfig.Image or "83350053574867"
-	-- Background image disabled
-	guiconfig.Background = nil
-	guiconfig.BackgroundImage = nil
-	guiconfig.Theme = nil
+	guiconfig.Image = guiconfig.Image or PILAT_LOGO
 	guiconfig.ImageSize = tonumber(guiconfig.ImageSize) or 48
 	guiconfig.AutoConfigTab = guiconfig.AutoConfigTab ~= false
 	guiconfig.LazyConfigTab = guiconfig.LazyConfigTab ~= false
@@ -2767,11 +2688,8 @@ function Chloex:Window(guiconfig)
 	dropshadowholder.AnchorPoint = Vector2.new(0.5, 0.5)
 	dropshadowholder.Position = UDim2.new(0.5, 0, 0.5, 0)
 	dropshadowholder.ZIndex = 0
-	if isMobile then
-		dropshadowholder.Size = safesize(470, 270)
-	else
-		dropshadowholder.Size = safesize(640, 400)
-	end
+	-- size comes from makedraggable (saved size or default, clamped to the screen)
+	dropshadowholder.Size = UDim2.new(0, draggable.defx, 0, draggable.defy)
 
 	dropshadowholder.Position = UDim2.new(0.5, 0, 0.5, 0)
 
@@ -2791,11 +2709,7 @@ function Chloex:Window(guiconfig)
 
 	-- Any Image other than the default Pilat logo is the window background; the
 	-- floating button logo comes from ToggleImage / ToggleIcon / ButtonImage.
-	local bgRaw = guiconfig.Theme
-		or guiconfig.Background
-		or guiconfig.BackgroundImage
-		or (userPassedImage and tostring(userPassedImage):gsub("%s+", "") ~= guiconfig.Image and userPassedImage)
-
+	local bgRaw = nil -- [clean] background images disabled: plain black window
 	local bgAsset = nil
 	if bgRaw then
 		local s = tostring(bgRaw):gsub("^%s+", ""):gsub("%s+$", "")
@@ -2833,10 +2747,10 @@ function Chloex:Window(guiconfig)
 		main.ScaleType = Enum.ScaleType.Crop
 		main.BackgroundTransparency = 0
 		main.BackgroundColor3 = theme.Backdrop
-		local dim = math.clamp(tonumber(guiconfig.ThemeDim or guiconfig.BackgroundDim) or 0.35, 0, 1)
+		local dim = math.clamp(tonumber(guiconfig.ThemeDim or guiconfig.BackgroundDim) or 0.6, 0, 1)
 		local gray = math.floor((1 - dim) * 255 + 0.5)
 		main.ImageColor3 = Color3.fromRGB(gray, gray, gray)
-		rowalpha = math.clamp(tonumber(guiconfig.RowTransparency or guiconfig.RowAlpha) or 0.3, 0, 0.9)
+		rowalpha = math.clamp(tonumber(guiconfig.RowTransparency or guiconfig.RowAlpha) or 0.15, 0, 0.9)
 	else
 		rowalpha = 0
 		main = instance.frame(dropshadow)
@@ -2865,10 +2779,11 @@ function Chloex:Window(guiconfig)
 	top.Size = UDim2.new(1, 0, 0, 38)
 
 	local textlabel = instance.textlabel(top)
-	textlabel.Font = Enum.Font.GothamBold
+	textlabel.Font = FONT_BOLD
 	textlabel.Text = guiconfig.Title
 	textlabel.TextColor3 = theme.Text
 	textlabel.TextSize = 14
+	textlabel.TextTruncate = Enum.TextTruncate.AtEnd
 	textlabel.TextXAlignment = Enum.TextXAlignment.Left
 	textlabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	textlabel.BackgroundTransparency = 1
@@ -2879,18 +2794,94 @@ function Chloex:Window(guiconfig)
 
 	local uicorner1 = instance.uicorner(top)
 
+	-- Footer text is the subtitle: lighter weight, dimmer, placed right after the
+	-- title. Laid out from measured widths every time the bar resizes, so it never
+	-- runs under the search box (it was positioned once, from TextBounds at 0).
 	local textlabel1 = instance.textlabel(top)
-	textlabel1.Font = Enum.Font.GothamBold
+	textlabel1.Font = FONT_MEDIUM
 	textlabel1.Text = guiconfig.Footer
 	textlabel1.TextColor3 = theme.SubText
-	textlabel1.TextSize = 14
+	textlabel1.TextSize = 13
+	textlabel1.TextTruncate = Enum.TextTruncate.AtEnd
 	textlabel1.TextXAlignment = Enum.TextXAlignment.Left
 	textlabel1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	textlabel1.BackgroundTransparency = 1
 	textlabel1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	textlabel1.BorderSizePixel = 0
-	textlabel1.Size = UDim2.new(1, -(textlabel.TextBounds.X + 104), 1, 0)
-	textlabel1.Position = UDim2.new(0, textlabel.TextBounds.X + 15, 0, 0)
+	textlabel1.Size = UDim2.new(0, 0, 1, 0)
+	textlabel1.Position = UDim2.new(0, 10, 0, 0)
+
+	local headerreserve = (isMobile and 110 or 150) + 66 + 12
+	local headerchips = { rows = {} }
+	headerchips.holder = instance.frame(top)
+	headerchips.holder.Name = "HeaderChips"
+	headerchips.holder.AnchorPoint = Vector2.new(1, 0.5)
+	headerchips.holder.Position = UDim2.new(1, -(headerreserve - 4), 0.5, 0)
+	headerchips.holder.Size = UDim2.new(0, 0, 0, 22)
+	headerchips.holder.AutomaticSize = Enum.AutomaticSize.X
+	headerchips.holder.BackgroundTransparency = 1
+	headerchips.holder.BorderSizePixel = 0
+	local headerchiplayout = instance.uilistlayout(headerchips.holder)
+	headerchiplayout.FillDirection = Enum.FillDirection.Horizontal
+	headerchiplayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	headerchiplayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	headerchiplayout.SortOrder = Enum.SortOrder.LayoutOrder
+	headerchiplayout.Padding = UDim.new(0, 4)
+	local function layoutheader()
+		local reserve = headerreserve + math.floor(headerchips.holder.AbsoluteSize.X) + (headerchips.holder.AbsoluteSize.X > 0 and 6 or 0)
+		local avail = math.max(60, top.AbsoluteSize.X - 10 - reserve)
+		if top.AbsoluteSize.X <= 1 then
+			avail = draggable.defx - 10 - reserve
+		end
+		local titlew = math.min(textwidth(textlabel.Text, 14, FONT_BOLD) + 2, math.floor(avail * 0.65))
+		textlabel.Size = UDim2.new(0, titlew, 1, 0)
+		local footerx = 10 + titlew + 6
+		textlabel1.Position = UDim2.new(0, footerx, 0, 0)
+		textlabel1.Size = UDim2.new(0, math.max(0, avail - titlew - 6), 1, 0)
+	end
+	layoutheader()
+	top:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutheader)
+	textlabel:GetPropertyChangedSignal("Text"):Connect(layoutheader)
+	headerchips.holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutheader)
+	function headerchips.row(i)
+		local row = headerchips.rows[i]
+		if row then return row end
+		local chip = instance.frame(headerchips.holder)
+		chip.Name = "Chip" .. i
+		chip.LayoutOrder = i
+		chip.Size = UDim2.new(0, 0, 0, 22)
+		chip.AutomaticSize = Enum.AutomaticSize.X
+		chip.BackgroundColor3 = theme.Pill
+		chip.BorderSizePixel = 0
+		instance.uicorner(chip).CornerRadius = UDim.new(1, 0)
+		local chipstroke = instance.uistroke(chip)
+		chipstroke.Color = theme.Stroke
+		chipstroke.Transparency = 0.3
+		local pad = instance.uipadding(chip)
+		pad.PaddingLeft = UDim.new(0, 5)
+		pad.PaddingRight = UDim.new(0, 8)
+		local lay = instance.uilistlayout(chip)
+		lay.FillDirection = Enum.FillDirection.Horizontal
+		lay.VerticalAlignment = Enum.VerticalAlignment.Center
+		lay.SortOrder = Enum.SortOrder.LayoutOrder
+		lay.Padding = UDim.new(0, 4)
+		local img = instance.imagelabel(chip)
+		img.BackgroundTransparency = 1
+		img.ScaleType = Enum.ScaleType.Fit
+		img.Size = UDim2.new(0, 14, 0, 14)
+		img.LayoutOrder = 1
+		local label = instance.textlabel(chip)
+		label.BackgroundTransparency = 1
+		label.Font = FONT_MEDIUM
+		label.TextSize = 12
+		label.TextColor3 = theme.Text
+		label.Size = UDim2.new(0, 0, 1, 0)
+		label.AutomaticSize = Enum.AutomaticSize.X
+		label.LayoutOrder = 2
+		row = { frame = chip, img = img, label = label }
+		headerchips.rows[i] = row
+		return row
+	end
 
 	local close = instance.textbutton(top)
 	close.Name = "Close"
@@ -2905,16 +2896,37 @@ function Chloex:Window(guiconfig)
 	close.BorderSizePixel = 0
 	close.Position = UDim2.new(1, -8, 0.5, 0)
 	close.Size = UDim2.new(0, 25, 0, 25)
+	-- above any header sibling that might be drawn over it
+	close.ZIndex = 5
 
-	local imagelabel1 = instance.imagelabel(close)
-	imagelabel1.Image = "rbxassetid://9886659671"
-	imagelabel1.AnchorPoint = Vector2.new(0.5, 0.5)
-	imagelabel1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	imagelabel1.BackgroundTransparency = 1
-	imagelabel1.BorderColor3 = Color3.fromRGB(0, 0, 0)
-	imagelabel1.BorderSizePixel = 0
-	imagelabel1.Position = UDim2.new(0.49, 0, 0.5, 0)
-	imagelabel1.Size = UDim2.new(1, -8, 1, -8)
+	-- The X is drawn from two bars, not an icon image: it went missing in the header on
+	-- some clients even though the button still worked.
+	local closebars = {}
+	for _, angle in ipairs({ 45, -45 }) do
+		local bar = instance.frame(close)
+		bar.Name = "CloseBar"
+		bar.AnchorPoint = Vector2.new(0.5, 0.5)
+		bar.BackgroundColor3 = theme.SubText
+		bar.BackgroundTransparency = 0
+		bar.BorderSizePixel = 0
+		bar.Position = UDim2.new(0.5, 0, 0.5, 0)
+		bar.Rotation = angle
+		bar.ZIndex = 5
+		bar.Size = UDim2.new(0, 13, 0, 2)
+		instance.uicorner(bar).CornerRadius = UDim.new(1, 0)
+		closebars[#closebars + 1] = bar
+	end
+	local function paintclose(color)
+		for _, bar in ipairs(closebars) do
+			bar.BackgroundColor3 = color
+		end
+	end
+	close.MouseEnter:Connect(function()
+		paintclose(theme.Bad)
+	end)
+	close.MouseLeave:Connect(function()
+		paintclose(theme.SubText)
+	end)
 
 	local min = instance.textbutton(top)
 	min.Name = "Min"
@@ -2931,15 +2943,21 @@ function Chloex:Window(guiconfig)
 	min.Size = UDim2.new(0, 25, 0, 25)
 
 	local imagelabel2 = instance.imagelabel(min)
-	imagelabel2.Image = "rbxassetid://9886659276"
 	imagelabel2.AnchorPoint = Vector2.new(0.5, 0.5)
 	imagelabel2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	imagelabel2.BackgroundTransparency = 1
-	imagelabel2.ImageTransparency = 0.2
+	imagelabel2.ImageColor3 = theme.SubText
 	imagelabel2.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	imagelabel2.BorderSizePixel = 0
 	imagelabel2.Position = UDim2.new(0.5, 0, 0.5, 0)
-	imagelabel2.Size = UDim2.new(1, -9, 1, -9)
+	imagelabel2.Size = UDim2.new(0, 15, 0, 15)
+	applyicon(imagelabel2, "minus", 48)
+	min.MouseEnter:Connect(function()
+		imagelabel2.ImageColor3 = theme.Text
+	end)
+	min.MouseLeave:Connect(function()
+		imagelabel2.ImageColor3 = theme.SubText
+	end)
 
 	local searchbox = instance.textbox(top)
 	searchbox.Name = "SearchBox"
@@ -2949,7 +2967,7 @@ function Chloex:Window(guiconfig)
 	searchbox.BackgroundColor3 = theme.Pill
 	searchbox.BackgroundTransparency = 0
 	searchbox.BorderSizePixel = 0
-	searchbox.Font = Enum.Font.Gotham
+	searchbox.Font = FONT_MEDIUM
 	searchbox.PlaceholderText = "Search"
 	searchbox.PlaceholderColor3 = theme.Dim
 	searchbox.Text = ""
@@ -2985,7 +3003,7 @@ function Chloex:Window(guiconfig)
 	layerstab.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	layerstab.BorderSizePixel = 0
 	layerstab.Position = UDim2.new(0, 3, 0, 50)
-	layerstab.Size = UDim2.new(0, guiconfig["Tab Width"], 1, -93)
+	layerstab.Size = UDim2.new(0, tabwidth, 1, -93)
 
 	local uicorner2 = instance.uicorner(layerstab)
 	uicorner2.CornerRadius = UDim.new(0, 2)
@@ -3011,14 +3029,27 @@ function Chloex:Window(guiconfig)
 	decidesaparator.Size = UDim2.new(0, 1, 1, 17)
 	decidesaparator.Rotation = 0
 
+	-- With a photo background, a soft dark scrim sits behind the page so rows and
+	-- text keep their contrast on bright images.
+	if bgAsset then
+		local pagescrim = instance.frame(main)
+		pagescrim.Name = "PageScrim"
+		pagescrim.BackgroundColor3 = theme.Backdrop
+		pagescrim.BackgroundTransparency = 0.4
+		pagescrim.BorderSizePixel = 0
+		pagescrim.Position = UDim2.new(0, tabwidth + 9, 0, 44)
+		pagescrim.Size = UDim2.new(1, -(tabwidth + 12), 1, -84)
+		instance.uicorner(pagescrim).CornerRadius = UDim.new(0, 6)
+	end
+
 	local layers = instance.frame(main)
 	layers.Name = "Layers"
 	layers.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	layers.BackgroundTransparency = 1
 	layers.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	layers.BorderSizePixel = 0
-	layers.Position = UDim2.new(0, guiconfig["Tab Width"] + 13, 0, 40)
-	layers.Size = UDim2.new(1, -(guiconfig["Tab Width"] + 20), 1, -83)
+	layers.Position = UDim2.new(0, tabwidth + 13, 0, 40)
+	layers.Size = UDim2.new(1, -(tabwidth + 20), 1, -83)
 
 	local uicorner6 = instance.uicorner(layers)
 	uicorner6.CornerRadius = UDim.new(0, 2)
@@ -3107,7 +3138,7 @@ function Chloex:Window(guiconfig)
 	local username = instance.textlabel(userfooter)
 	username.Name = "Username"
 	username.BackgroundTransparency = 1
-	username.Font = Enum.Font.Gotham
+	username.Font = FONT_MEDIUM
 	username.TextColor3 = Color3.fromRGB(255, 255, 255)
 	username.TextSize = 12
 	username.TextXAlignment = Enum.TextXAlignment.Left
@@ -3144,25 +3175,22 @@ function Chloex:Window(guiconfig)
 		updateIdent()
 	end)
 
+	-- Footer status chips are read-only, so they carry no fill and no border: in
+	-- this window a filled shape always means "you can press this".
 	local function makepill(parent, pillconfig)
 		local pill = instance.frame(parent)
 		pill.Name = pillconfig.Name or "Pill"
 		pill.LayoutOrder = pillconfig.LayoutOrder or 1
 		pill.BackgroundColor3 = theme.Pill
-		pill.BackgroundTransparency = 0
+		pill.BackgroundTransparency = 1
 		pill.BorderSizePixel = 0
 		pill.AutomaticSize = Enum.AutomaticSize.X
 		pill.Size = UDim2.new(0, 0, 0, 22)
 		instance.uicorner(pill).CornerRadius = UDim.new(1, 0)
 
-		local stroke = instance.uistroke(pill)
-		stroke.Color = theme.Stroke
-		stroke.Thickness = 1
-		stroke.Transparency = 0.35
-
 		local pad = instance.uipadding(pill)
-		pad.PaddingLeft = UDim.new(0, pillconfig.Icon and 9 or 12)
-		pad.PaddingRight = UDim.new(0, 12)
+		pad.PaddingLeft = UDim.new(0, 4)
+		pad.PaddingRight = UDim.new(0, 4)
 
 		local layout = instance.uilistlayout(pill)
 		layout.FillDirection = Enum.FillDirection.Horizontal
@@ -3185,7 +3213,7 @@ function Chloex:Window(guiconfig)
 		label.BackgroundTransparency = 1
 		label.AutomaticSize = Enum.AutomaticSize.X
 		label.Size = UDim2.new(0, 0, 1, 0)
-		label.Font = Enum.Font.GothamMedium
+		label.Font = FONT_BOLD
 		label.Text = pillconfig.Text or ""
 		label.TextColor3 = pillconfig.Color or theme.SubText
 		label.TextSize = 11
@@ -3209,12 +3237,12 @@ function Chloex:Window(guiconfig)
 	striplayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 	if not isMobile then
-		makepill(statusstrip, { Name = "Executor", LayoutOrder = 1, Icon = "terminal", Text = "Executor : " .. executorname() })
+		makepill(statusstrip, { Name = "Executor", LayoutOrder = 1, Icon = "terminal", Text = executorname() })
 	end
 
 	local _, fpslabel = makepill(statusstrip, { Name = "Fps", LayoutOrder = 2, Icon = "activity", Text = "-- FPS" })
 
-	local _, donatorlabel, donatoricon = makepill(statusstrip, { Name = "Premium", LayoutOrder = 3, Icon = "crown", Text = "Premium" })
+	local _, donatorlabel, donatoricon = makepill(statusstrip, { Name = "Donator", LayoutOrder = 3, Icon = "crown", Text = "Free" })
 
 	local function refreshdonatorpill()
 		local info = Chloex.DonatorInfo or (getgenv and getgenv().PilatDonatorInfo)
@@ -3223,10 +3251,10 @@ function Chloex:Window(guiconfig)
 			text, color = "Trial", theme.Blue
 		elseif isdonator() then
 			local days = info and tonumber(info.days_left)
-			text = "Premium"
+			text = days and ("Donator · " .. tostring(math.floor(days)) .. "d") or "Donator"
 			color = theme.Gold
 		else
-			text, color = "Premium", theme.Gold
+			text, color = "Free", theme.SubText
 		end
 		donatorlabel.Text = text
 		donatorlabel.TextColor3 = color
@@ -3372,7 +3400,7 @@ function Chloex:Window(guiconfig)
 		title.Size = UDim2.new(1, 0, 0, 40)
 		title.Position = UDim2.new(0, 0, 0, 4)
 		title.BackgroundTransparency = 1
-		title.Font = Enum.Font.GothamBold
+		title.Font = FONT_BOLD
 		title.Text = "Pilat Window"
 		title.TextSize = 22
 		title.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -3383,7 +3411,7 @@ function Chloex:Window(guiconfig)
 		message.Size = UDim2.new(1, -20, 0, 60)
 		message.Position = UDim2.new(0, 10, 0, 30)
 		message.BackgroundTransparency = 1
-		message.Font = Enum.Font.Gotham
+		message.Font = FONT_MEDIUM
 		message.Text = "Do you want to close this window?\nYou will not be able to open it again"
 		message.TextSize = 14
 		message.TextColor3 = theme.SubText
@@ -3398,7 +3426,7 @@ function Chloex:Window(guiconfig)
 		yes.BackgroundTransparency = 0
 		yes.AutoButtonColor = true
 		yes.Text = "Yes"
-		yes.Font = Enum.Font.GothamBold
+		yes.Font = FONT_BOLD
 		yes.TextSize = 15
 		yes.TextColor3 = Color3.fromRGB(255, 255, 255)
 		yes.TextTransparency = 0.3
@@ -3414,7 +3442,7 @@ function Chloex:Window(guiconfig)
 		cancel.BackgroundTransparency = 0
 		cancel.AutoButtonColor = true
 		cancel.Text = "Cancel"
-		cancel.Font = Enum.Font.GothamBold
+		cancel.Font = FONT_BOLD
 		cancel.TextSize = 15
 		cancel.TextColor3 = Color3.fromRGB(255, 255, 255)
 		cancel.TextTransparency = 0.3
@@ -3455,7 +3483,7 @@ function Chloex:Window(guiconfig)
 		mainbutton.Size = UDim2.new(0, guiconfig.ImageSize, 0, guiconfig.ImageSize)
 		mainbutton.Position = UDim2.new(0, 20, 0, 100)
 		mainbutton.BackgroundTransparency = 1
-		local toggleIcon = userPassedToggle or userPassedImage or "83350053574867"
+		local toggleIcon = userPassedToggle or (not bgAsset and userPassedImage) or PILAT_LOGO
 		local toggleStr = tostring(toggleIcon):gsub("^%s+", ""):gsub("%s+$", "")
 		if toggleStr:match("^%d+$") then
 			toggleStr = "rbxassetid://" .. toggleStr
@@ -3464,9 +3492,9 @@ function Chloex:Window(guiconfig)
 		end
 		if toggleStr:match("^https?://") then
 			local url = toggleStr
-			mainbutton.Image = urlimage(url, true) or "rbxassetid://83350053574867"
+			mainbutton.Image = urlimage(url, true) or ""
 			task.spawn(function()
-				if not mainbutton.Image:match("^rbxassetid://83350053574867") then
+				if mainbutton.Image ~= "" then
 					return
 				end
 				local asset = urlimage(url)
@@ -3538,6 +3566,28 @@ function Chloex:Window(guiconfig)
 	guifunc:ToggleUI()
 
 	local tabs = {}
+	function tabs:SetHeaderChips(list)
+		list = type(list) == "table" and list or {}
+		for i, item in ipairs(list) do
+			local row = headerchips.row(i)
+			row.frame.Visible = true
+			local icon = tostring(item.Icon or "")
+			if row.icon ~= icon then
+				row.icon = icon
+				row.img.Visible = icon ~= ""
+				applyicon(row.img, icon, 48)
+			end
+			local tint = item.IconColor or Color3.new(1, 1, 1)
+			if row.img.ImageColor3 ~= tint then row.img.ImageColor3 = tint end
+			local text = tostring(item.Text or "")
+			if row.label.Text ~= text then row.label.Text = text end
+			local color = item.TextColor or theme.Text
+			if row.label.TextColor3 ~= color then row.label.TextColor3 = color end
+		end
+		for i = #list + 1, #headerchips.rows do
+			headerchips.rows[i].frame.Visible = false
+		end
+	end
 	local searchItems = {}
 	local counttab = 0
 	local countdropdown = 0
@@ -3552,14 +3602,15 @@ function Chloex:Window(guiconfig)
 
 		local ttitle = instance.textlabel(t)
 		ttitle.Name = "ToggleTitle"
-		ttitle.Font = Enum.Font.GothamBold
+		ttitle.Font = FONT_BOLD
 		ttitle.TextSize = 13
 		ttitle.TextColor3 = theme.Text
 		ttitle.TextXAlignment = Enum.TextXAlignment.Left
 		ttitle.TextYAlignment = Enum.TextYAlignment.Top
+		ttitle.TextTruncate = Enum.TextTruncate.AtEnd
 		ttitle.BackgroundTransparency = 1
 		ttitle.Position = UDim2.new(0, 10, 0, 15)
-		ttitle.Size = UDim2.new(1, -100, 0, 13)
+		ttitle.Size = UDim2.new(1, -72, 0, 14)
 
 		local tbutton = instance.textbutton(t)
 		tbutton.Name = "ToggleButton"
@@ -3603,14 +3654,15 @@ function Chloex:Window(guiconfig)
 
 		local stitle = instance.textlabel(s)
 		stitle.Name = "SliderTitle"
-		stitle.Font = Enum.Font.GothamBold
+		stitle.Font = FONT_BOLD
 		stitle.TextColor3 = theme.Text
 		stitle.TextSize = 13
 		stitle.TextXAlignment = Enum.TextXAlignment.Left
 		stitle.TextYAlignment = Enum.TextYAlignment.Center
+		stitle.TextTruncate = Enum.TextTruncate.AtEnd
 		stitle.BackgroundTransparency = 1
 		stitle.Position = UDim2.new(0, 10, 0, 7)
-		stitle.Size = UDim2.new(1, -58, 0, 20)
+		stitle.Size = UDim2.new(1, -62, 0, 20)
 
 		local sholder = instance.frame(s)
 		sholder.Name = "SliderInputHolder"
@@ -3621,7 +3673,7 @@ function Chloex:Window(guiconfig)
 
 		local sinput = instance.textbox(sholder)
 		sinput.Name = "SliderInput"
-		sinput.Font = Enum.Font.GothamBold
+		sinput.Font = FONT_BOLD
 		sinput.Text = ""
 		sinput.TextColor3 = Color3.fromRGB(255, 255, 255)
 		sinput.TextSize = 12
@@ -3634,7 +3686,7 @@ function Chloex:Window(guiconfig)
 		sinput.Position = UDim2.new(0, 3, 0, 0)
 
 		local sinputconstraint = instance.uitextsizeconstraint(sinput)
-		sinputconstraint.MinTextSize = 7
+		sinputconstraint.MinTextSize = 10
 		sinputconstraint.MaxTextSize = 12
 
 		local sbar = instance.frame(s)
@@ -3684,7 +3736,7 @@ function Chloex:Window(guiconfig)
 		sbubbletext.BackgroundTransparency = 1
 		sbubbletext.Size = UDim2.new(1, -6, 1, 0)
 		sbubbletext.Position = UDim2.new(0, 3, 0, 0)
-		sbubbletext.Font = Enum.Font.GothamBold
+		sbubbletext.Font = FONT_BOLD
 		sbubbletext.TextColor3 = Color3.fromRGB(255, 255, 255)
 		sbubbletext.TextSize = 11
 		sbubbletext.TextScaled = true
@@ -3693,7 +3745,7 @@ function Chloex:Window(guiconfig)
 		sbubbletext.ZIndex = 21
 
 		local sbubbleconstraint = instance.uitextsizeconstraint(sbubbletext)
-		sbubbleconstraint.MinTextSize = 7
+		sbubbleconstraint.MinTextSize = 9
 		sbubbleconstraint.MaxTextSize = 11
 
 		templates.Slider = s
@@ -3713,8 +3765,8 @@ function Chloex:Window(guiconfig)
 
 		local otext = instance.textlabel(o)
 		otext.Name = "OptionText"
-		otext.Font = Enum.Font.GothamBold
-		otext.TextSize = 13
+		otext.Font = FONT_BOLD
+		otext.TextSize = 12
 		otext.TextColor3 = theme.Text
 		otext.BackgroundTransparency = 1
 		otext.TextXAlignment = Enum.TextXAlignment.Left
@@ -3736,7 +3788,6 @@ function Chloex:Window(guiconfig)
 		templates.DropdownOption = o
 	end
 
-	dropshadowholder.Size = UDim2.new(0, 115 + textlabel.TextBounds.X + 1 + textlabel1.TextBounds.X, 0, 350)
 	makedraggable(top, dropshadowholder)
 
 	local moreblur = instance.frame(layers)
@@ -3794,8 +3845,8 @@ function Chloex:Window(guiconfig)
 	dropdownselect.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	dropdownselect.BorderSizePixel = 0
 	dropdownselect.LayoutOrder = 1
-	dropdownselect.Position = UDim2.new(1, 172, 0.5, 0)
-	dropdownselect.Size = UDim2.new(0, 160, 1, -16)
+	dropdownselect.Position = UDim2.new(1, 212, 0.5, 0)
+	dropdownselect.Size = UDim2.new(0, 200, 1, -16)
 	dropdownselect.ClipsDescendants = true
 
 	local uicorner36 = instance.uicorner(dropdownselect)
@@ -3849,7 +3900,7 @@ function Chloex:Window(guiconfig)
 		popuptoken = popuptoken + 1
 		local token = popuptoken
 		sv.ts:Create(moreblur, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
-		sv.ts:Create(dropdownselect, TweenInfo.new(0.3), { Position = UDim2.new(1, 172, 0.5, 0) }):Play()
+		sv.ts:Create(dropdownselect, TweenInfo.new(0.3), { Position = UDim2.new(1, 212, 0.5, 0) }):Play()
 		task.delay(0.3, function()
 			if popuptoken == token then
 				moreblur.Visible = false
@@ -3934,7 +3985,7 @@ function Chloex:Window(guiconfig)
 		return elementconfig.Locked2 == true or elementconfig.DonatorOnly == true
 	end
 
-	local CONTENT_FONT = Enum.Font.Gotham
+	local CONTENT_FONT = FONT_MEDIUM
 	local CONTENT_SIZE = 12
 
 	-- Description text of an element: Content, Desc or Description; nil when empty.
@@ -3952,7 +4003,9 @@ function Chloex:Window(guiconfig)
 
 	-- Grey description line under an element title. measure() wraps the text to
 	-- the row's current width and returns its height; the element turns that
-	-- into its row height (see watchwidth for window resizes).
+	-- into its row height (see watchwidth for window resizes). rightinset may be
+	-- a function when the control beside the text has a width of its own.
+	-- Rich-text tags are stripped before measuring: they take no room on screen.
 	local function attachcontent(row, text, x, y, rightinset)
 		local label = instance.textlabel(row)
 		label.Name = "Content"
@@ -3966,7 +4019,15 @@ function Chloex:Window(guiconfig)
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.TextYAlignment = Enum.TextYAlignment.Top
 		label.Position = UDim2.new(0, x, 0, y)
-		label.Size = UDim2.new(1, -(x + rightinset), 0, CONTENT_SIZE)
+		local function inset()
+			if type(rightinset) == "function" then
+				local ok, value = pcall(rightinset)
+				return ok and tonumber(value) or 10
+			end
+			return rightinset
+		end
+		label.Size = UDim2.new(1, -(x + inset()), 0, CONTENT_SIZE)
+		local plain = tostring(text):gsub("<[^>]+>", "")
 		local function measure()
 			local width = row.AbsoluteSize.X
 			if width <= 1 then
@@ -3975,8 +4036,9 @@ function Chloex:Window(guiconfig)
 			if width <= 1 then
 				width = 440
 			end
-			local height = textheight(text, CONTENT_SIZE, CONTENT_FONT, width - x - rightinset, 400)
-			label.Size = UDim2.new(1, -(x + rightinset), 0, height)
+			local right = inset()
+			local height = textheight(plain, CONTENT_SIZE, CONTENT_FONT, width - x - right, 400)
+			label.Size = UDim2.new(1, -(x + right), 0, height)
 			return height
 		end
 		return label, measure
@@ -4051,10 +4113,10 @@ function Chloex:Window(guiconfig)
 			local notice = instance.textlabel(container)
 			notice.Name = "LockNotice"
 			notice.BackgroundTransparency = 1
-			notice.Font = Enum.Font.GothamBold
+			notice.Font = FONT_BOLD
 			notice.RichText = true
 			local tierlabel = donatoronly and "Donator only" or "Donator / Trial"
-			notice.Text = '<font color="' .. hexcolor(theme.Text) .. '">' .. tierlabel .. '</font>  ·  get your key at Pilathub.xyz/key'
+			notice.Text = '<font color="' .. hexcolor(theme.Text) .. '">' .. tierlabel .. '</font>'
 			notice.TextColor3 = theme.SubText
 			notice.TextSize = 11
 			notice.TextXAlignment = Enum.TextXAlignment.Left
@@ -4103,7 +4165,7 @@ function Chloex:Window(guiconfig)
 			pilltext.BackgroundTransparency = 1
 			pilltext.AutomaticSize = Enum.AutomaticSize.X
 			pilltext.Size = UDim2.new(0, 0, 1, 0)
-			pilltext.Font = Enum.Font.GothamBold
+			pilltext.Font = FONT_BOLD
 			pilltext.Text = "LOCKED"
 			pilltext.TextColor3 = theme.Text
 			pilltext.TextSize = 10
@@ -4238,6 +4300,81 @@ function Chloex:Window(guiconfig)
 
 	local hasActiveTab = false
 
+	-- KeyGate: until a trial or donator key is active, every tab except the ones made
+	-- with Gate = false (the Donate tab, where the key is redeemed) is hidden, and its
+	-- elements are locked like Donator elements, so saved settings are held back
+	-- instead of running. A key redeemed mid-session opens everything at once.
+	local keygate = guiconfig.KeyGate == true
+	-- KeyGateDonatorOnly: only a real donator key opens the gate; a trial key does not
+	-- (the gated elements become Locked2 / DonatorOnly).
+	local keygatedonator = keygate and guiconfig.KeyGateDonatorOnly == true
+	local tabentries = {}
+	local gatewasopen = nil
+	local gatenotified = false
+	local trialnotified = false
+	local function applykeygate()
+		if not keygate then
+			return
+		end
+		local open
+		if keygatedonator then
+			open = Chloex._isDonator == true
+		else
+			open = isdonator()
+		end
+		local current = layerspagelayout.CurrentPage
+		local currententry, first, firstvisible
+		for _, entry in ipairs(tabentries) do
+			entry.tab.Visible = open or not entry.gated
+			if entry.page == current then
+				currententry = entry
+			end
+			if entry.first then
+				first = entry
+			end
+			if entry.tab.Visible and (not firstvisible or entry.order < firstvisible.order) then
+				firstvisible = entry
+			end
+		end
+		if open and gatewasopen == false and first then
+			-- just unlocked: land on the hub's start tab
+			first.select()
+		elseif currententry and not currententry.tab.Visible and firstvisible then
+			firstvisible.select()
+		end
+		if not open and firstvisible then
+			local where = tostring(firstvisible.name)
+			if keygatedonator and istrial() and not trialnotified then
+				trialnotified = true
+				gatenotified = true
+				Chloex:Notify({
+					Title = "Pilat",
+					Description = "Donator key required",
+					Content = "Trial keys do not unlock this hub. Redeem a donator key in " .. where .. ".",
+					Duration = 8,
+				})
+			elseif not gatenotified then
+				gatenotified = true
+				Chloex:Notify({
+					Title = "Pilat",
+					Description = keygatedonator and "Donator key required" or "Key required",
+					Content = "Redeem a " .. (keygatedonator and "donator" or "trial or donator") .. " key in " .. where .. " to unlock every tab.",
+					Duration = 8,
+				})
+			end
+		end
+		gatewasopen = open
+	end
+	if keygate then
+		table.insert(Chloex.DonatorListeners, applykeygate)
+		-- a key saved from an earlier session is checked again in the background
+		if not isdonator() and Chloex:GetSavedKey() then
+			task.spawn(function()
+				pcall(Chloex.CheckDonatorKey, Chloex)
+			end)
+		end
+	end
+
 	function tabs:AddTab(tabconfig)
 		tabconfig = tabconfig or {}
 		tabconfig.Name = tabconfig.Name or "Tab"
@@ -4248,11 +4385,17 @@ function Chloex:Window(guiconfig)
 		if isFirstTab then
 			hasActiveTab = true
 		end
+		local tabgated = keygate and tabconfig.Gate ~= false
 
+		-- Thin visible scrollbar: a hidden one let content (the chat input) sit below
+		-- the fold with nothing telling the player there was more.
 		local scrollayers = instance.scrollingframe(layersfolder)
 		scrollayers.Name = "ScrolLayers"
-		scrollayers.ScrollBarImageColor3 = theme.Track
-		scrollayers.ScrollBarThickness = 0
+		scrollayers.ScrollBarImageColor3 = theme.Bar
+		scrollayers.ScrollBarImageTransparency = 0.35
+		scrollayers.ScrollBarThickness = 3
+		scrollayers.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+		scrollayers.ScrollingDirection = Enum.ScrollingDirection.Y
 		scrollayers.Active = true
 		scrollayers.LayoutOrder = layoutOrder
 		scrollayers.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -4281,7 +4424,7 @@ function Chloex:Window(guiconfig)
 
 		local tabbutton = instance.textbutton(tab)
 		tabbutton.Name = "TabButton"
-		tabbutton.Font = Enum.Font.GothamBold
+		tabbutton.Font = FONT_BOLD
 		tabbutton.Text = ""
 		tabbutton.TextColor3 = Color3.fromRGB(255, 255, 255)
 		tabbutton.TextSize = 13
@@ -4309,10 +4452,11 @@ function Chloex:Window(guiconfig)
 
 		local tabname = instance.textlabel(tab)
 		tabname.Name = "TabName"
-		tabname.Font = Enum.Font.GothamBold
+		tabname.Font = FONT_BOLD
 		tabname.Text = tostring(tabconfig.Name)
 		tabname.TextColor3 = Color3.fromRGB(255, 255, 255)
 		tabname.TextSize = 13
+		tabname.TextTruncate = Enum.TextTruncate.AtEnd
 		tabname.TextXAlignment = Enum.TextXAlignment.Left
 		tabname.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		tabname.BackgroundTransparency = 1
@@ -4325,7 +4469,7 @@ function Chloex:Window(guiconfig)
 			tabicon = instance.imagelabel(tab)
 			tabicon.Name = "TabIcon"
 			tabicon.AnchorPoint = Vector2.new(0, 0.5)
-			tabicon.Position = UDim2.new(0, 8, 0.5, 0)
+			tabicon.Position = UDim2.new(0, 10, 0.5, 0)
 			tabicon.Size = UDim2.new(0, 14, 0, 14)
 			tabicon.BackgroundTransparency = 1
 			tabicon.ImageColor3 = isFirstTab and theme.Text or theme.SubText
@@ -4333,27 +4477,81 @@ function Chloex:Window(guiconfig)
 		end
 
 		tabname.TextColor3 = isFirstTab and theme.Text or theme.SubText
-		tabname.Size = UDim2.new(1, -(hasicon and 28 or 10), 1, 0)
-		tabname.Position = UDim2.new(0, hasicon and 26 or 8, 0, 0)
+		tabname.Size = UDim2.new(1, -(hasicon and 36 or 16), 1, 0)
+		tabname.Position = UDim2.new(0, hasicon and 30 or 10, 0, 0)
 
+		-- Icon-only sidebar: centre the icon; a tab without an icon shows its
+		-- first letters instead.
+		if compactsidebar then
+			if tabicon then
+				tabicon.AnchorPoint = Vector2.new(0.5, 0.5)
+				tabicon.Position = UDim2.new(0.5, 1, 0.5, 0)
+				tabicon.Size = UDim2.new(0, 16, 0, 16)
+				tabname.Visible = false
+			else
+				tabname.Text = string.upper(string.sub(tostring(tabconfig.Name), 1, 2))
+				tabname.TextXAlignment = Enum.TextXAlignment.Center
+				tabname.Position = UDim2.new(0, 0, 0, 0)
+				tabname.Size = UDim2.new(1, 0, 1, 0)
+			end
+		end
+
+		-- Unread / count badge, set by the hub or a component (tab:SetBadge).
+		local badge = instance.frame(tab)
+		badge.Name = "TabBadge"
+		badge.AnchorPoint = compactsidebar and Vector2.new(1, 0) or Vector2.new(1, 0.5)
+		badge.Position = compactsidebar and UDim2.new(1, -2, 0, 2) or UDim2.new(1, -6, 0.5, 0)
+		badge.Size = UDim2.new(0, 0, 0, compactsidebar and 12 or 16)
+		badge.AutomaticSize = Enum.AutomaticSize.X
+		badge.BackgroundColor3 = theme.Bad
+		badge.BorderSizePixel = 0
+		badge.Visible = false
+		badge.ZIndex = 3
+		instance.uicorner(badge).CornerRadius = UDim.new(1, 0)
+		local badgepad = instance.uipadding(badge)
+		badgepad.PaddingLeft = UDim.new(0, compactsidebar and 3 or 5)
+		badgepad.PaddingRight = UDim.new(0, compactsidebar and 3 or 5)
+		local badgetext = instance.textlabel(badge)
+		badgetext.AutomaticSize = Enum.AutomaticSize.X
+		badgetext.BackgroundTransparency = 1
+		badgetext.Font = FONT_BOLD
+		badgetext.Size = UDim2.new(0, 0, 1, 0)
+		badgetext.Text = ""
+		badgetext.TextColor3 = Color3.fromRGB(255, 255, 255)
+		badgetext.TextSize = compactsidebar and 9 or 10
+		badgetext.ZIndex = 3
+
+		local function isactive()
+			return layerspagelayout.CurrentPage == scrollayers
+		end
+
+		-- Hover: a faint fill on inactive tabs only.
+		tabbutton.MouseEnter:Connect(function()
+			if not isactive() then
+				tabbg.ImageTransparency = 0.6
+			end
+		end)
+		tabbutton.MouseLeave:Connect(function()
+			if not isactive() then
+				tabbg.ImageTransparency = 1
+			end
+		end)
+
+		-- Active marker: a 3 px accent bar that moves between tabs.
 		if isFirstTab then
 			layerspagelayout:JumpTo(scrollayers)
 			local chooseframe = instance.frame(tab)
 			chooseframe.Name = "ChooseFrame"
-			chooseframe.BackgroundColor3 = theme.Text
+			chooseframe.BackgroundColor3 = guiconfig.Color
 			chooseframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			chooseframe.BorderSizePixel = 0
-			chooseframe.Position = UDim2.new(0, 2, 0, 8)
-			chooseframe.Size = UDim2.new(0, 1, 0, 12)
+			chooseframe.Position = UDim2.new(0, 1, 0, 7)
+			chooseframe.Size = UDim2.new(0, 3, 0, 14)
 
-			local uistroke2 = instance.uistroke(chooseframe)
-			uistroke2.Color = theme.Text
-			uistroke2.Thickness = 1.6
-
-			instance.uicorner(chooseframe)
+			instance.uicorner(chooseframe).CornerRadius = UDim.new(1, 0)
 		end
 
-		tabbutton.Activated:Connect(function()
+		local function selecttab()
 			if layerspagelayout.CurrentPage == scrollayers then
 				runOnOpen()
 				return
@@ -4392,8 +4590,8 @@ function Chloex:Window(guiconfig)
 			end
 
 			framechoose.Parent = tab
-			framechoose.Position = UDim2.new(0, 2, 0, 8)
-			framechoose.Size = UDim2.new(0, 1, 0, 12)
+			framechoose.Position = UDim2.new(0, 1, 0, 7)
+			framechoose.Size = UDim2.new(0, 3, 0, 14)
 
 			layerspagelayout:JumpTo(scrollayers)
 			runOnOpen()
@@ -4401,10 +4599,23 @@ function Chloex:Window(guiconfig)
 			if searchbox.Text ~= "" then
 				runsearch()
 			end
-		end)
+		end
+		tabbutton.Activated:Connect(selecttab)
 
 		local sections = {}
 		local countsection = 0
+
+		-- tab:SetBadge(n | text | nil): small red count on the sidebar row;
+		-- nil, 0, false or "" hides it.
+		function sections:SetBadge(value)
+			elevate()
+			local show = value ~= nil and value ~= false and value ~= 0 and value ~= ""
+			if show then
+				local n = tonumber(value)
+				badgetext.Text = n and (n > 99 and "99+" or tostring(math.floor(n))) or tostring(value)
+			end
+			badge.Visible = show and true or false
+		end
 
 		function sections:OnOpen(callback)
 			onOpenCallback = callback
@@ -4414,8 +4625,25 @@ function Chloex:Window(guiconfig)
 			return self
 		end
 
+		-- AddSection(title, alwaysOpen) or AddSection({ Title, AlwaysOpen, Header }).
+		--   AlwaysOpen  pinned open, the header no longer collapses it
+		--   Header=false  no header row at all (a component that fills its tab,
+		--                 e.g. Live Chat or Forum, and carries its own title)
 		function sections:AddSection(sectiontitletext, alwaysopen)
-			sectiontitletext = sectiontitletext or "Title"
+			local noheader = false
+			local sectionicon = nil
+			if type(sectiontitletext) == "table" then
+				local sectioncfg = sectiontitletext
+				sectionicon = sectioncfg.Icon
+				sectiontitletext = sectioncfg.Title
+				alwaysopen = sectioncfg.AlwaysOpen == true or sectioncfg.Open == true or alwaysopen
+				noheader = sectioncfg.Header == false
+			end
+			sectiontitletext = tostring(sectiontitletext or (noheader and "" or "Title"))
+			if noheader then
+				alwaysopen = true
+			end
+			local headerheight = noheader and 0 or 30
 
 			local section = instance.frame(scrollayers)
 			section.Name = "Section"
@@ -4424,7 +4652,7 @@ function Chloex:Window(guiconfig)
 			section.BorderSizePixel = 0
 			section.LayoutOrder = countsection
 			section.ClipsDescendants = true
-			section.Size = UDim2.new(1, 0, 0, 30)
+			section.Size = UDim2.new(1, 0, 0, headerheight)
 
 			local sectionreal = instance.frame(section)
 			sectionreal.AnchorPoint = Vector2.new(0.5, 0)
@@ -4433,6 +4661,7 @@ function Chloex:Window(guiconfig)
 			sectionreal.BorderSizePixel = 0
 			sectionreal.Position = UDim2.new(0.5, 0, 0, 0)
 			sectionreal.Size = UDim2.new(1, 1, 0, 30)
+			sectionreal.Visible = not noheader
 
 			local uicorner = instance.uicorner(sectionreal)
 			uicorner.CornerRadius = UDim.new(0, 4)
@@ -4446,34 +4675,50 @@ function Chloex:Window(guiconfig)
 			local featureframe = instance.frame(sectionreal)
 			featureframe.AnchorPoint = Vector2.new(1, 0.5)
 			featureframe.BackgroundTransparency = 1
-			featureframe.Position = UDim2.new(1, -5, 0.5, 0)
-			featureframe.Size = UDim2.new(0, 20, 0, 20)
+			featureframe.Position = UDim2.new(1, -8, 0.5, 0)
+			featureframe.Size = UDim2.new(0, 16, 0, 16)
+			featureframe.Visible = not alwaysopen
 
+			-- Lucide chevron-right; the frame turns it to point down when open.
 			local featureimg = instance.imagelabel(featureframe)
-			featureimg.Image = "rbxassetid://16851841101"
 			featureimg.AnchorPoint = Vector2.new(0.5, 0.5)
 			featureimg.BackgroundTransparency = 1
+			featureimg.ImageColor3 = theme.SubText
 			featureimg.Position = UDim2.new(0.5, 0, 0.5, 0)
-			featureimg.Rotation = -90
-			featureimg.Size = UDim2.new(1, 6, 1, 6)
+			featureimg.Size = UDim2.new(0, 14, 0, 14)
+			applyicon(featureimg, "chevron-right", 48)
 
 			local sectiontitle = instance.textlabel(sectionreal)
-			sectiontitle.Font = Enum.Font.GothamBold
+			sectiontitle.Font = FONT_BOLD
 			sectiontitle.Text = sectiontitletext
 			sectiontitle.TextColor3 = theme.Text
 			sectiontitle.TextSize = 13
+			sectiontitle.TextTruncate = Enum.TextTruncate.AtEnd
 			sectiontitle.TextXAlignment = Enum.TextXAlignment.Left
 			sectiontitle.AnchorPoint = Vector2.new(0, 0.5)
 			sectiontitle.BackgroundTransparency = 1
 			sectiontitle.Position = UDim2.new(0, 10, 0.5, 0)
-			sectiontitle.Size = UDim2.new(1, -50, 0, 13)
+			sectiontitle.Size = UDim2.new(1, -40, 0, 14)
+
+			if sectionicon and tostring(sectionicon) ~= "" then
+				local sectioniconimg = instance.imagelabel(sectionreal)
+				sectioniconimg.Name = "SectionIcon"
+				sectioniconimg.AnchorPoint = Vector2.new(0, 0.5)
+				sectioniconimg.BackgroundTransparency = 1
+				sectioniconimg.ScaleType = Enum.ScaleType.Fit
+				sectioniconimg.Position = UDim2.new(0, 8, 0.5, 0)
+				sectioniconimg.Size = UDim2.new(0, 20, 0, 20)
+				applyicon(sectioniconimg, sectionicon, 48)
+				sectiontitle.Position = UDim2.new(0, 34, 0.5, 0)
+				sectiontitle.Size = UDim2.new(1, -64, 0, 14)
+			end
 
 			local sectionadd = instance.frame(section)
 			sectionadd.AnchorPoint = Vector2.new(0.5, 0)
 			sectionadd.BackgroundTransparency = 1
 			sectionadd.BorderSizePixel = 0
 			sectionadd.ClipsDescendants = true
-			sectionadd.Position = UDim2.new(0.5, 0, 0, 30)
+			sectionadd.Position = UDim2.new(0.5, 0, 0, headerheight)
 			sectionadd.Size = UDim2.new(1, 0, 0, 0)
 
 			local uicorner8 = instance.uicorner(sectionadd)
@@ -4495,7 +4740,7 @@ function Chloex:Window(guiconfig)
 				end
 
 				local contentHeight = math.max(0, uilistlayout2.AbsoluteContentSize.Y)
-				local sectionsizey = 30 + contentHeight
+				local sectionsizey = headerheight + contentHeight
 				sectiontitle.TextColor3 = color_open
 
 				if animate and featureframe.Parent then
@@ -4526,23 +4771,26 @@ function Chloex:Window(guiconfig)
 			end
 
 			local function closesection(animate)
-				if not opensection then
+				if not opensection or alwaysopen then
 					return
 				end
 				opensection = false
 				sectiontitle.TextColor3 = color_normal
 				if animate then
 					sv.ts:Create(featureframe, TweenInfo.new(0.3), { Rotation = 0 }):Play()
-					sv.ts:Create(section, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, 30) }):Play()
+					sv.ts:Create(section, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, headerheight) }):Play()
 					sv.ts:Create(sectionadd, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, 0) }):Play()
 				else
 					featureframe.Rotation = 0
-					section.Size = UDim2.new(1, 0, 0, 30)
+					section.Size = UDim2.new(1, 0, 0, headerheight)
 					sectionadd.Size = UDim2.new(1, 0, 0, 0)
 				end
 			end
 
 			sectionbutton.Activated:Connect(function()
+				if alwaysopen then
+					return
+				end
 				if opensection then
 					closesection(true)
 				else
@@ -4633,54 +4881,64 @@ function Chloex:Window(guiconfig)
 
 				local paragraphtitle = instance.textlabel(paragraph)
 				paragraphtitle.Name = "ParagraphTitle"
-				paragraphtitle.Font = Enum.Font.GothamBold
+				paragraphtitle.Font = FONT_BOLD
 				paragraphtitle.Text = paragraphconfig.Title
 				paragraphtitle.TextColor3 = theme.Text
 				paragraphtitle.TextSize = 13
 				paragraphtitle.TextXAlignment = Enum.TextXAlignment.Left
 				paragraphtitle.TextYAlignment = Enum.TextYAlignment.Top
+				paragraphtitle.TextTruncate = Enum.TextTruncate.AtEnd
 				paragraphtitle.BackgroundTransparency = 1
 				paragraphtitle.Position = UDim2.new(0, iconoffset, 0, 10)
-				paragraphtitle.Size = UDim2.new(1, -16, 0, 13)
+				paragraphtitle.Size = UDim2.new(1, -(iconoffset + 10), 0, 14)
 
+				-- Body is regular weight: the title carries the emphasis.
 				local paragraphcontent = instance.textlabel(paragraph)
 				paragraphcontent.Name = "ParagraphContent"
-				paragraphcontent.Font = Enum.Font.GothamBold
+				paragraphcontent.Font = FONT_MEDIUM
 				paragraphcontent.Text = paragraphconfig.Content
-				paragraphcontent.TextColor3 = Color3.fromRGB(255, 255, 255)
+				paragraphcontent.TextColor3 = theme.Text
+				paragraphcontent.TextTransparency = 0.12
 				paragraphcontent.TextSize = 12
 				paragraphcontent.TextXAlignment = Enum.TextXAlignment.Left
 				paragraphcontent.TextYAlignment = Enum.TextYAlignment.Top
 				paragraphcontent.BackgroundTransparency = 1
-				paragraphcontent.Position = UDim2.new(0, iconoffset, 0, 25)
+				paragraphcontent.Position = UDim2.new(0, iconoffset, 0, 27)
 				paragraphcontent.TextWrapped = true
 				paragraphcontent.RichText = true
-				paragraphcontent.Size = UDim2.new(1, -16, 0, 0)
+				paragraphcontent.Size = UDim2.new(1, -(iconoffset + 10), 0, 0)
 
 				local paragraphbutton
 				if paragraphconfig.ButtonText then
 					paragraphbutton = instance.textbutton(paragraph)
 					paragraphbutton.Position = UDim2.new(0, 10, 0, 42)
-					paragraphbutton.Size = UDim2.new(1, -22, 0, 28)
-					paragraphbutton.Font = Enum.Font.GothamBold
+					paragraphbutton.Size = UDim2.new(1, -20, 0, 28)
+					paragraphbutton.Font = FONT_BOLD
 					paragraphbutton.TextSize = 12
-					paragraphbutton.TextTransparency = 0.3
-					paragraphbutton.TextColor3 = Color3.fromRGB(255, 255, 255)
+					paragraphbutton.TextColor3 = theme.Text
+					paragraphbutton.TextTruncate = Enum.TextTruncate.AtEnd
 					paragraphbutton.Text = paragraphconfig.ButtonText
 
 					hoverbg(paragraphbutton, roundbg(paragraphbutton, 6, theme.Inner), theme.Inner, theme.InnerHover)
 
 					if paragraphconfig.ButtonCallback then
-						paragraphbutton.MouseButton1Click:Connect(paragraphconfig.ButtonCallback)
+						paragraphbutton.MouseButton1Click:Connect(function()
+							pcall(pesseffect, paragraphbutton)
+							paragraphconfig.ButtonCallback()
+						end)
 					end
 				end
 
+				-- The button follows the body, so a multi-line body never sits under it.
 				local function updatesize()
-					local totalheight = paragraphcontent.TextBounds.Y + 33
+					local bodyheight = paragraphcontent.TextBounds.Y
+					paragraphcontent.Size = UDim2.new(1, -(iconoffset + 10), 0, bodyheight)
+					local totalheight = 27 + bodyheight + 10
 					if paragraphbutton then
-						totalheight = totalheight + paragraphbutton.Size.Y.Offset + 5
+						paragraphbutton.Position = UDim2.new(0, 10, 0, 27 + bodyheight + 8)
+						totalheight = totalheight + paragraphbutton.Size.Y.Offset + 6
 					end
-					paragraph.Size = UDim2.new(1, 0, 0, totalheight)
+					paragraph.Size = UDim2.new(1, 0, 0, math.max(46, totalheight))
 				end
 
 				task.defer(updatesize)
@@ -4789,6 +5047,186 @@ function Chloex:Window(guiconfig)
 			-- A locked element never applies a saved value and never fires its
 			-- callback with one.
 
+			function items:AddIconGrid(gridconfig)
+				gridconfig = gridconfig or {}
+				local gridfunc = {}
+				local columns = math.max(1, tonumber(gridconfig.Columns) or 4)
+				local cardheight = tonumber(gridconfig.CardHeight) or 104
+				local gap = 6
+
+				local holder = instance.frame(sectionadd)
+				holder.Name = "IconGrid"
+				holder.BorderSizePixel = 0
+				holder.LayoutOrder = countitem
+				holder.Size = UDim2.new(1, 0, 0, 40 + cardheight)
+				roundbg(holder, 4, theme.Row)
+
+				local title = instance.textlabel(holder)
+				title.Name = "GridTitle"
+				title.Font = FONT_BOLD
+				title.Text = tostring(gridconfig.Title or "Collection")
+				title.TextColor3 = theme.Text
+				title.TextSize = 13
+				title.TextXAlignment = Enum.TextXAlignment.Left
+				title.TextTruncate = Enum.TextTruncate.AtEnd
+				title.BackgroundTransparency = 1
+				title.Position = UDim2.new(0, 10, 0, 8)
+				title.Size = UDim2.new(0.6, -10, 0, 16)
+
+				local note = instance.textlabel(holder)
+				note.Name = "GridNote"
+				note.Font = FONT_MEDIUM
+				note.Text = tostring(gridconfig.Note or "")
+				note.TextColor3 = theme.SubText
+				note.TextSize = 12
+				note.TextXAlignment = Enum.TextXAlignment.Right
+				note.TextTruncate = Enum.TextTruncate.AtEnd
+				note.BackgroundTransparency = 1
+				note.Position = UDim2.new(0.4, 0, 0, 8)
+				note.Size = UDim2.new(0.6, -10, 0, 16)
+
+				local body = instance.frame(holder)
+				body.Name = "GridBody"
+				body.BackgroundTransparency = 1
+				body.BorderSizePixel = 0
+				body.Position = UDim2.new(0, 8, 0, 32)
+				body.Size = UDim2.new(1, -16, 0, cardheight)
+
+				local layout = instance.uigridlayout(body)
+				layout.SortOrder = Enum.SortOrder.LayoutOrder
+				layout.CellPadding = UDim2.new(0, gap, 0, gap)
+				layout.CellSize = UDim2.new(0, 80, 0, cardheight)
+
+				local cards, data, dirty = {}, {}, false
+
+				local function newcard(i)
+					local card = instance.frame(body)
+					card.Name = "Card" .. i
+					card.BorderSizePixel = 0
+					card.LayoutOrder = i
+					card.ClipsDescendants = true
+					local bg = roundbg(card, 6, theme.Inner)
+					local stroke = instance.uistroke(card)
+					stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					stroke.Thickness = 1
+					stroke.Transparency = 0.55
+					stroke.Color = theme.Stroke
+					instance.uicorner(card).CornerRadius = UDim.new(0, 6)
+
+					local glow = instance.frame(card)
+					glow.Name = "Glow"
+					glow.BorderSizePixel = 0
+					glow.BackgroundTransparency = 0.82
+					glow.Size = UDim2.new(1, 0, 0, 3)
+					glow.ZIndex = 2
+
+					local icon = instance.imagelabel(card)
+					icon.Name = "Icon"
+					icon.BackgroundTransparency = 1
+					icon.ScaleType = Enum.ScaleType.Fit
+					icon.AnchorPoint = Vector2.new(0.5, 0)
+					icon.Position = UDim2.new(0.5, 0, 0, 8)
+					icon.Size = UDim2.new(0, 40, 0, 40)
+					icon.ZIndex = 2
+
+					local function line(name, font, size, y, color)
+						local l = instance.textlabel(card)
+						l.Name = name
+						l.Font = font
+						l.TextSize = size
+						l.TextColor3 = color
+						l.BackgroundTransparency = 1
+						l.TextXAlignment = Enum.TextXAlignment.Center
+						l.TextTruncate = Enum.TextTruncate.AtEnd
+						l.Position = UDim2.new(0, 4, 0, y)
+						l.Size = UDim2.new(1, -8, 0, size + 2)
+						l.ZIndex = 2
+						return l
+					end
+
+					local c = {
+						frame = card,
+						bg = bg,
+						stroke = stroke,
+						glow = glow,
+						icon = icon,
+						name = line("Name", FONT_MEDIUM, 12, 50, theme.SubText),
+						value = line("Value", FONT_BOLD, 16, 64, theme.Text),
+						sub = line("Sub", FONT_MEDIUM, 11, 84, theme.Dim),
+					}
+					cards[i] = c
+					return c
+				end
+
+				local function relayout()
+					local width = body.AbsoluteSize.X
+					if width <= 1 then return end
+					local cols = columns
+					while cols > 1 and (width - gap * (cols - 1)) / cols < 70 do
+						cols = cols - 1
+					end
+					local cell = math.floor((width - gap * (cols - 1)) / cols)
+					layout.CellSize = UDim2.new(0, cell, 0, cardheight)
+					local rows = math.max(1, math.ceil(#data / cols))
+					local h = rows * cardheight + (rows - 1) * gap
+					body.Size = UDim2.new(1, -16, 0, h)
+					holder.Size = UDim2.new(1, 0, 0, 40 + h)
+				end
+
+				local function paint()
+					dirty = false
+					for i, item in ipairs(data) do
+						local c = cards[i] or newcard(i)
+						c.frame.Visible = true
+						local accent = typeof(item.Color) == "Color3" and item.Color or theme.Stroke
+						c.stroke.Color = accent
+						c.glow.BackgroundColor3 = accent
+						if c.iconId ~= item.Icon then
+							c.iconId = item.Icon
+							applyicon(c.icon, item.Icon, 48)
+						end
+						c.name.Text = tostring(item.Name or "")
+						c.value.Text = tostring(item.Value or "")
+						c.sub.Text = tostring(item.Sub or "")
+						c.sub.TextColor3 = item.SubColor or theme.Dim
+					end
+					for i = #data + 1, #cards do
+						cards[i].frame.Visible = false
+					end
+					relayout()
+				end
+
+				local function queue()
+					if dirty then return end
+					dirty = true
+					task.defer(paint)
+				end
+
+				trackConnection(body:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout), "icongrid.resize")
+
+				function gridfunc:SetItems(list)
+					data = type(list) == "table" and list or {}
+					queue()
+				end
+
+				function gridfunc:SetNote(text)
+					note.Text = tostring(text or "")
+				end
+
+				function gridfunc:SetTitle(text)
+					title.Text = tostring(text or "")
+				end
+
+				if type(gridconfig.Items) == "table" then
+					gridfunc:SetItems(gridconfig.Items)
+				end
+
+				registerSearchItem(gridconfig.Title or "Collection", holder)
+				countitem = countitem + 1
+				yieldbuild()
+				return gridfunc
+			end
+
 			function items:AddActionList(listconfig)
 				listconfig = listconfig or {}
 				listconfig.Title = listconfig.Title or "List"
@@ -4810,7 +5248,8 @@ function Chloex:Window(guiconfig)
 				
 				local header = instance.textlabel(container)
 				header.Name = "ActionListTitle"
-				header.Font = Enum.Font.GothamBold
+				header.Font = FONT_BOLD
+				header.TextTruncate = Enum.TextTruncate.AtEnd
 				header.Text = tostring(listconfig.Title)
 				header.TextColor3 = theme.Text
 				header.TextSize = 13
@@ -4821,7 +5260,7 @@ function Chloex:Window(guiconfig)
 				
 				local counter = instance.textlabel(container)
 				counter.Name = "ActionListCount"
-				counter.Font = Enum.Font.GothamBold
+				counter.Font = FONT_BOLD
 				counter.Text = "0"
 				counter.TextColor3 = theme.SubText
 				counter.TextSize = 12
@@ -4850,7 +5289,7 @@ function Chloex:Window(guiconfig)
 				
 				local empty = instance.textlabel(scroll)
 				empty.Name = "ActionListEmpty"
-				empty.Font = Enum.Font.GothamBold
+				empty.Font = FONT_MEDIUM
 				empty.Text = emptytext
 				empty.TextColor3 = theme.Dim
 				empty.TextSize = 12
@@ -4890,7 +5329,7 @@ function Chloex:Window(guiconfig)
 					
 					local name = instance.textlabel(row)
 					name.Name = "RowName"
-					name.Font = Enum.Font.GothamBold
+					name.Font = FONT_BOLD
 					name.TextColor3 = theme.Text
 					name.TextSize = 12
 					name.RichText = true
@@ -4902,7 +5341,7 @@ function Chloex:Window(guiconfig)
 					
 					local sub = instance.textlabel(row)
 					sub.Name = "RowSub"
-					sub.Font = Enum.Font.Gotham
+					sub.Font = FONT_MEDIUM
 					sub.TextColor3 = theme.SubText
 					sub.TextSize = 11
 					sub.RichText = true
@@ -4914,7 +5353,7 @@ function Chloex:Window(guiconfig)
 					
 					local status = instance.textlabel(row)
 					status.Name = "RowStatus"
-					status.Font = Enum.Font.GothamBold
+					status.Font = FONT_BOLD
 					status.TextColor3 = theme.Text
 					status.TextSize = 12
 					status.RichText = true
@@ -4926,7 +5365,7 @@ function Chloex:Window(guiconfig)
 					
 					local statussub = instance.textlabel(row)
 					statussub.Name = "RowStatusSub"
-					statussub.Font = Enum.Font.Gotham
+					statussub.Font = FONT_MEDIUM
 					statussub.TextColor3 = theme.Dim
 					statussub.TextSize = 11
 					statussub.RichText = true
@@ -4938,7 +5377,7 @@ function Chloex:Window(guiconfig)
 					
 					local action = instance.textbutton(row)
 					action.Name = "RowAction"
-					action.Font = Enum.Font.GothamBold
+					action.Font = FONT_BOLD
 					action.TextSize = 12
 					action.AutoButtonColor = false
 					action.Text = "Go"
@@ -4959,11 +5398,21 @@ function Chloex:Window(guiconfig)
 						entry = nil,
 					}
 					
+					-- The action button grows to its label (never below ButtonWidth), and
+					-- the status column gives up the same width.
 					function record.setlabel(text, tint)
 						elevate()
-						action.Text = tostring(text or "Go")
+						text = tostring(text or "Go")
+						action.Text = text
 						actionbg.ImageColor3 = tintof(tint)
 						action.TextColor3 = textof(tint)
+						local width = math.max(buttonwidth, textwidth(text, 12, FONT_BOLD) + 20)
+						if record.width ~= width then
+							record.width = width
+							action.Size = UDim2.new(0, width, 0, 26)
+							status.Size = UDim2.new(0.56, -width - 14, 0, 14)
+							statussub.Size = UDim2.new(0.56, -width - 14, 0, 14)
+						end
 					end
 					
 					action.MouseButton1Down:Connect(function()
@@ -5033,6 +5482,508 @@ function Chloex:Window(guiconfig)
 				return listfunc
 			end
 
+			-- Ordered list the player re-ranks with up/down buttons (the hub's Task Order).
+			--   Items   { { Id, Title, Sub?, Icon?, Pinned? }, ... }
+			--   Default { ids... }  the hub's order; Pinned items always sit at the bottom
+			--   Value   array of ids, first runs first; Callback(order) gets a copy
+			--   SetStatus(id, text, tone)  live line under a row, tone "run" | "wait" | "off"
+			function items:AddPriorityList(listconfig)
+				listconfig = listconfig or {}
+				listconfig.Title = listconfig.Title or "Priority"
+				listconfig.Callback = listconfig.Callback or function() end
+
+				local configkey = keyfor("Priority_", listconfig)
+				local rowheight, rowgap, headerheight = 40, 4, 36
+				local itemsbyid, itemorder = {}, {}
+				for _, item in ipairs(type(listconfig.Items) == "table" and listconfig.Items or {}) do
+					local id = type(item) == "table" and tostring(item.Id or item.Title or "") or ""
+					if id ~= "" and not itemsbyid[id] then
+						itemsbyid[id] = item
+						itemorder[#itemorder + 1] = id
+					end
+				end
+
+				-- Unknown ids are dropped and missing ones appended in default order, so an
+				-- order saved before a task existed still loads. Pinned items go last.
+				local function sanitize(order)
+					local out, seen = {}, {}
+					local function push(id)
+						id = tostring(id)
+						if itemsbyid[id] and not seen[id] and not itemsbyid[id].Pinned then
+							seen[id] = true
+							out[#out + 1] = id
+						end
+					end
+					for _, id in ipairs(type(order) == "table" and order or {}) do
+						push(id)
+					end
+					for _, id in ipairs(type(listconfig.Default) == "table" and listconfig.Default or {}) do
+						push(id)
+					end
+					for _, id in ipairs(itemorder) do
+						push(id)
+					end
+					for _, id in ipairs(itemorder) do
+						if itemsbyid[id].Pinned and not seen[id] then
+							seen[id] = true
+							out[#out + 1] = id
+						end
+					end
+					return out
+				end
+
+				local function copyorder(order)
+					local out = {}
+					for index, id in ipairs(order) do
+						out[index] = id
+					end
+					return out
+				end
+
+				local hubdefault = sanitize(listconfig.Default)
+				local function savedpref()
+					local saved = config.data[configkey]
+					if type(saved) == "table" then
+						return sanitize(saved)
+					end
+					return copyorder(hubdefault)
+				end
+
+				local listfunc = { Value = copyorder(hubdefault), DefaultValue = copyorder(hubdefault) }
+				local rows, statuses = {}, {}
+				-- rows the hub hid (their task is switched off); they keep their place in Value
+				local hiddenrows = {}
+
+				local container = instance.frame(sectionadd)
+				container.Name = "PriorityList"
+				container.BorderSizePixel = 0
+				container.LayoutOrder = countitem
+				container.ClipsDescendants = true
+				container.Size = UDim2.new(1, 0, 0, headerheight)
+				roundbg(container, 4, theme.Row)
+
+				local title = instance.textlabel(container)
+				title.Name = "PriorityTitle"
+				title.BackgroundTransparency = 1
+				title.Font = FONT_BOLD
+				title.Text = tostring(listconfig.Title)
+				title.TextColor3 = theme.Text
+				title.TextSize = 13
+				title.TextTruncate = Enum.TextTruncate.AtEnd
+				title.TextXAlignment = Enum.TextXAlignment.Left
+				title.TextYAlignment = Enum.TextYAlignment.Top
+				title.Position = UDim2.new(0, 10, 0, 11)
+				title.Size = UDim2.new(1, -110, 0, 14)
+
+				-- Reset is an auto-width pill: the label sizes the button, never the other way.
+				local reset = instance.textbutton(container)
+				reset.Name = "PriorityReset"
+				reset.AutoButtonColor = false
+				reset.Text = ""
+				reset.AnchorPoint = Vector2.new(1, 0)
+				reset.Position = UDim2.new(1, -8, 0, 8)
+				reset.Size = UDim2.new(0, 0, 0, 22)
+				reset.AutomaticSize = Enum.AutomaticSize.X
+				local resetbg = roundbg(reset, 11, theme.Inner)
+				local resetpad = instance.uipadding(reset)
+				resetpad.PaddingLeft = UDim.new(0, 8)
+				resetpad.PaddingRight = UDim.new(0, 10)
+				local resetlayout = instance.uilistlayout(reset)
+				resetlayout.FillDirection = Enum.FillDirection.Horizontal
+				resetlayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				resetlayout.SortOrder = Enum.SortOrder.LayoutOrder
+				resetlayout.Padding = UDim.new(0, 5)
+				local reseticon = instance.imagelabel(reset)
+				reseticon.Name = "Icon"
+				reseticon.BackgroundTransparency = 1
+				reseticon.ImageColor3 = theme.SubText
+				reseticon.LayoutOrder = 1
+				reseticon.Size = UDim2.new(0, 12, 0, 12)
+				applyicon(reseticon, "rotate-ccw", 48)
+				local resettext = instance.textlabel(reset)
+				resettext.Name = "Label"
+				resettext.AutomaticSize = Enum.AutomaticSize.X
+				resettext.BackgroundTransparency = 1
+				resettext.Font = FONT_BOLD
+				resettext.LayoutOrder = 2
+				resettext.Size = UDim2.new(0, 0, 1, 0)
+				resettext.Text = tostring(listconfig.ResetText or "Reset")
+				resettext.TextColor3 = theme.SubText
+				resettext.TextSize = 12
+				hoverbg(reset, resetbg, theme.Inner, theme.InnerHover)
+
+				local bodytop = headerheight
+				local measure = nil
+				local description = contenttext(listconfig)
+				if description then
+					title.Position = UDim2.new(0, 10, 0, 10)
+					local _, m = attachcontent(container, description, 10, 30, 10)
+					measure = m
+				end
+
+				local holder = instance.frame(container)
+				holder.Name = "PriorityRows"
+				holder.BackgroundTransparency = 1
+				holder.BorderSizePixel = 0
+				holder.Position = UDim2.new(0, 6, 0, bodytop)
+				holder.Size = UDim2.new(1, -12, 0, 0)
+
+				local tones = {
+					run = { color = theme.Good, icon = "circle-play" },
+					wait = { color = theme.Gold, icon = "hourglass" },
+					off = { color = theme.Dim, icon = "circle-off" },
+				}
+				local tweenfast = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+				local move
+
+				local function buildrow(id)
+					elevate()
+					local item = itemsbyid[id]
+					local pinned = item.Pinned == true
+
+					local row = instance.frame(holder)
+					row.Name = "PriorityRow"
+					row.BorderSizePixel = 0
+					row.Size = UDim2.new(1, 0, 0, rowheight)
+					roundbg(row, 6, theme.Element, true)
+					local stroke = instance.uistroke(row)
+					stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					stroke.Color = guiconfig.Color
+					stroke.Thickness = 1
+					stroke.Transparency = 1
+
+					local badge = instance.frame(row)
+					badge.Name = "Rank"
+					badge.AnchorPoint = Vector2.new(0, 0.5)
+					badge.BackgroundColor3 = theme.Inner
+					badge.BorderSizePixel = 0
+					badge.Position = UDim2.new(0, 8, 0.5, 0)
+					badge.Size = UDim2.new(0, 22, 0, 22)
+					instance.uicorner(badge).CornerRadius = UDim.new(1, 0)
+					local ranktext = instance.textlabel(badge)
+					ranktext.BackgroundTransparency = 1
+					ranktext.Font = FONT_BOLD
+					ranktext.Size = UDim2.new(1, 0, 1, 0)
+					ranktext.Text = ""
+					ranktext.TextColor3 = theme.Text
+					ranktext.TextSize = 11
+					local lockicon = instance.imagelabel(badge)
+					lockicon.AnchorPoint = Vector2.new(0.5, 0.5)
+					lockicon.BackgroundTransparency = 1
+					lockicon.ImageColor3 = theme.SubText
+					lockicon.Position = UDim2.new(0.5, 0, 0.5, 0)
+					lockicon.Size = UDim2.new(0, 11, 0, 11)
+					lockicon.Visible = pinned
+					ranktext.Visible = not pinned
+					if pinned then
+						applyicon(lockicon, "lock", 48)
+					end
+
+					local textx = 38
+					if item.Icon then
+						local icon = instance.imagelabel(row)
+						icon.Name = "TaskIcon"
+						icon.AnchorPoint = Vector2.new(0, 0.5)
+						icon.BackgroundTransparency = 1
+						icon.ImageColor3 = theme.SubText
+						icon.Position = UDim2.new(0, 38, 0.5, 0)
+						icon.Size = UDim2.new(0, 16, 0, 16)
+						applyicon(icon, item.Icon, 48)
+						textx = 62
+					end
+					local rightinset = pinned and 12 or 70
+
+					local name = instance.textlabel(row)
+					name.Name = "TaskName"
+					name.BackgroundTransparency = 1
+					name.Font = FONT_BOLD
+					name.Position = UDim2.new(0, textx, 0, 6)
+					name.Size = UDim2.new(1, -(textx + rightinset), 0, 15)
+					name.Text = tostring(item.Title or id)
+					name.TextColor3 = theme.Text
+					name.TextSize = 12
+					name.TextTruncate = Enum.TextTruncate.AtEnd
+					name.TextXAlignment = Enum.TextXAlignment.Left
+
+					local statusicon = instance.imagelabel(row)
+					statusicon.Name = "StatusIcon"
+					statusicon.BackgroundTransparency = 1
+					statusicon.Position = UDim2.new(0, textx, 0, 23)
+					statusicon.Size = UDim2.new(0, 11, 0, 11)
+					statusicon.Visible = false
+
+					local status = instance.textlabel(row)
+					status.Name = "TaskStatus"
+					status.BackgroundTransparency = 1
+					status.Font = FONT_MEDIUM
+					status.Position = UDim2.new(0, textx, 0, 22)
+					status.Size = UDim2.new(1, -(textx + rightinset), 0, 13)
+					status.Text = tostring(item.Sub or "")
+					status.TextColor3 = theme.Dim
+					status.TextSize = 11
+					status.TextTruncate = Enum.TextTruncate.AtEnd
+					status.TextXAlignment = Enum.TextXAlignment.Left
+
+					local function arrow(iconname, x)
+						local button = instance.textbutton(row)
+						button.Name = "Move"
+						button.AnchorPoint = Vector2.new(1, 0.5)
+						button.AutoButtonColor = false
+						button.Position = UDim2.new(1, x, 0.5, 0)
+						button.Size = UDim2.new(0, 26, 0, 26)
+						button.Text = ""
+						local bg = roundbg(button, 6, theme.Inner)
+						local img = instance.imagelabel(button)
+						img.AnchorPoint = Vector2.new(0.5, 0.5)
+						img.BackgroundTransparency = 1
+						img.ImageColor3 = theme.Text
+						img.Position = UDim2.new(0.5, 0, 0.5, 0)
+						img.Size = UDim2.new(0, 14, 0, 14)
+						applyicon(img, iconname, 48)
+						local state = { enabled = true }
+						button.MouseEnter:Connect(function()
+							if state.enabled then
+								bg.ImageColor3 = theme.InnerHover
+							end
+						end)
+						button.MouseLeave:Connect(function()
+							bg.ImageColor3 = theme.Inner
+						end)
+						function state.set(on)
+							state.enabled = on
+							button.Active = on
+							bg.ImageColor3 = theme.Inner
+							bg.ImageTransparency = on and rowalpha or 0.6
+							img.ImageTransparency = on and 0 or 0.7
+						end
+						return button, state
+					end
+
+					local up, upstate, down, downstate
+					if not pinned then
+						up, upstate = arrow("chevron-up", -38)
+						down, downstate = arrow("chevron-down", -8)
+						up.MouseButton1Click:Connect(function()
+							if upstate.enabled then
+								pcall(pesseffect, up)
+								move(id, -1)
+							end
+						end)
+						down.MouseButton1Click:Connect(function()
+							if downstate.enabled then
+								pcall(pesseffect, down)
+								move(id, 1)
+							end
+						end)
+					end
+
+					local record = { id = id, frame = row, tone = "off" }
+
+					-- index among the visible rows; prev / nxt are the visible neighbours
+					function record.setrank(index, prev, nxt)
+						ranktext.Text = tostring(index)
+						if upstate then
+							upstate.set(prev ~= nil and not itemsbyid[prev].Pinned)
+							downstate.set(nxt ~= nil and not itemsbyid[nxt].Pinned)
+						end
+					end
+
+					function record.setstatus(text, tone)
+						local look = tones[tone] or tones.off
+						record.tone = tone
+						if text == "" then
+							text = tostring(item.Sub or "")
+						end
+						status.Text = text
+						status.TextColor3 = look.color
+						statusicon.Visible = text ~= ""
+						statusicon.ImageColor3 = look.color
+						applyicon(statusicon, look.icon, 48)
+						local shift = statusicon.Visible and 15 or 0
+						status.Position = UDim2.new(0, textx + shift, 0, 22)
+						status.Size = UDim2.new(1, -(textx + shift + rightinset), 0, 13)
+						stroke.Transparency = tone == "run" and 0.35 or 1
+						name.TextColor3 = tone == "off" and theme.SubText or theme.Text
+					end
+
+					function record.flash()
+						if record.tone == "run" then
+							return
+						end
+						stroke.Transparency = 0.1
+						sv.ts:Create(stroke, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play()
+					end
+
+					return record
+				end
+
+				local function slotpos(index)
+					return UDim2.new(0, 0, 0, (index - 1) * (rowheight + rowgap))
+				end
+
+				local emptyrow = instance.textlabel(holder)
+				emptyrow.Name = "Empty"
+				emptyrow.BackgroundTransparency = 1
+				emptyrow.Font = FONT_MEDIUM
+				emptyrow.Size = UDim2.new(1, 0, 0, rowheight)
+				emptyrow.Text = tostring(listconfig.EmptyText or "Nothing here yet.")
+				emptyrow.TextColor3 = theme.Dim
+				emptyrow.TextSize = 12
+				emptyrow.TextWrapped = true
+				emptyrow.Visible = false
+
+				local function visibleorder()
+					local out = {}
+					for _, id in ipairs(listfunc.Value) do
+						if rows[id] and not hiddenrows[id] then
+							out[#out + 1] = id
+						end
+					end
+					return out
+				end
+
+				local function layout(instant)
+					elevate()
+					local shown = visibleorder()
+					for _, id in ipairs(listfunc.Value) do
+						local record = rows[id]
+						if record and hiddenrows[id] then
+							record.frame.Visible = false
+						end
+					end
+					for index, id in ipairs(shown) do
+						local record = rows[id]
+						local goal = slotpos(index)
+						local wasvisible = record.frame.Visible
+						record.frame.Visible = true
+						if instant or not wasvisible then
+							record.frame.Position = goal
+						else
+							sv.ts:Create(record.frame, tweenfast, { Position = goal }):Play()
+						end
+						record.setrank(index, shown[index - 1], shown[index + 1])
+					end
+					local count = #shown
+					emptyrow.Visible = count == 0
+					local body = count > 0 and (count * rowheight + (count - 1) * rowgap) or rowheight
+					holder.Position = UDim2.new(0, 6, 0, bodytop)
+					holder.Size = UDim2.new(1, -12, 0, body)
+					container.Size = UDim2.new(1, 0, 0, bodytop + body + 8)
+				end
+
+				local function apply(order, instant, save, fire)
+					elevate()
+					listfunc.Value = sanitize(order)
+					if save then
+						config.data[configkey] = copyorder(listfunc.Value)
+					end
+					layout(instant)
+					if fire then
+						local ok, err = pcall(listconfig.Callback, copyorder(listfunc.Value))
+						if not ok then
+							warn("PriorityList Callback error (" .. tostring(listconfig.Title) .. "):", err)
+						end
+					end
+				end
+
+				-- swaps with the nearest visible neighbour, so hidden rows keep their spot
+				move = function(id, delta)
+					local order = listfunc.Value
+					local shown = visibleorder()
+					local at = table.find(shown, id)
+					local other = at and shown[at + delta]
+					if not other or itemsbyid[other].Pinned or itemsbyid[id].Pinned then
+						return
+					end
+					local index, target = table.find(order, id), table.find(order, other)
+					if not index or not target then
+						return
+					end
+					local neworder = copyorder(order)
+					neworder[index], neworder[target] = neworder[target], neworder[index]
+					apply(neworder, false, true, true)
+					if rows[id] then
+						rows[id].flash()
+					end
+				end
+
+				for _, id in ipairs(itemorder) do
+					rows[id] = buildrow(id)
+				end
+
+				local function relayout()
+					if measure then
+						bodytop = 30 + measure() + 8
+					end
+					layout(true)
+				end
+				if measure then
+					watchwidth(container, relayout)
+				end
+
+				reset.MouseButton1Click:Connect(function()
+					pcall(pesseffect, reset)
+					listfunc:ResetValue()
+				end)
+
+				function listfunc:Set(order, instant)
+					apply(order, instant, true, true)
+				end
+
+				function listfunc:LoadValue(order)
+					self:Set(order, true)
+				end
+
+				function listfunc:ResetValue()
+					self:Set(copyorder(hubdefault))
+				end
+
+				function listfunc:GetValue()
+					return copyorder(self.Value)
+				end
+
+				-- Hide a row (its task is off) without losing its place in the order.
+				function listfunc:SetVisible(id, visible)
+					id = tostring(id)
+					if not rows[id] then
+						return
+					end
+					local hide = visible == false
+					if (hiddenrows[id] == true) == hide then
+						return
+					end
+					hiddenrows[id] = hide or nil
+					layout(false)
+				end
+
+				-- Writes only when the text or tone changed, so a hub can call it every tick.
+				function listfunc:SetStatus(id, text, tone)
+					local record = rows[tostring(id)]
+					if not record then
+						return
+					end
+					text = tostring(text or "")
+					tone = tones[tone] and tone or "off"
+					local last = statuses[record.id]
+					if last and last.text == text and last.tone == tone then
+						return
+					end
+					statuses[record.id] = { text = text, tone = tone }
+					elevate()
+					record.setstatus(text, tone)
+				end
+
+				relayout()
+				apply(savedpref(), true, true, true)
+
+				countitem = countitem + 1
+				yieldbuild()
+				config.elements[configkey] = listfunc
+				registerSearchItem(listconfig.Title, container)
+				return listfunc
+			end
+
 			function items:AddFusePartner(itemCfg)
 				itemCfg = itemCfg or {}
 				local tiers = itemCfg.Tiers or { "Divine", "Eternal" }
@@ -5083,8 +6034,8 @@ function Chloex:Window(guiconfig)
 
 				local function SetStatus(text)
 					pcall(function()
-						if Status and Status.Set then
-							Status:Set({ Content = tostring(text or "") })
+						if Status and Status.SetContent then
+							Status:SetContent(tostring(text or ""))
 						end
 					end)
 				end
@@ -5121,8 +6072,8 @@ function Chloex:Window(guiconfig)
 				local function SetBroadcastLabel(active)
 					st.isBroadcasting = active == true
 					pcall(function()
-						if BroadcastBtn and BroadcastBtn.Set then
-							BroadcastBtn:Set({ Title = active and "Stop Broadcast" or "Broadcast: Find Partner" })
+						if BroadcastBtn and BroadcastBtn.SetTitle then
+							BroadcastBtn:SetTitle(active and "Stop Broadcast" or "Broadcast: Find Partner")
 						end
 					end)
 				end
@@ -5169,8 +6120,8 @@ function Chloex:Window(guiconfig)
 				buttonconfig.Callback = buttonconfig.Callback or function() end
 				buttonconfig.SubTitle = buttonconfig.SubTitle or nil
 				buttonconfig.SubCallback = buttonconfig.SubCallback or function() end
-				local lockable = isdonatorelement(buttonconfig)
-				local donatoronly = isdonatoronly(buttonconfig)
+				local lockable = tabgated or isdonatorelement(buttonconfig)
+				local donatoronly = (tabgated and keygatedonator) or isdonatoronly(buttonconfig)
 				local islocked = lockable and not tierallows(donatoronly)
 
 				local function runcallback(fn, label)
@@ -5194,66 +6145,175 @@ function Chloex:Window(guiconfig)
 
 				local padding = 3
 				local gap = 4
+				local buttonfunc = {}
+				local lock = nil
+				local basey = 40
+				local description = contenttext(buttonconfig)
 
-				local mainbutton = instance.textbutton(button)
-				mainbutton.Font = Enum.Font.GothamBold
-				mainbutton.Text = tostring(buttonconfig.Title)
-				mainbutton.TextSize = 12
-				mainbutton.TextColor3 = Color3.fromRGB(255, 255, 255)
-				mainbutton.TextTransparency = 0.3
-				mainbutton.AutoButtonColor = false
-				mainbutton.ZIndex = 10
-				hoverbg(mainbutton, roundbg(mainbutton, 4, theme.Inner), theme.Inner, theme.InnerHover)
-
-				if buttonconfig.SubTitle then
-					mainbutton.Size = UDim2.new(0.5, -padding - gap, 1, -10)
-					mainbutton.Position = UDim2.new(0, padding, 0, 5)
-				else
-					mainbutton.Size = UDim2.new(1, -padding * 2, 1, -10)
-					mainbutton.Position = UDim2.new(0, padding, 0, 5)
+				-- Variant: "secondary" (default), "primary" (accent fill) or "danger".
+				local variant = tostring(buttonconfig.Variant or "secondary"):lower()
+				local facecolor, facehover, facetext = theme.Inner, theme.InnerHover, theme.Text
+				if variant == "primary" then
+					facecolor = guiconfig.Color
+					facehover = guiconfig.Color:Lerp(Color3.new(1, 1, 1), 0.12)
+					facetext = theme.AccentText
+				elseif variant == "danger" then
+					facecolor = Color3.fromRGB(64, 30, 32)
+					facehover = Color3.fromRGB(84, 36, 38)
+					facetext = theme.Bad
 				end
 
-				mainbutton.MouseButton1Down:Connect(function()
-					pcall(pesseffect, mainbutton)
-				end)
+				local function setbase(height)
+					basey = height
+					if lock and lock:IsLocked() then
+						lock:Relayout()
+					else
+						button.Size = UDim2.new(1, 0, 0, basey)
+					end
+				end
+
+				-- A face's label is padded and truncated, so a long title ends in "..."
+				-- inside the button instead of running into its neighbour.
+				local function face(text)
+					local b = instance.textbutton(button)
+					b.Font = FONT_BOLD
+					b.Text = tostring(text)
+					b.TextSize = 12
+					b.TextColor3 = facetext
+					b.TextTruncate = Enum.TextTruncate.AtEnd
+					b.AutoButtonColor = false
+					b.ZIndex = 10
+					local pad = instance.uipadding(b)
+					pad.PaddingLeft = UDim.new(0, 10)
+					pad.PaddingRight = UDim.new(0, 10)
+					hoverbg(b, roundbg(b, 4, facecolor), facecolor, facehover)
+					b.MouseButton1Down:Connect(function()
+						pcall(pesseffect, b)
+					end)
+					return b
+				end
+
+				local buttons = {}
+				local mainbutton, subbutton
+
+				if description and not buttonconfig.SubTitle then
+					-- Row action: title + description on the left, chevron on the right,
+					-- the whole row is the button.
+					local title = instance.textlabel(button)
+					title.Name = "ButtonTitle"
+					title.BackgroundTransparency = 1
+					title.Font = FONT_BOLD
+					title.Text = tostring(buttonconfig.Title)
+					title.TextColor3 = theme.Text
+					title.TextSize = 13
+					title.TextTruncate = Enum.TextTruncate.AtEnd
+					title.TextXAlignment = Enum.TextXAlignment.Left
+					title.TextYAlignment = Enum.TextYAlignment.Top
+					title.Position = UDim2.new(0, 10, 0, 9)
+					title.Size = UDim2.new(1, -44, 0, 14)
+					local _, measure = attachcontent(button, description, 10, 26, 44)
+
+					local chevron = instance.imagelabel(button)
+					chevron.Name = "ButtonIcon"
+					chevron.AnchorPoint = Vector2.new(1, 0.5)
+					chevron.BackgroundTransparency = 1
+					chevron.ImageColor3 = theme.SubText
+					chevron.Position = UDim2.new(1, -12, 0.5, 0)
+					chevron.Size = UDim2.new(0, 16, 0, 16)
+					applyicon(chevron, buttonconfig.Icon or "chevron-right", 48)
+
+					mainbutton = instance.textbutton(button)
+					mainbutton.Name = "RowButton"
+					mainbutton.AutoButtonColor = false
+					mainbutton.BackgroundTransparency = 1
+					mainbutton.Size = UDim2.new(1, 0, 1, 0)
+					mainbutton.Text = ""
+					mainbutton.ZIndex = 10
+					local rowbg = button:FindFirstChild("Bg")
+					mainbutton.MouseEnter:Connect(function()
+						if rowbg then
+							rowbg.ImageColor3 = theme.ElementHover
+						end
+						chevron.ImageColor3 = theme.Text
+					end)
+					mainbutton.MouseLeave:Connect(function()
+						if rowbg then
+							rowbg.ImageColor3 = theme.Row
+						end
+						chevron.ImageColor3 = theme.SubText
+					end)
+					mainbutton.MouseButton1Down:Connect(function()
+						pcall(pesseffect, chevron)
+					end)
+					buttons = { title, chevron }
+
+					local function relayout()
+						setbase(math.max(46, 26 + measure() + 10))
+					end
+					relayout()
+					watchwidth(button, relayout)
+
+					function buttonfunc:SetTitle(text)
+						title.Text = tostring(text)
+					end
+				else
+					-- Classic face buttons; a description, when given, sits above them.
+					local measure = nil
+					if description then
+						local _, m = attachcontent(button, description, 10, 9, 10)
+						measure = m
+					end
+					mainbutton = face(buttonconfig.Title)
+					buttons[1] = mainbutton
+					if buttonconfig.SubTitle then
+						subbutton = face(buttonconfig.SubTitle)
+						buttons[2] = subbutton
+					end
+
+					local function place()
+						local top = measure and (9 + measure() + 6) or 5
+						local height = 30
+						if subbutton then
+							mainbutton.Size = UDim2.new(0.5, -padding - gap, 0, height)
+							mainbutton.Position = UDim2.new(0, padding, 0, top)
+							subbutton.Size = UDim2.new(0.5, -padding - gap, 0, height)
+							subbutton.Position = UDim2.new(0.5, gap, 0, top)
+						else
+							mainbutton.Size = UDim2.new(1, -padding * 2, 0, height)
+							mainbutton.Position = UDim2.new(0, padding, 0, top)
+						end
+						setbase(top + height + 5)
+					end
+					place()
+					if measure then
+						watchwidth(button, place)
+					end
+
+					function buttonfunc:SetTitle(text)
+						mainbutton.Text = tostring(text)
+					end
+					function buttonfunc:SetSubTitle(text)
+						if subbutton then
+							subbutton.Text = tostring(text)
+						end
+					end
+
+					if subbutton then
+						subbutton.MouseButton1Click:Connect(function()
+							runcallback(buttonconfig.SubCallback, buttonconfig.SubTitle)
+						end)
+					end
+				end
 
 				mainbutton.MouseButton1Click:Connect(function()
 					runcallback(buttonconfig.Callback, buttonconfig.Title)
 				end)
 
-				local buttons = { mainbutton }
-
-				if buttonconfig.SubTitle then
-					local subbutton = instance.textbutton(button)
-					subbutton.Font = Enum.Font.GothamBold
-					subbutton.Text = tostring(buttonconfig.SubTitle)
-					subbutton.TextSize = 12
-					subbutton.TextTransparency = 0.3
-					subbutton.TextColor3 = Color3.fromRGB(255, 255, 255)
-					subbutton.Size = UDim2.new(0.5, -padding - gap, 1, -10)
-					subbutton.Position = UDim2.new(0.5, gap, 0, 5)
-					subbutton.AutoButtonColor = false
-					subbutton.ZIndex = 10
-					hoverbg(subbutton, roundbg(subbutton, 4, theme.Inner), theme.Inner, theme.InnerHover)
-
-					subbutton.MouseButton1Down:Connect(function()
-						pcall(pesseffect, subbutton)
-					end)
-
-					subbutton.MouseButton1Click:Connect(function()
-						runcallback(buttonconfig.SubCallback, buttonconfig.SubTitle)
-					end)
-					buttons[#buttons + 1] = subbutton
-				end
-
 				if lockable then
-					makelock(button, buttons, {
+					lock = makelock(button, buttons, {
 						DonatorOnly = donatoronly,
-						Pin = function(state)
-							for _, b in ipairs(buttons) do
-								b.Size = state and UDim2.new(b.Size.X.Scale, b.Size.X.Offset, 0, 30)
-									or UDim2.new(b.Size.X.Scale, b.Size.X.Offset, 1, -10)
-							end
+						GetBaseHeight = function()
+							return basey
 						end,
 						OnLock = function()
 							islocked = true
@@ -5273,6 +6333,8 @@ function Chloex:Window(guiconfig)
 				registerSearchItem(searchname, button)
 				countitem = countitem + 1
 				yieldbuild()
+				buttonfunc.Instance = button
+				return buttonfunc
 			end
 
 			function items:AddToggle(toggleconfig)
@@ -5293,8 +6355,8 @@ function Chloex:Window(guiconfig)
 					return hubdefault
 				end
 
-				local lockable = isdonatorelement(toggleconfig)
-				local donatoronly = isdonatoronly(toggleconfig)
+				local lockable = tabgated or isdonatorelement(toggleconfig)
+				local donatoronly = (tabgated and keygatedonator) or isdonatoronly(toggleconfig)
 				local islocked = lockable and not tierallows(donatoronly)
 				local togglefunc = { Value = false, DefaultValue = hubdefault }
 
@@ -5309,6 +6371,18 @@ function Chloex:Window(guiconfig)
 				local featureframe2 = toggle.FeatureFrame
 				local uistroke8 = featureframe2.UIStroke
 				local togglecircle = featureframe2.ToggleCircle
+
+				local togglerowbg = toggle:FindFirstChild("Bg")
+				togglebutton.MouseEnter:Connect(function()
+					if togglerowbg and not islocked then
+						togglerowbg.ImageColor3 = theme.ElementHover
+					end
+				end)
+				togglebutton.MouseLeave:Connect(function()
+					if togglerowbg then
+						togglerowbg.ImageColor3 = theme.Row
+					end
+				end)
 
 				local lock = nil
 				local basey = 46
@@ -5500,8 +6574,8 @@ function Chloex:Window(guiconfig)
 					return v and clampvalue(v) or hubdefault
 				end
 
-				local lockable = isdonatorelement(sliderconfig)
-				local donatoronly = isdonatoronly(sliderconfig)
+				local lockable = tabgated or isdonatorelement(sliderconfig)
+				local donatoronly = (tabgated and keygatedonator) or isdonatoronly(sliderconfig)
 				local islocked = lockable and not tierallows(donatoronly)
 				local sliderfunc = {
 					Value = islocked and hubdefault or savedpref(),
@@ -5757,8 +6831,8 @@ function Chloex:Window(guiconfig)
 					return hubdefault
 				end
 
-				local lockable = isdonatorelement(inputconfig)
-				local donatoronly = isdonatoronly(inputconfig)
+				local lockable = tabgated or isdonatorelement(inputconfig)
+				local donatoronly = (tabgated and keygatedonator) or isdonatoronly(inputconfig)
 				local islocked = lockable and not tierallows(donatoronly)
 				local inputfunc = { Value = islocked and hubdefault or savedpref(), DefaultValue = hubdefault }
 
@@ -5769,23 +6843,23 @@ function Chloex:Window(guiconfig)
 				roundbg(inputcontainer, 4, theme.Row)
 
 				local inputtitle = instance.textlabel(inputcontainer)
-				inputtitle.Font = Enum.Font.GothamBold
+				inputtitle.Font = FONT_BOLD
 				inputtitle.Text = inputconfig.Title
 				inputtitle.TextSize = 13
-				inputtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+				inputtitle.TextColor3 = theme.Text
+				inputtitle.TextTruncate = Enum.TextTruncate.AtEnd
 				inputtitle.TextXAlignment = Enum.TextXAlignment.Left
 				inputtitle.BackgroundTransparency = 1
 				inputtitle.Position = UDim2.new(0, 10, 0, 6)
 				inputtitle.Size = UDim2.new(1, -20, 0, 14)
 
 				local inputtextbox = instance.textbox(inputcontainer)
-				inputtextbox.Font = Enum.Font.GothamBold
+				inputtextbox.Font = FONT_MEDIUM
 				inputtextbox.PlaceholderText = inputconfig.Placeholder
-				inputtextbox.PlaceholderColor3 = Color3.fromRGB(255, 255, 255)
-				inputtextbox.TextTransparency = 0.4
+				inputtextbox.PlaceholderColor3 = theme.Dim
 				inputtextbox.Text = inputfunc.Value
-				inputtextbox.TextSize = 11
-				inputtextbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+				inputtextbox.TextSize = 12
+				inputtextbox.TextColor3 = theme.Text
 				inputtextbox.BackgroundColor3 = theme.Field
 				inputtextbox.BackgroundTransparency = 0
 				inputtextbox.TextXAlignment = Enum.TextXAlignment.Left
@@ -5794,9 +6868,24 @@ function Chloex:Window(guiconfig)
 				inputtextbox.Size = UDim2.new(1, -20, 0, 24)
 				inputtextbox.ClipsDescendants = true
 				inputtextbox.TextTruncate = Enum.TextTruncate.AtEnd
+				instance.uicorner(inputtextbox).CornerRadius = UDim.new(0, 4)
+
+				-- Focus ring: the field the keyboard is typing into is obvious.
+				local inputfocus = instance.uistroke(inputtextbox)
+				inputfocus.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				inputfocus.Color = guiconfig.Color
+				inputfocus.Thickness = 1
+				inputfocus.Transparency = 1
+				inputtextbox.Focused:Connect(function()
+					sv.ts:Create(inputfocus, TweenInfo.new(0.12), { Transparency = 0.3 }):Play()
+				end)
+				inputtextbox.FocusLost:Connect(function()
+					sv.ts:Create(inputfocus, TweenInfo.new(0.12), { Transparency = 1 }):Play()
+				end)
 
 				local padding = instance.uipadding(inputtextbox)
-				padding.PaddingLeft = UDim.new(0, 4)
+				padding.PaddingLeft = UDim.new(0, 8)
+				padding.PaddingRight = UDim.new(0, 8)
 
 				local lock = nil
 				local basey = 58
@@ -5858,12 +6947,20 @@ function Chloex:Window(guiconfig)
 					self:Set(hubdefault)
 				end
 
+				local typedseq = 0
 				inputtextbox:GetPropertyChangedSignal("Text"):Connect(function()
 					if suppress or islocked then
 						return
 					end
 					inputfunc.Value = inputtextbox.Text
 					config.data[configkey] = inputtextbox.Text
+					typedseq = typedseq + 1
+					local seq = typedseq
+					task.delay(0.35, function()
+						if seq == typedseq and not islocked and inputtextbox.Text == inputfunc.Value then
+							applyinput(inputfunc.Value, true, true)
+						end
+					end)
 				end)
 
 				inputtextbox.FocusLost:Connect(function()
@@ -5965,8 +7062,8 @@ function Chloex:Window(guiconfig)
 					return normalize(hubdefault)
 				end
 
-				local lockable = isdonatorelement(dropdownconfig)
-				local donatoronly = isdonatoronly(dropdownconfig)
+				local lockable = tabgated or isdonatorelement(dropdownconfig)
+				local donatoronly = (tabgated and keygatedonator) or isdonatoronly(dropdownconfig)
 				local islocked = lockable and not tierallows(donatoronly)
 				local dropdownfunc = {
 					Value = islocked and normalize(hubdefault) or savedpref(),
@@ -6016,55 +7113,77 @@ function Chloex:Window(guiconfig)
 				dropdownbutton.BackgroundTransparency = 1
 				dropdownbutton.Size = UDim2.new(1, 0, 1, 0)
 
+				local dropdownrowbg = dropdown:FindFirstChild("Bg")
+				dropdownbutton.MouseEnter:Connect(function()
+					if dropdownrowbg then
+						dropdownrowbg.ImageColor3 = theme.ElementHover
+					end
+				end)
+				dropdownbutton.MouseLeave:Connect(function()
+					if dropdownrowbg then
+						dropdownrowbg.ImageColor3 = theme.Row
+					end
+				end)
+
 				local dropdowntitle = instance.textlabel(dropdown)
 				dropdowntitle.Name = "DropdownTitle"
-				dropdowntitle.Font = Enum.Font.GothamBold
+				dropdowntitle.Font = FONT_BOLD
 				dropdowntitle.Text = dropdownconfig.Title
 				dropdowntitle.TextColor3 = theme.Text
 				dropdowntitle.TextSize = 13
+				dropdowntitle.TextTruncate = Enum.TextTruncate.AtEnd
 				dropdowntitle.TextXAlignment = Enum.TextXAlignment.Left
 				dropdowntitle.BackgroundTransparency = 1
 				dropdowntitle.Position = UDim2.new(0, 10, 0, 0)
-				dropdowntitle.Size = UDim2.new(1, -180, 1, 0)
+				dropdowntitle.Size = UDim2.new(0.55, -24, 1, 0)
 
+				-- The value pill takes 45% of the row (120-260 px) instead of a fixed
+				-- 148 px, and its text is truncated; the full pick list is in the popup.
 				local selectoptionsframe = instance.frame(dropdown)
 				selectoptionsframe.Name = "SelectOptionsFrame"
 				selectoptionsframe.AnchorPoint = Vector2.new(1, 0.5)
 				selectoptionsframe.Position = UDim2.new(1, -7, 0.5, 0)
-				selectoptionsframe.Size = UDim2.new(0, 148, 0, 30)
+				selectoptionsframe.Size = UDim2.new(0.45, 0, 0, 30)
 				selectoptionsframe.LayoutOrder = countdropdown
 				roundbg(selectoptionsframe, 4, theme.Inner)
+				local pillconstraint = instance.uisizeconstraint(selectoptionsframe)
+				pillconstraint.MinSize = Vector2.new(120, 0)
+				pillconstraint.MaxSize = Vector2.new(260, 30)
 
 				local optionselecting = instance.textlabel(selectoptionsframe)
 				optionselecting.Name = "OptionSelecting"
-				optionselecting.Font = Enum.Font.GothamBold
+				optionselecting.Font = FONT_BOLD
 				optionselecting.Text = dropdownconfig.Multi and "Select Options" or "Select Option"
-				optionselecting.TextColor3 = Color3.fromRGB(255, 255, 255)
+				optionselecting.TextColor3 = theme.Text
 				optionselecting.TextSize = 12
-				optionselecting.TextTransparency = 0.6
+				optionselecting.TextTransparency = 0.55
+				optionselecting.TextTruncate = Enum.TextTruncate.AtEnd
 				optionselecting.TextXAlignment = Enum.TextXAlignment.Left
 				optionselecting.AnchorPoint = Vector2.new(0, 0.5)
 				optionselecting.BackgroundTransparency = 1
-				optionselecting.Position = UDim2.new(0, 5, 0.5, 0)
-				optionselecting.Size = UDim2.new(1, -30, 1, -8)
+				optionselecting.Position = UDim2.new(0, 9, 0.5, 0)
+				optionselecting.Size = UDim2.new(1, -34, 1, -8)
 
 				local optionimg = instance.imagelabel(selectoptionsframe)
 				optionimg.Name = "OptionImg"
-				optionimg.Image = "rbxassetid://16851841101"
-				optionimg.ImageColor3 = theme.Text
+				optionimg.ImageColor3 = theme.SubText
 				optionimg.AnchorPoint = Vector2.new(1, 0.5)
 				optionimg.BackgroundTransparency = 1
-				optionimg.Position = UDim2.new(1, 0, 0.5, 0)
-				optionimg.Size = UDim2.new(0, 25, 0, 25)
+				optionimg.Position = UDim2.new(1, -8, 0.5, 0)
+				optionimg.Size = UDim2.new(0, 14, 0, 14)
+				applyicon(optionimg, "chevron-down", 48)
 
 				local lock = nil
 				local basey = 46
 				local description = contenttext(dropdownconfig)
 				if description then
 					dropdowntitle.Position = UDim2.new(0, 10, 0, 9)
-					dropdowntitle.Size = UDim2.new(1, -180, 0, 14)
+					dropdowntitle.Size = UDim2.new(0.55, -24, 0, 14)
 					dropdowntitle.TextYAlignment = Enum.TextYAlignment.Top
-					local _, measure = attachcontent(dropdown, description, 10, 26, 170)
+					local _, measure = attachcontent(dropdown, description, 10, 26, function()
+						local width = selectoptionsframe.AbsoluteSize.X
+						return (width > 1 and width or 160) + 20
+					end)
 					local function relayout()
 						basey = math.max(46, 26 + measure() + 10)
 						if lock and lock:IsLocked() then
@@ -6084,16 +7203,24 @@ function Chloex:Window(guiconfig)
 				local searchbox = instance.textbox(dropdowncontainer)
 				searchbox.Name = "SearchBox"
 				searchbox.PlaceholderText = "Search"
-				searchbox.Font = Enum.Font.GothamBold
+				searchbox.PlaceholderColor3 = theme.Dim
+				searchbox.Font = FONT_MEDIUM
 				searchbox.Text = ""
 				searchbox.TextSize = 12
-				searchbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+				searchbox.TextColor3 = theme.Text
+				searchbox.TextXAlignment = Enum.TextXAlignment.Left
+				searchbox.TextTruncate = Enum.TextTruncate.AtEnd
 				searchbox.BackgroundColor3 = theme.Element
 				searchbox.BackgroundTransparency = 0
 				searchbox.BorderSizePixel = 0
-				searchbox.Size = UDim2.new(1, 0, 0, 25)
+				searchbox.ClipsDescendants = true
+				searchbox.Size = UDim2.new(1, 0, 0, 26)
 				searchbox.Position = UDim2.new(0, 0, 0, 0)
 				searchbox.ClearTextOnFocus = false
+				instance.uicorner(searchbox).CornerRadius = UDim.new(0, 4)
+				local searchpad = instance.uipadding(searchbox)
+				searchpad.PaddingLeft = UDim.new(0, 8)
+				searchpad.PaddingRight = UDim.new(0, 8)
 
 				local scrollselect = instance.scrollingframe(dropdowncontainer)
 				scrollselect.Name = "ScrollSelect"
@@ -6170,8 +7297,18 @@ function Chloex:Window(guiconfig)
 							texts[#texts + 1] = tostring(v)
 						end
 					end
-					optionselecting.Text = (#texts == 0) and (multi and "Select Options" or "Select Option")
-						or table.concat(texts, ", ")
+					-- One pick shows its name; several show "first +N" so the pill never
+					-- has to fit a comma list. Placeholder text stays dim.
+					if #texts == 0 then
+						optionselecting.Text = multi and "Select Options" or "Select Option"
+						optionselecting.TextTransparency = 0.55
+					elseif #texts == 1 then
+						optionselecting.Text = texts[1]
+						optionselecting.TextTransparency = 0
+					else
+						optionselecting.Text = texts[1] .. "  +" .. tostring(#texts - 1)
+						optionselecting.TextTransparency = 0
+					end
 				end
 
 				local function fire()
@@ -6252,7 +7389,7 @@ function Chloex:Window(guiconfig)
 					if useAdvanced and entry.desc then
 						local optiondesc = instance.textlabel(optionframe)
 						optiondesc.Name = "OptionDesc"
-						optiondesc.Font = Enum.Font.GothamBold
+						optiondesc.Font = FONT_BOLD
 						optiondesc.Text = tostring(entry.desc)
 						optiondesc.TextSize = 10
 						optiondesc.TextTransparency = 0.3
@@ -6434,12 +7571,18 @@ function Chloex:Window(guiconfig)
 				return dropdownfunc
 			end
 
+			-- Live Chat. Fill = true makes it take the whole tab (pair it with
+			-- AddSection({ Header = false })); otherwise Height sets a fixed card.
+			--   views   General + four language rooms, plus one thread per PM partner
+			--   menu    chat on/off, show my name, commands (the "..." button)
+			--   tap     a message opens Mention / Private message / Request to join (Retry if it failed)
 			function items:AddLiveChat(chatconfig)
 				chatconfig = chatconfig or {}
 				chatconfig.Title = chatconfig.Title or chatconfig[1] or "Live Chat"
-				local height = math.max(180, tonumber(chatconfig.Height) or 260)
+				local fill = chatconfig.Fill == true
+				local fixedheight = math.max(220, tonumber(chatconfig.Height) or 300)
 				local cooldown = math.max(0, tonumber(chatconfig.Cooldown) or 5)
-				local maxshown = math.max(15, tonumber(chatconfig.MaxMessages) or 30)
+				local maxshown = math.max(15, tonumber(chatconfig.MaxMessages) or 40)
 				local fixedmax = tonumber(chatconfig.MaxLength)
 
 				-- Live chat is opt-in: off by default, choice remembered per device
@@ -6468,11 +7611,6 @@ function Chloex:Window(guiconfig)
 				local chatdirty = true
 				local setchatenabled
 
-				local systemline, switchroom, setmode, toggletagdropdown, updatecategorybuttons
-				local mode, pmtarget = "global", nil
-				local activeroom = "general"
-				local lastincoming = nil
-
 				local function maxlength()
 					if fixedmax then
 						return math.max(10, fixedmax)
@@ -6493,85 +7631,6 @@ function Chloex:Window(guiconfig)
 				local dimhex = hexcolor(theme.Dim)
 				local minehex = hexcolor(theme.Text)
 
-				local chat = instance.frame(sectionadd)
-				chat.Name = "LiveChat"
-				chat.BorderSizePixel = 0
-				chat.LayoutOrder = countitem
-				chat.Size = UDim2.new(1, 0, 0, height)
-				chat.ClipsDescendants = true
-				roundbg(chat, 6, theme.Row)
-
-				local pad = 8
-				local headerh = 34
-				local roomh = 24
-				local barh = isMobile and 32 or 30
-
-				local function pill(parent, name, text, clickable)
-					local frame = clickable and instance.textbutton(parent) or instance.frame(parent)
-					frame.Name = name
-					frame.BackgroundColor3 = theme.Element
-					frame.BackgroundTransparency = 0
-					frame.BorderSizePixel = 0
-					frame.AutomaticSize = Enum.AutomaticSize.X
-					frame.Size = UDim2.new(0, 0, 0, 20)
-					if clickable then
-						frame.Text = ""
-						frame.AutoButtonColor = false
-					end
-					frame.ZIndex = 3
-					instance.uicorner(frame).CornerRadius = UDim.new(1, 0)
-
-					local stroke = instance.uistroke(frame)
-					stroke.Color = theme.Stroke
-					stroke.Thickness = 1
-					stroke.Transparency = 0.35
-
-					local padding = instance.uipadding(frame)
-					padding.PaddingLeft = UDim.new(0, 10)
-					padding.PaddingRight = UDim.new(0, 10)
-
-					local label = instance.textlabel(frame)
-					label.Name = "Label"
-					label.BackgroundTransparency = 1
-					label.AutomaticSize = Enum.AutomaticSize.X
-					label.Size = UDim2.new(0, 0, 1, 0)
-					label.Font = Enum.Font.GothamMedium
-					label.RichText = true
-					label.Text = text
-					label.TextColor3 = theme.SubText
-					label.TextSize = 11
-					label.ZIndex = 4
-
-					return frame, label, stroke
-				end
-
-				local chattitle = instance.textlabel(chat)
-				chattitle.Name = "ChatTitle"
-				chattitle.BackgroundTransparency = 1
-				chattitle.Position = UDim2.new(0, 12, 0, 0)
-				chattitle.Size = UDim2.new(0.3, 0, 0, headerh)
-				chattitle.Font = Enum.Font.GothamBold
-				chattitle.Text = tostring(chatconfig.Title)
-				chattitle.TextColor3 = theme.Text
-				chattitle.TextSize = 13
-				chattitle.TextXAlignment = Enum.TextXAlignment.Left
-				chattitle.TextTruncate = Enum.TextTruncate.AtEnd
-
-				local headerstrip = instance.frame(chat)
-				headerstrip.Name = "HeaderStrip"
-				headerstrip.AnchorPoint = Vector2.new(1, 0.5)
-				headerstrip.Position = UDim2.new(1, -pad, 0, headerh / 2)
-				headerstrip.Size = UDim2.new(0, 0, 0, 20)
-				headerstrip.AutomaticSize = Enum.AutomaticSize.X
-				headerstrip.BackgroundTransparency = 1
-
-				local headerlayout = instance.uilistlayout(headerstrip)
-				headerlayout.FillDirection = Enum.FillDirection.Horizontal
-				headerlayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-				headerlayout.VerticalAlignment = Enum.VerticalAlignment.Center
-				headerlayout.Padding = UDim.new(0, 6)
-				headerlayout.SortOrder = Enum.SortOrder.LayoutOrder
-
 				local localowner = isowner()
 				local hidename = not localowner
 				if not localowner then
@@ -6582,54 +7641,7 @@ function Chloex:Window(guiconfig)
 					end
 				end
 
-				local function hidetext()
-					return hidename and ('<font color="' .. badhex .. '">●</font>  Hidden')
-						or ('<font color="' .. goodhex .. '">●</font>  Public')
-				end
-
-				local modebtn, modelabel = pill(headerstrip, "Mode", "Rooms", true)
-				modebtn.LayoutOrder = 1
-				local hidebtn, hidelabel = pill(headerstrip, "HideName", hidetext(), true)
-				hidebtn.LayoutOrder = 2
-				local onlinepill, onlinelabel = pill(headerstrip, "Online", '<font color="' .. dimhex .. '">●</font>  connecting', false)
-				onlinepill.LayoutOrder = 3
-				local powerbtn, powerlabel, powerstroke = pill(headerstrip, "Power", "", true)
-				powerbtn.LayoutOrder = 0
-
-				local offh = 64
-				local offcard = instance.frame(chat)
-				offcard.Name = "ChatOff"
-				offcard.Position = UDim2.new(0, pad, 0, headerh)
-				offcard.Size = UDim2.new(1, -pad * 2, 0, offh - pad)
-				offcard.BackgroundColor3 = theme.ChatBg
-				offcard.BorderSizePixel = 0
-				offcard.ZIndex = 3
-				offcard.Visible = false
-				instance.uicorner(offcard).CornerRadius = UDim.new(0, 6)
-				local offtext = instance.textlabel(offcard)
-				offtext.BackgroundTransparency = 1
-				offtext.Position = UDim2.new(0, 12, 0, 0)
-				offtext.Size = UDim2.new(1, -170, 1, 0)
-				offtext.Font = Enum.Font.Gotham
-				offtext.Text = "Live chat is off to keep your FPS up. Turn it on to read and send messages."
-				offtext.TextColor3 = theme.Dim
-				offtext.TextSize = 11
-				offtext.TextWrapped = true
-				offtext.TextXAlignment = Enum.TextXAlignment.Left
-				offtext.ZIndex = 4
-				local onbtn = instance.textbutton(offcard)
-				onbtn.AnchorPoint = Vector2.new(1, 0.5)
-				onbtn.Position = UDim2.new(1, -10, 0.5, 0)
-				onbtn.Size = UDim2.new(0, 140, 0, 28)
-				onbtn.BackgroundColor3 = theme.Accent
-				onbtn.BorderSizePixel = 0
-				onbtn.Font = Enum.Font.GothamBold
-				onbtn.Text = "Turn On Live Chat"
-				onbtn.TextColor3 = theme.AccentText
-				onbtn.TextSize = 12
-				onbtn.ZIndex = 4
-				instance.uicorner(onbtn).CornerRadius = UDim.new(1, 0)
-
+				-- views: the five rooms plus one per private-message partner
 				local rooms = {
 					{ id = "general", label = "General" },
 					{ id = "indonesian", label = "Indonesian" },
@@ -6637,184 +7649,1466 @@ function Chloex:Window(guiconfig)
 					{ id = "vietnam", label = "Vietnam" },
 					{ id = "brazilian", label = "Brazilian" },
 				}
+				local views, vieworder = {}, {}
+				local activeview = "general"
+				local lastincoming = nil
 
-				local catbar = instance.scrollingframe(chat)
-				catbar.Name = "CategoryBar"
-				catbar.Position = UDim2.new(0, pad, 0, headerh)
-				catbar.Size = UDim2.new(1, -pad * 2, 0, roomh)
-				catbar.BackgroundTransparency = 1
-				catbar.BorderSizePixel = 0
-				catbar.ScrollBarThickness = 0
-				catbar.ScrollingDirection = Enum.ScrollingDirection.X
-				catbar.CanvasSize = UDim2.new(0, 0, 0, 0)
-				catbar.AutomaticCanvasSize = Enum.AutomaticSize.X
-				catbar.ZIndex = 3
+				local function stripname(name)
+					return (tostring(name or ""):gsub("%s*%[DONATOR%]", ""):gsub("%s*%[TRIAL%]", ""):gsub("%s*%[VIP%]", ""):gsub("%s*%[OWNER%]", ""):gsub("%s*%[STAFF%]", ""))
+				end
 
-				local catlayout = instance.uilistlayout(catbar)
-				catlayout.FillDirection = Enum.FillDirection.Horizontal
-				catlayout.VerticalAlignment = Enum.VerticalAlignment.Center
-				catlayout.Padding = UDim.new(0, 5)
-				catlayout.SortOrder = Enum.SortOrder.LayoutOrder
+				local pad = 8
+				local headerh = 30
+				local striph = 26
+				local barh = isMobile and 34 or 32
+				local statush = 18
+				local sendw = 74
 
-				catbar.InputChanged:Connect(function(input)
+				local chat = instance.frame(sectionadd)
+				chat.Name = "LiveChat"
+				chat.BorderSizePixel = 0
+				chat.LayoutOrder = countitem
+				chat.ClipsDescendants = true
+				chat.Size = UDim2.new(1, 0, 0, fixedheight)
+				roundbg(chat, 6, theme.Row)
+
+				local function icon(parent, name, size, color)
+					local img = instance.imagelabel(parent)
+					img.BackgroundTransparency = 1
+					img.ImageColor3 = color or theme.SubText
+					img.Size = UDim2.new(0, size, 0, size)
+					applyicon(img, name, 48)
+					return img
+				end
+
+				-- header: what you are looking at, read-only presence, and the menu
+				local viewtitle = instance.textlabel(chat)
+				viewtitle.Name = "ViewTitle"
+				viewtitle.BackgroundTransparency = 1
+				viewtitle.Font = FONT_BOLD
+				viewtitle.Position = UDim2.new(0, 12, 0, 0)
+				viewtitle.Size = UDim2.new(1, -180, 0, headerh)
+				viewtitle.Text = tostring(chatconfig.Title)
+				viewtitle.TextColor3 = theme.Text
+				viewtitle.TextSize = 13
+				viewtitle.TextTruncate = Enum.TextTruncate.AtEnd
+				viewtitle.TextXAlignment = Enum.TextXAlignment.Left
+
+				local presence = instance.textlabel(chat)
+				presence.Name = "Presence"
+				presence.AnchorPoint = Vector2.new(1, 0.5)
+				presence.BackgroundTransparency = 1
+				presence.Font = FONT_MEDIUM
+				presence.Position = UDim2.new(1, -42, 0, headerh / 2)
+				presence.RichText = true
+				presence.Size = UDim2.new(0, 130, 0, 16)
+				presence.Text = '<font color="' .. dimhex .. '">●</font>  connecting'
+				presence.TextColor3 = theme.Dim
+				presence.TextSize = 11
+				presence.TextTruncate = Enum.TextTruncate.AtEnd
+				presence.TextXAlignment = Enum.TextXAlignment.Right
+
+				local menubtn = instance.textbutton(chat)
+				menubtn.Name = "Menu"
+				menubtn.AnchorPoint = Vector2.new(1, 0.5)
+				menubtn.AutoButtonColor = false
+				menubtn.Position = UDim2.new(1, -8, 0, headerh / 2)
+				menubtn.Size = UDim2.new(0, 28, 0, 22)
+				menubtn.Text = ""
+				menubtn.ZIndex = 3
+				hoverbg(menubtn, roundbg(menubtn, 6, theme.Inner), theme.Inner, theme.InnerHover)
+				local menuicon = icon(menubtn, "ellipsis", 14, theme.Text)
+				menuicon.AnchorPoint = Vector2.new(0.5, 0.5)
+				menuicon.Position = UDim2.new(0.5, 0, 0.5, 0)
+				menuicon.ZIndex = 4
+
+				-- view strip: filled chip = the view you are in; a number = unread
+				local strip = instance.scrollingframe(chat)
+				strip.Name = "Views"
+				strip.AutomaticCanvasSize = Enum.AutomaticSize.X
+				strip.BackgroundTransparency = 1
+				strip.BorderSizePixel = 0
+				strip.CanvasSize = UDim2.new(0, 0, 0, 0)
+				strip.Position = UDim2.new(0, pad, 0, headerh)
+				strip.ScrollBarThickness = 0
+				strip.ScrollingDirection = Enum.ScrollingDirection.X
+				strip.Size = UDim2.new(1, -pad * 2, 0, striph)
+				strip.ZIndex = 3
+				local striplayout = instance.uilistlayout(strip)
+				striplayout.FillDirection = Enum.FillDirection.Horizontal
+				striplayout.Padding = UDim.new(0, 5)
+				striplayout.SortOrder = Enum.SortOrder.LayoutOrder
+				striplayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				strip.InputChanged:Connect(function(input)
 					if input.UserInputType == Enum.UserInputType.MouseWheel then
 						elevate()
-						local maxscroll = math.max(0, catbar.AbsoluteCanvasSize.X - catbar.AbsoluteWindowSize.X)
-						catbar.CanvasPosition = Vector2.new(math.clamp(catbar.CanvasPosition.X - input.Position.Z * 60, 0, maxscroll), 0)
+						local maxscroll = math.max(0, strip.AbsoluteCanvasSize.X - strip.AbsoluteWindowSize.X)
+						strip.CanvasPosition = Vector2.new(math.clamp(strip.CanvasPosition.X - input.Position.Z * 60, 0, maxscroll), 0)
 					end
 				end)
 
-				local scrolltop = headerh + roomh + 6
-				local scroll = instance.scrollingframe(chat)
-				scroll.Name = "Messages"
-				scroll.Position = UDim2.new(0, pad, 0, scrolltop)
-				scroll.Size = UDim2.new(1, -pad * 2, 1, -(scrolltop + barh + pad * 2))
-				scroll.BackgroundColor3 = theme.ChatBg
-				scroll.BackgroundTransparency = 0
-				scroll.BorderSizePixel = 0
-				scroll.ScrollBarThickness = 3
-				scroll.ScrollBarImageColor3 = theme.Track
-				scroll.ScrollBarImageTransparency = 0.3
-				scroll.ScrollingDirection = Enum.ScrollingDirection.Y
-				scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-				scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-				scroll.ZIndex = 2
-				instance.uicorner(scroll).CornerRadius = UDim.new(0, 6)
+				local list = instance.scrollingframe(chat)
+				list.Name = "Messages"
+				list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+				list.BackgroundColor3 = theme.ChatBg
+				list.BackgroundTransparency = 0
+				list.BorderSizePixel = 0
+				list.CanvasSize = UDim2.new(0, 0, 0, 0)
+				list.ScrollBarImageColor3 = theme.Bar
+				list.ScrollBarImageTransparency = 0.3
+				list.ScrollBarThickness = 3
+				list.ScrollingDirection = Enum.ScrollingDirection.Y
+				list.ZIndex = 2
+				instance.uicorner(list).CornerRadius = UDim.new(0, 6)
+				local liststroke = instance.uistroke(list)
+				liststroke.Color = theme.Stroke
+				liststroke.Thickness = 1
+				liststroke.Transparency = 0.5
+				local listpad = instance.uipadding(list)
+				listpad.PaddingBottom = UDim.new(0, 6)
+				listpad.PaddingLeft = UDim.new(0, 6)
+				listpad.PaddingRight = UDim.new(0, 8)
+				listpad.PaddingTop = UDim.new(0, 6)
+				local listlayout = instance.uilistlayout(list)
+				listlayout.Padding = UDim.new(0, 2)
+				listlayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-				local scrollstroke = instance.uistroke(scroll)
-				scrollstroke.Color = theme.Stroke
-				scrollstroke.Thickness = 1
-				scrollstroke.Transparency = 0.5
+				local empty = instance.frame(list)
+				empty.Name = "Empty"
+				empty.BackgroundTransparency = 1
+				empty.LayoutOrder = -1
+				empty.Size = UDim2.new(1, 0, 0, 70)
+				local emptyicon = icon(empty, "messages-square", 20, theme.Dim)
+				emptyicon.AnchorPoint = Vector2.new(0.5, 0)
+				emptyicon.Position = UDim2.new(0.5, 0, 0, 14)
+				local emptytext = instance.textlabel(empty)
+				emptytext.BackgroundTransparency = 1
+				emptytext.Font = FONT_MEDIUM
+				emptytext.Position = UDim2.new(0, 0, 0, 40)
+				emptytext.Size = UDim2.new(1, 0, 0, 16)
+				emptytext.Text = "No messages here yet. Say hi!"
+				emptytext.TextColor3 = theme.Dim
+				emptytext.TextSize = 12
 
-				local scrollpad = instance.uipadding(scroll)
-				scrollpad.PaddingLeft = UDim.new(0, 8)
-				scrollpad.PaddingRight = UDim.new(0, 8)
-				scrollpad.PaddingTop = UDim.new(0, 6)
-				scrollpad.PaddingBottom = UDim.new(0, 6)
+				-- status line: cooldown, maintenance, offline, send errors (never a chat row)
+				local statusline = instance.frame(chat)
+				statusline.Name = "Status"
+				statusline.AnchorPoint = Vector2.new(0, 1)
+				statusline.BackgroundTransparency = 1
+				statusline.Position = UDim2.new(0, pad + 4, 1, -(pad + barh + 4))
+				statusline.Size = UDim2.new(1, -(pad * 2 + 8), 0, statush)
+				statusline.Visible = false
+				statusline.ZIndex = 3
+				local statusicon = icon(statusline, "info", 12, theme.SubText)
+				statusicon.AnchorPoint = Vector2.new(0, 0.5)
+				statusicon.Position = UDim2.new(0, 0, 0.5, 0)
+				statusicon.ZIndex = 3
+				local statustext = instance.textlabel(statusline)
+				statustext.BackgroundTransparency = 1
+				statustext.Font = FONT_BOLD
+				statustext.Position = UDim2.new(0, 18, 0, 0)
+				statustext.Size = UDim2.new(1, -18, 1, 0)
+				statustext.Text = ""
+				statustext.TextColor3 = theme.SubText
+				statustext.TextSize = 11
+				statustext.TextTruncate = Enum.TextTruncate.AtEnd
+				statustext.TextXAlignment = Enum.TextXAlignment.Left
+				statustext.ZIndex = 3
 
-				local scrolllayout = instance.uilistlayout(scroll)
-				scrolllayout.Padding = UDim.new(0, 7)
-				scrolllayout.SortOrder = Enum.SortOrder.LayoutOrder
-
+				-- composer
 				local bar = instance.frame(chat)
-				bar.Name = "InputBar"
+				bar.Name = "Composer"
 				bar.AnchorPoint = Vector2.new(0, 1)
+				bar.BackgroundTransparency = 1
 				bar.Position = UDim2.new(0, pad, 1, -pad)
 				bar.Size = UDim2.new(1, -pad * 2, 0, barh)
-				bar.BackgroundTransparency = 1
 
-				local sendw = 60
 				local tagw = barh
-
 				local box = instance.textbox(bar)
 				box.Name = "Input"
-				box.Size = UDim2.new(1, -sendw - tagw - 12, 1, 0)
 				box.BackgroundColor3 = theme.Element
 				box.BackgroundTransparency = 0
 				box.BorderSizePixel = 0
-				box.Font = Enum.Font.Gotham
-				box.Text = ""
-				box.PlaceholderText = "Message in #general..."
-				box.PlaceholderColor3 = theme.Dim
-				box.TextColor3 = theme.Text
-				box.TextSize = 12
-				box.TextXAlignment = Enum.TextXAlignment.Left
 				box.ClearTextOnFocus = false
 				box.ClipsDescendants = true
+				box.Font = FONT_MEDIUM
+				box.PlaceholderColor3 = theme.Dim
+				box.PlaceholderText = "Message #general  ·  /help"
+				box.Size = UDim2.new(1, -sendw - tagw - 12, 1, 0)
+				box.Text = ""
+				box.TextColor3 = theme.Text
+				box.TextSize = 12
 				box.TextTruncate = Enum.TextTruncate.AtEnd
+				box.TextXAlignment = Enum.TextXAlignment.Left
 				box.ZIndex = 3
 				instance.uicorner(box).CornerRadius = UDim.new(1, 0)
-
 				local boxstroke = instance.uistroke(box)
 				boxstroke.Color = theme.Stroke
 				boxstroke.Thickness = 1
 				boxstroke.Transparency = 0.35
-
 				local boxpad = instance.uipadding(box)
 				boxpad.PaddingLeft = UDim.new(0, 12)
 				boxpad.PaddingRight = UDim.new(0, 12)
 
+				local counter = instance.textlabel(bar)
+				counter.Name = "Counter"
+				counter.AnchorPoint = Vector2.new(1, 0.5)
+				counter.BackgroundTransparency = 1
+				counter.Font = FONT_BOLD
+				counter.Position = UDim2.new(1, -(sendw + tagw + 12 + 10), 0.5, 0)
+				counter.Size = UDim2.new(0, 48, 0, 14)
+				counter.Text = ""
+				counter.TextColor3 = theme.Dim
+				counter.TextSize = 10
+				counter.TextXAlignment = Enum.TextXAlignment.Right
+				counter.Visible = false
+				counter.ZIndex = 4
+
 				local tagbtn = instance.textbutton(bar)
-				tagbtn.Name = "TagBtn"
+				tagbtn.Name = "Mention"
 				tagbtn.AnchorPoint = Vector2.new(1, 0)
+				tagbtn.AutoButtonColor = false
 				tagbtn.Position = UDim2.new(1, -sendw - 6, 0, 0)
 				tagbtn.Size = UDim2.new(0, tagw, 1, 0)
-				tagbtn.BackgroundColor3 = theme.Element
-				tagbtn.BackgroundTransparency = 0
-				tagbtn.BorderSizePixel = 0
-				tagbtn.Font = Enum.Font.GothamBold
-				tagbtn.Text = "@"
-				tagbtn.TextColor3 = theme.Text
-				tagbtn.TextSize = 14
-				tagbtn.AutoButtonColor = true
+				tagbtn.Text = ""
 				tagbtn.ZIndex = 3
-				instance.uicorner(tagbtn).CornerRadius = UDim.new(1, 0)
-
-				local tagbtnstroke = instance.uistroke(tagbtn)
-				tagbtnstroke.Color = theme.Stroke
-				tagbtnstroke.Thickness = 1
-				tagbtnstroke.Transparency = 0.35
+				hoverbg(tagbtn, roundbg(tagbtn, barh / 2, theme.Element), theme.Element, theme.ElementHover)
+				local tagicon = icon(tagbtn, "at-sign", 14, theme.Text)
+				tagicon.AnchorPoint = Vector2.new(0.5, 0.5)
+				tagicon.Position = UDim2.new(0.5, 0, 0.5, 0)
+				tagicon.ZIndex = 4
 
 				local send = instance.textbutton(bar)
 				send.Name = "Send"
 				send.AnchorPoint = Vector2.new(1, 0)
-				send.Position = UDim2.new(1, 0, 0, 0)
-				send.Size = UDim2.new(0, sendw, 1, 0)
+				send.AutoButtonColor = false
 				send.BackgroundColor3 = guiconfig.Color
 				send.BorderSizePixel = 0
-				send.Font = Enum.Font.GothamBold
-				send.Text = "Send"
-				send.TextColor3 = theme.AccentText
-				send.TextSize = 12
-				send.AutoButtonColor = true
+				send.Position = UDim2.new(1, 0, 0, 0)
+				send.Size = UDim2.new(0, sendw, 1, 0)
+				send.Text = ""
 				send.ZIndex = 3
 				instance.uicorner(send).CornerRadius = UDim.new(1, 0)
+				local sendlayout = instance.uilistlayout(send)
+				sendlayout.FillDirection = Enum.FillDirection.Horizontal
+				sendlayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+				sendlayout.Padding = UDim.new(0, 5)
+				sendlayout.SortOrder = Enum.SortOrder.LayoutOrder
+				sendlayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				local sendicon = icon(send, "send-horizontal", 13, theme.AccentText)
+				sendicon.LayoutOrder = 1
+				sendicon.ZIndex = 4
+				local sendlabel = instance.textlabel(send)
+				sendlabel.AutomaticSize = Enum.AutomaticSize.X
+				sendlabel.BackgroundTransparency = 1
+				sendlabel.Font = FONT_BOLD
+				sendlabel.LayoutOrder = 2
+				sendlabel.Size = UDim2.new(0, 0, 1, 0)
+				sendlabel.Text = "Send"
+				sendlabel.TextColor3 = theme.AccentText
+				sendlabel.TextSize = 12
+				sendlabel.ZIndex = 4
 
+				-- "new messages" pill while you are scrolled up
+				local newpill = instance.textbutton(chat)
+				newpill.Name = "NewMessages"
+				newpill.AnchorPoint = Vector2.new(0.5, 1)
+				newpill.AutoButtonColor = false
+				newpill.AutomaticSize = Enum.AutomaticSize.X
+				newpill.BackgroundColor3 = guiconfig.Color
+				newpill.BorderSizePixel = 0
+				newpill.Size = UDim2.new(0, 0, 0, 22)
+				newpill.Text = ""
+				newpill.Visible = false
+				newpill.ZIndex = 6
+				instance.uicorner(newpill).CornerRadius = UDim.new(1, 0)
+				local newpad = instance.uipadding(newpill)
+				newpad.PaddingLeft = UDim.new(0, 10)
+				newpad.PaddingRight = UDim.new(0, 10)
+				local newlayout = instance.uilistlayout(newpill)
+				newlayout.FillDirection = Enum.FillDirection.Horizontal
+				newlayout.Padding = UDim.new(0, 5)
+				newlayout.SortOrder = Enum.SortOrder.LayoutOrder
+				newlayout.VerticalAlignment = Enum.VerticalAlignment.Center
+				local newicon = icon(newpill, "arrow-down", 12, theme.AccentText)
+				newicon.LayoutOrder = 1
+				newicon.ZIndex = 7
+				local newtext = instance.textlabel(newpill)
+				newtext.AutomaticSize = Enum.AutomaticSize.X
+				newtext.BackgroundTransparency = 1
+				newtext.Font = FONT_BOLD
+				newtext.LayoutOrder = 2
+				newtext.Size = UDim2.new(0, 0, 1, 0)
+				newtext.Text = "New messages"
+				newtext.TextColor3 = theme.AccentText
+				newtext.TextSize = 11
+				newtext.ZIndex = 7
+
+				-- chat off: one card, one button
+				local offcard = instance.frame(chat)
+				offcard.Name = "ChatOff"
+				offcard.BackgroundColor3 = theme.ChatBg
+				offcard.BorderSizePixel = 0
+				offcard.Position = UDim2.new(0, pad, 0, headerh)
+				offcard.Size = UDim2.new(1, -pad * 2, 0, 84)
+				offcard.Visible = false
+				offcard.ZIndex = 3
+				instance.uicorner(offcard).CornerRadius = UDim.new(0, 6)
+				local officon = icon(offcard, "message-circle", 18, theme.SubText)
+				officon.AnchorPoint = Vector2.new(0, 0.5)
+				officon.Position = UDim2.new(0, 14, 0.5, 0)
+				officon.ZIndex = 4
+				local offtext = instance.textlabel(offcard)
+				offtext.BackgroundTransparency = 1
+				offtext.Font = FONT_MEDIUM
+				offtext.Position = UDim2.new(0, 42, 0, 0)
+				offtext.Size = UDim2.new(1, -190, 1, 0)
+				offtext.Text = "Live chat is off to keep your FPS up. Turn it on to read and send messages."
+				offtext.TextColor3 = theme.SubText
+				offtext.TextSize = 12
+				offtext.TextWrapped = true
+				offtext.TextXAlignment = Enum.TextXAlignment.Left
+				offtext.ZIndex = 4
+				local onbtn = instance.textbutton(offcard)
+				onbtn.AnchorPoint = Vector2.new(1, 0.5)
+				onbtn.AutoButtonColor = false
+				onbtn.BackgroundColor3 = guiconfig.Color
+				onbtn.BorderSizePixel = 0
+				onbtn.Font = FONT_BOLD
+				onbtn.Position = UDim2.new(1, -12, 0.5, 0)
+				onbtn.Size = UDim2.new(0, 132, 0, 30)
+				onbtn.Text = "Turn on chat"
+				onbtn.TextColor3 = theme.AccentText
+				onbtn.TextSize = 12
+				onbtn.ZIndex = 4
+				instance.uicorner(onbtn).CornerRadius = UDim.new(1, 0)
+
+				-- popovers (menu, mention picker, message actions, help) share one
+				-- click-outside layer, so whichever is open closes on any outside tap
+				local dismiss = instance.textbutton(chat)
+				dismiss.Name = "Dismiss"
+				dismiss.AutoButtonColor = false
+				dismiss.BackgroundTransparency = 1
+				dismiss.Size = UDim2.new(1, 0, 1, 0)
+				dismiss.Text = ""
+				dismiss.Visible = false
+				dismiss.ZIndex = 25
+				local openpop = nil
+				local function closepop()
+					if openpop then
+						openpop.Visible = false
+					end
+					openpop = nil
+					dismiss.Visible = false
+				end
+				local function showpop(frame)
+					closepop()
+					openpop = frame
+					frame.Visible = true
+					dismiss.Visible = true
+				end
+				dismiss.Activated:Connect(closepop)
+
+				local function popover(name, width)
+					local frame = instance.frame(chat)
+					frame.Name = name
+					frame.AutomaticSize = Enum.AutomaticSize.Y
+					frame.BackgroundColor3 = theme.Card
+					frame.BorderSizePixel = 0
+					frame.Size = UDim2.new(0, width, 0, 0)
+					frame.Visible = false
+					frame.ZIndex = 30
+					instance.uicorner(frame).CornerRadius = UDim.new(0, 8)
+					local stroke = instance.uistroke(frame)
+					stroke.Color = theme.Stroke
+					stroke.Thickness = 1
+					local fpad = instance.uipadding(frame)
+					fpad.PaddingBottom = UDim.new(0, 6)
+					fpad.PaddingLeft = UDim.new(0, 6)
+					fpad.PaddingRight = UDim.new(0, 6)
+					fpad.PaddingTop = UDim.new(0, 6)
+					local flayout = instance.uilistlayout(frame)
+					flayout.Padding = UDim.new(0, 2)
+					flayout.SortOrder = Enum.SortOrder.LayoutOrder
+					return frame
+				end
+
+				-- one row of a popover: icon, label, optional sub line and right-hand value
+				local function poprow(parent, order, iconname, text, sub, onclick, disabled)
+					local row = instance.textbutton(parent)
+					row.AutoButtonColor = false
+					row.BackgroundColor3 = theme.Element
+					row.BackgroundTransparency = 1
+					row.BorderSizePixel = 0
+					row.LayoutOrder = order
+					row.Size = UDim2.new(1, 0, 0, sub and 40 or 30)
+					row.Text = ""
+					row.ZIndex = 31
+					instance.uicorner(row).CornerRadius = UDim.new(0, 6)
+					local img = icon(row, iconname, 14, disabled and theme.Dim or theme.SubText)
+					img.AnchorPoint = Vector2.new(0, 0.5)
+					img.Position = UDim2.new(0, 8, 0.5, 0)
+					img.ZIndex = 32
+					local label = instance.textlabel(row)
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.Position = UDim2.new(0, 30, 0, sub and 5 or 0)
+					label.Size = UDim2.new(1, -78, 0, sub and 16 or 30)
+					label.Text = text
+					label.TextColor3 = disabled and theme.Dim or theme.Text
+					label.TextSize = 12
+					label.TextTruncate = Enum.TextTruncate.AtEnd
+					label.TextXAlignment = Enum.TextXAlignment.Left
+					label.ZIndex = 32
+					if sub then
+						local sublabel = instance.textlabel(row)
+						sublabel.BackgroundTransparency = 1
+						sublabel.Font = FONT_MEDIUM
+						sublabel.Position = UDim2.new(0, 30, 0, 21)
+						sublabel.Size = UDim2.new(1, -78, 0, 14)
+						sublabel.Text = sub
+						sublabel.TextColor3 = theme.Dim
+						sublabel.TextSize = 11
+						sublabel.TextTruncate = Enum.TextTruncate.AtEnd
+						sublabel.TextXAlignment = Enum.TextXAlignment.Left
+						sublabel.ZIndex = 32
+					end
+					if not disabled then
+						row.MouseEnter:Connect(function()
+							row.BackgroundTransparency = 0
+						end)
+						row.MouseLeave:Connect(function()
+							row.BackgroundTransparency = 1
+						end)
+						row.Activated:Connect(function()
+							elevate()
+							if onclick then
+								local ok, err = pcall(onclick)
+								if not ok then
+									warn("LiveChat action error:", err)
+								end
+							end
+						end)
+					end
+					return row, label
+				end
+
+				-- little on/off switch drawn at the right of a menu row
+				local function rowswitch(row)
+					local track = instance.frame(row)
+					track.AnchorPoint = Vector2.new(1, 0.5)
+					track.BackgroundColor3 = theme.Field
+					track.BorderSizePixel = 0
+					track.Position = UDim2.new(1, -8, 0.5, 0)
+					track.Size = UDim2.new(0, 30, 0, 16)
+					track.ZIndex = 32
+					instance.uicorner(track).CornerRadius = UDim.new(1, 0)
+					local knob = instance.frame(track)
+					knob.BackgroundColor3 = theme.Text
+					knob.BorderSizePixel = 0
+					knob.Position = UDim2.new(0, 2, 0, 2)
+					knob.Size = UDim2.new(0, 12, 0, 12)
+					knob.ZIndex = 33
+					instance.uicorner(knob).CornerRadius = UDim.new(1, 0)
+					return function(on)
+						track.BackgroundColor3 = on and guiconfig.Color or theme.Field
+						knob.BackgroundColor3 = on and theme.AccentText or theme.Text
+						sv.ts:Create(knob, TweenInfo.new(0.15), { Position = on and UDim2.new(0, 16, 0, 2) or UDim2.new(0, 2, 0, 2) }):Play()
+					end
+				end
+
+				local status = { sticky = nil, token = 0 }
+				local tones = {
+					info = { color = theme.SubText, icon = "info" },
+					warn = { color = theme.Gold, icon = "hourglass" },
+					bad = { color = theme.Bad, icon = "triangle-alert" },
+				}
+
+				local layoutchat
+
+				local function drawstatus(text, tone)
+					if not chatenabled then
+						statusline.Visible = false
+						return
+					end
+					local look = tones[tone] or tones.info
+					statustext.Text = text
+					statustext.TextColor3 = look.color
+					statusicon.ImageColor3 = look.color
+					applyicon(statusicon, look.icon, 48)
+					statusline.Visible = true
+					layoutchat()
+				end
+
+				-- A transient line (seconds) shows over the sticky one, which comes back after.
+				local function setstatus(text, tone, seconds)
+					elevate()
+					if not text or text == "" then
+						statusline.Visible = false
+						layoutchat()
+						return
+					end
+					status.token = status.token + 1
+					local token = status.token
+					drawstatus(text, tone)
+					if seconds then
+						task.delay(seconds, function()
+							if status.token ~= token or not chat.Parent then
+								return
+							end
+							elevate()
+							if status.sticky then
+								drawstatus(status.sticky[1], status.sticky[2])
+							else
+								statusline.Visible = false
+								layoutchat()
+							end
+						end)
+					end
+				end
+
+				local function setsticky(text, tone)
+					status.sticky = text and { text, tone } or nil
+					if text then
+						setstatus(text, tone)
+					else
+						status.token = status.token + 1
+						statusline.Visible = false
+						layoutchat()
+					end
+				end
+
+				-- Server codes become sentences; the doubled "maintenance: Maintenance"
+				-- prefix is dropped. Returns text, tone, seconds.
+				local function cleanpause(why)
+					why = tostring(why or ""):gsub("^%s+", ""):gsub("^[Mm]aintenance[%s,:%.%-]*", "")
+					return why
+				end
+				local function friendlyerror(err)
+					err = tostring(err or "")
+					local wait = err:match("^cooldown:(%d+)")
+					if wait then
+						return "Slow down, you can send again in " .. wait .. "s", "warn", tonumber(wait)
+					end
+					if err:match("^maintenance") then
+						local why = cleanpause(err:match("^maintenance:(.*)") or "")
+						return "Chat is under maintenance" .. (why ~= "" and ("  ·  " .. why) or ""), "warn", 6
+					end
+					if err:match("^badword") then
+						return "Message blocked by the chat filter", "bad", 6
+					end
+					if err == "Sharing key is prohibited" then
+						return "Message blocked: never share license keys", "bad", 6
+					end
+					if err == "no response" then
+						return "Can't reach the chat server, try again in a moment", "bad", 5
+					end
+					if err == "empty" then
+						return nil
+					end
+					if err == "bad key" or err == "missing uid" or err == "not connected" then
+						return "Chat is unavailable right now, reconnecting", "bad", 5
+					end
+					return "Message not sent", "bad", 5
+				end
+
+				local chatpause = { chat = false, dm = false, msg = "" }
+
+				local function activekind()
+					local v = views[activeview]
+					return v and v.kind or "room"
+				end
+
+				local function sendblocked()
+					if activekind() == "pm" then
+						return chatpause.dm
+					end
+					return chatpause.chat
+				end
+
+				local function pausetext()
+					local who = activekind() == "pm" and "Private messages are paused" or "Chat is under maintenance"
+					local why = cleanpause(chatpause.msg)
+					return who .. (why ~= "" and ("  ·  " .. why) or "")
+				end
+
+				local sending = false
+				local lastsent = -math.huge
+				local countdowntoken = 0
+
+				local function setsend(enabled, label)
+					if enabled and sendblocked() then
+						enabled, label = false, "Paused"
+					end
+					sendlabel.Text = label or "Send"
+					sendicon.Visible = (label or "Send") == "Send"
+					send.Active = enabled
+					send.BackgroundColor3 = enabled and guiconfig.Color or theme.Track
+					sendlabel.TextColor3 = enabled and theme.AccentText or theme.SubText
+				end
+
+				local function countdown(seconds)
+					countdowntoken = countdowntoken + 1
+					local token = countdowntoken
+					for i = math.floor(seconds), 1, -1 do
+						if not chat.Parent or countdowntoken ~= token then
+							return
+						end
+						elevate()
+						setsend(false, tostring(i) .. "s")
+						task.wait(1)
+					end
+					if chat.Parent and countdowntoken == token and not sending then
+						elevate()
+						setsend(true, "Send")
+					end
+				end
+
+				local function updateplaceholder()
+					local v = views[activeview]
+					if sendblocked() then
+						box.PlaceholderText = pausetext()
+					elseif v and v.kind == "pm" then
+						box.PlaceholderText = "Private message to " .. tostring(v.target)
+					else
+						box.PlaceholderText = "Message #" .. tostring(v and v.id or "general") .. "  ·  /help"
+					end
+				end
+
+				local function applypause()
+					updateplaceholder()
+					if sendblocked() then
+						setsticky(pausetext(), "warn")
+						setsend(false, "Paused")
+					else
+						if status.sticky and (status.sticky[1]:find("maintenance", 1, true) or status.sticky[1]:find("paused", 1, true)) then
+							setsticky(nil)
+						end
+						if not sending and sendlabel.Text == "Paused" then
+							setsend(true, "Send")
+						end
+					end
+				end
+
+				local function chatonscreen()
+					return chatenabled
+						and chat.Parent ~= nil
+						and opensection
+						and chloeex.Enabled
+						and dropshadowholder.Visible
+						and layerspagelayout.CurrentPage == scrollayers
+				end
+
+				-- message rows are pooled: switching rooms rebinds the same frames
+				local namecache = {}
+				local function namecolor(name)
+					local cached = namecache[name]
+					if cached then
+						return cached
+					end
+					local h = 0
+					for i = 1, #name do
+						h = (h * 31 + name:byte(i)) % 360
+					end
+					cached = Color3.fromHSV(h / 360, 0.42, 0.92)
+					namecache[name] = cached
+					return cached
+				end
+
+				local avatarsize = 26
+				local left = 6 + avatarsize + 9
+				local nametoid = {}
 				local unhiddenusers = {}
+				local msgpool, linepool = {}, {}
+				local usedmsg, usedline = 0, 0
+				local openactions
 
-				local tagdropdown = instance.frame(chat)
-				tagdropdown.Name = "TagDropdown"
-				tagdropdown.AnchorPoint = Vector2.new(1, 1)
-				tagdropdown.Position = UDim2.new(1, -pad, 1, -barh - pad - 6)
-				tagdropdown.Size = UDim2.new(0, 210, 0, 150)
-				tagdropdown.BackgroundColor3 = theme.Card
-				tagdropdown.BorderSizePixel = 0
-				tagdropdown.Visible = false
-				tagdropdown.ZIndex = 20
-				instance.uicorner(tagdropdown).CornerRadius = UDim.new(0, 8)
+				local function buildmsgrow()
+					elevate()
+					local item = instance.frame(list)
+					item.Name = "Msg"
+					item.AutomaticSize = Enum.AutomaticSize.Y
+					item.BackgroundTransparency = 1
+					item.BorderSizePixel = 0
+					item.Size = UDim2.new(1, 0, 0, 0)
+					item.ZIndex = 3
+					local bg = roundbg(item, 6, theme.Mine)
+					bg.ImageTransparency = 1
+					local stroke = instance.uistroke(item)
+					stroke.Color = theme.Gold
+					stroke.Thickness = 1
+					stroke.Transparency = 1
+					local ipad = instance.uipadding(item)
+					ipad.PaddingBottom = UDim.new(0, 5)
 
-				local tagstroke = instance.uistroke(tagdropdown)
-				tagstroke.Color = theme.Stroke
-				tagstroke.Thickness = 1
+					local avatar = instance.imagelabel(item)
+					avatar.Name = "Avatar"
+					avatar.BorderSizePixel = 0
+					avatar.Position = UDim2.new(0, 6, 0, 5)
+					avatar.Size = UDim2.new(0, avatarsize, 0, avatarsize)
+					avatar.ZIndex = 4
+					instance.uicorner(avatar).CornerRadius = UDim.new(1, 0)
+					local initial = instance.textlabel(avatar)
+					initial.BackgroundTransparency = 1
+					initial.Font = FONT_BOLD
+					initial.Size = UDim2.new(1, 0, 1, 0)
+					initial.TextColor3 = Color3.fromRGB(255, 255, 255)
+					initial.TextSize = 12
+					initial.ZIndex = 5
+					local anon = icon(avatar, "user", 14, Color3.fromRGB(255, 255, 255))
+					anon.AnchorPoint = Vector2.new(0.5, 0.5)
+					anon.Position = UDim2.new(0.5, 0, 0.5, 0)
+					anon.ZIndex = 5
 
-				local tagtitle = instance.textlabel(tagdropdown)
-				tagtitle.Name = "TagTitle"
-				tagtitle.BackgroundTransparency = 1
-				tagtitle.Position = UDim2.new(0, 10, 0, 6)
-				tagtitle.Size = UDim2.new(1, -20, 0, 18)
-				tagtitle.Font = Enum.Font.GothamBold
-				tagtitle.Text = "Tag a player"
-				tagtitle.TextColor3 = theme.Text
-				tagtitle.TextSize = 11
-				tagtitle.TextXAlignment = Enum.TextXAlignment.Left
-				tagtitle.ZIndex = 21
+					local who = instance.textlabel(item)
+					who.Name = "Who"
+					who.BackgroundTransparency = 1
+					who.Font = FONT_BOLD
+					who.Position = UDim2.new(0, left, 0, 5)
+					who.RichText = true
+					who.Size = UDim2.new(1, -left - 46, 0, 15)
+					who.TextColor3 = theme.Text
+					who.TextSize = 12
+					who.TextTruncate = Enum.TextTruncate.AtEnd
+					who.TextXAlignment = Enum.TextXAlignment.Left
+					who.ZIndex = 4
 
-				local tagscroll = instance.scrollingframe(tagdropdown)
-				tagscroll.Name = "TagScroll"
-				tagscroll.Position = UDim2.new(0, 6, 0, 28)
-				tagscroll.Size = UDim2.new(1, -12, 1, -34)
-				tagscroll.BackgroundTransparency = 1
-				tagscroll.BorderSizePixel = 0
-				tagscroll.ScrollBarThickness = 2
-				tagscroll.ScrollBarImageColor3 = theme.Track
-				tagscroll.ScrollingDirection = Enum.ScrollingDirection.Y
-				tagscroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-				tagscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-				tagscroll.ZIndex = 21
+					-- the time has its own column, so a long name can never cut it off
+					local stamp = instance.textlabel(item)
+					stamp.Name = "Time"
+					stamp.AnchorPoint = Vector2.new(1, 0)
+					stamp.BackgroundTransparency = 1
+					stamp.Font = FONT_MEDIUM
+					stamp.Position = UDim2.new(1, -6, 0, 6)
+					stamp.Size = UDim2.new(0, 42, 0, 14)
+					stamp.TextColor3 = theme.Dim
+					stamp.TextSize = 10
+					stamp.TextXAlignment = Enum.TextXAlignment.Right
+					stamp.ZIndex = 4
 
-				local taglayout = instance.uilistlayout(tagscroll)
-				taglayout.Padding = UDim.new(0, 3)
-				taglayout.SortOrder = Enum.SortOrder.LayoutOrder
+					local body = instance.textlabel(item)
+					body.Name = "Body"
+					body.AutomaticSize = Enum.AutomaticSize.Y
+					body.BackgroundTransparency = 1
+					body.Font = FONT_MEDIUM
+					body.Position = UDim2.new(0, left, 0, 22)
+					body.RichText = true
+					body.Size = UDim2.new(1, -left - 8, 0, 0)
+					body.TextColor3 = theme.SubText
+					body.TextSize = 12
+					body.TextWrapped = true
+					body.TextXAlignment = Enum.TextXAlignment.Left
+					body.TextYAlignment = Enum.TextYAlignment.Top
+					body.ZIndex = 4
+
+					local record = {
+						frame = item,
+						bg = bg,
+						stroke = stroke,
+						avatar = avatar,
+						initial = initial,
+						anon = anon,
+						who = who,
+						time = stamp,
+						body = body,
+						entry = nil,
+						grouped = false,
+					}
+					item.InputBegan:Connect(function(input)
+						if
+							input.UserInputType == Enum.UserInputType.MouseButton1
+							or input.UserInputType == Enum.UserInputType.Touch
+						then
+							if record.entry and openactions then
+								openactions(record)
+							end
+						end
+					end)
+					return record
+				end
+
+				local function buildlinerow()
+					local line = instance.textlabel(list)
+					line.Name = "Line"
+					line.AutomaticSize = Enum.AutomaticSize.Y
+					line.BackgroundTransparency = 1
+					line.Font = FONT_MEDIUM
+					line.RichText = true
+					line.Size = UDim2.new(1, 0, 0, 0)
+					line.TextColor3 = theme.Dim
+					line.TextSize = 11
+					line.TextWrapped = true
+					line.TextXAlignment = Enum.TextXAlignment.Center
+					line.TextYAlignment = Enum.TextYAlignment.Top
+					line.ZIndex = 3
+					local lpad = instance.uipadding(line)
+					lpad.PaddingBottom = UDim.new(0, 3)
+					lpad.PaddingTop = UDim.new(0, 3)
+					return { frame = line }
+				end
+
+				-- What one message looks like: name, tier badge, game and time on top,
+				-- body below. grouped = same sender within two minutes, body only.
+				local function describe(entry)
+					local msg = entry.data
+					local name = tostring(msg.name or "??****")
+					local mine = msg.mine == true
+					local ownermsg = (msg.owner == true) or (msg.tier == "owner") or (mine and localowner)
+					local staffmsg = not ownermsg and (msg.staff == true or msg.tier == "staff")
+					local cleanname = stripname(name)
+					local hidden = (msg.hidden == true) or (name:find("%*") ~= nil)
+					if ownermsg then
+						cleanname = "Pilat"
+						hidden = false
+					elseif staffmsg then
+						hidden = false
+					end
+					local trialmsg = not ownermsg and not staffmsg
+						and ((msg.trial == true) or (msg.tier == "trial") or (name:find("%[TRIAL%]") ~= nil) or (mine and istrial()))
+					local donatormsg = not ownermsg and not staffmsg and not trialmsg
+						and ((msg.donator == true) or (msg.tier == "donator") or (name:find("%[DONATOR%]") ~= nil) or (mine and isdonator()))
+					return {
+						name = name,
+						cleanname = cleanname,
+						mine = mine,
+						owner = ownermsg,
+						staff = staffmsg,
+						trial = trialmsg,
+						donator = donatormsg,
+						hidden = hidden and not mine,
+					}
+				end
+
+				local function bindmsg(record, entry, grouped)
+					local msg = entry.data
+					local info = entry.info or describe(entry)
+					entry.info = info
+					record.entry = entry
+					record.grouped = grouped
+					local ts = tonumber(entry.ts) or os.time()
+					local tint = namecolor(info.name)
+
+					record.avatar.Visible = not grouped
+					record.who.Visible = not grouped
+					record.time.Visible = (not grouped) or entry.pending == true or entry.failed == true
+					record.body.Position = UDim2.new(0, left, 0, grouped and 2 or 22)
+					record.time.Position = UDim2.new(1, -6, 0, grouped and 3 or 6)
+
+					if not grouped then
+						record.avatar.BackgroundColor3 = info.owner and Color3.fromRGB(255, 255, 255)
+							or (info.staff and Color3.fromRGB(168, 85, 247))
+							or tint
+						-- a hidden sender keeps an anonymous avatar: their real headshot
+						-- would give away who they are
+						local av = tostring(msg.av or msg.uid or "")
+						if av == "" and info.mine then
+							av = localuserid()
+						end
+						if info.owner then
+							av = "8478064806"
+						end
+						local showhead = nil
+						if info.hidden then
+							showhead = nil
+						elseif av:match("^%d+$") and av ~= "0" then
+							showhead = av
+						elseif nametoid[info.name] then
+							showhead = nametoid[info.name]
+						elseif not info.name:find("%*") and info.name ~= "" then
+							task.spawn(function()
+								elevate()
+								local ingame = sv.plrs:FindFirstChild(info.name)
+								if ingame and ingame.UserId > 0 then
+									nametoid[info.name] = tostring(ingame.UserId)
+									if record.entry == entry and record.avatar.Parent then
+										record.avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(ingame.UserId) .. "&w=48&h=48"
+										record.initial.Visible = false
+									end
+								end
+							end)
+						end
+						if showhead then
+							record.avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(showhead) .. "&w=48&h=48"
+							record.initial.Visible = false
+							record.anon.Visible = false
+						else
+							record.avatar.Image = ""
+							record.anon.Visible = info.hidden
+							record.initial.Visible = not info.hidden
+							record.initial.Text = info.owner and "S" or info.name:sub(1, 1):upper()
+						end
+
+						local whocolor = info.owner and "#FFFFFF" or (info.staff and "#A855F7") or (info.mine and minehex or hexcolor(tint))
+						local whotext = string.format('<font color="%s">%s</font>', whocolor, escaperich(info.cleanname))
+						if info.owner then
+							whotext = whotext .. '  <font color="#EF4444">OWNER</font>'
+						elseif info.staff then
+							whotext = whotext .. '  <font color="#A855F7">STAFF</font>'
+						elseif info.donator then
+							whotext = whotext .. '  <font color="' .. goldhex .. '">DONATOR</font>'
+						elseif info.trial then
+							whotext = whotext .. '  <font color="' .. bluehex .. '">TRIAL</font>'
+						end
+						if msg.game and msg.game ~= "" then
+							whotext = whotext .. '  <font color="' .. dimhex .. '" size="10">' .. escaperich(msg.game) .. "</font>"
+						end
+						record.who.Text = whotext
+					end
+
+					if entry.pending then
+						record.time.Text = "sending"
+						record.time.TextColor3 = theme.Dim
+					elseif entry.failed then
+						record.time.Text = "failed"
+						record.time.TextColor3 = theme.Bad
+					else
+						record.time.Text = os.date("%H:%M", ts)
+						record.time.TextColor3 = theme.Dim
+					end
+
+					local myuname = localusername()
+					local mydname = localdisplayname()
+					if mydname == "" then
+						mydname = myuname
+					end
+					local mentionedme = false
+					local formatted = escaperich(tostring(entry.cleanbody or msg.text or "")):gsub("@([%w_]+)", function(tag)
+						local isme = (tag:lower() == myuname:lower()) or (tag:lower() == mydname:lower())
+							or (localowner and tag:lower() == "pilat")
+						if isme then
+							mentionedme = true
+							return '<font color="' .. goldhex .. '"><b>@' .. tag .. "</b></font>"
+						end
+						return '<font color="' .. bluehex .. '"><b>@' .. tag .. "</b></font>"
+					end)
+					record.body.Text = formatted
+					record.body.TextColor3 = info.mine and theme.Text or theme.SubText
+					record.body.TextTransparency = entry.pending and 0.45 or 0
+
+					if mentionedme and not info.mine then
+						record.bg.ImageColor3 = theme.Mention
+						record.bg.ImageTransparency = 0
+						record.stroke.Transparency = 0.4
+					elseif info.mine then
+						record.bg.ImageColor3 = theme.Mine
+						record.bg.ImageTransparency = 0
+						record.stroke.Transparency = 1
+					else
+						record.bg.ImageTransparency = 1
+						record.stroke.Transparency = 1
+					end
+				end
+
+				local function nearbottom()
+					local ok, result = pcall(function()
+						return list.AbsoluteCanvasSize.Y - list.AbsoluteWindowSize.Y - list.CanvasPosition.Y < 40
+					end)
+					return not ok or result
+				end
+
+				local newcount = 0
+				local function scrolltobottom()
+					newcount = 0
+					newpill.Visible = false
+					task.defer(function()
+						elevate()
+						pcall(function()
+							local y = list.AbsoluteCanvasSize.Y - list.AbsoluteWindowSize.Y
+							list.CanvasPosition = Vector2.new(0, math.max(0, y))
+						end)
+					end)
+				end
+				newpill.Activated:Connect(scrolltobottom)
+				list:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+					if newpill.Visible and nearbottom() then
+						newcount = 0
+						newpill.Visible = false
+					end
+				end)
+
+				local function isgrouped(prev, entry)
+					return prev ~= nil
+						and prev.type == "msg"
+						and entry.type == "msg"
+						and not prev.failed
+						and not entry.failed
+						and prev.senderkey ~= nil
+						and prev.senderkey == entry.senderkey
+						and math.abs((tonumber(entry.ts) or 0) - (tonumber(prev.ts) or 0)) <= 120
+				end
+
+				local function bindat(index, entry, prev)
+					if entry.type == "msg" then
+						usedmsg = usedmsg + 1
+						local record = msgpool[usedmsg]
+						if not record then
+							record = buildmsgrow()
+							msgpool[usedmsg] = record
+						end
+						bindmsg(record, entry, isgrouped(prev, entry))
+						record.frame.LayoutOrder = index
+						record.frame.Visible = true
+					else
+						usedline = usedline + 1
+						local record = linepool[usedline]
+						if not record then
+							record = buildlinerow()
+							linepool[usedline] = record
+						end
+						record.frame.Text = entry.text
+						record.frame.LayoutOrder = index
+						record.frame.Visible = true
+					end
+				end
+
+				local renderedrev = {}
+				local function renderview()
+					elevate()
+					local view = views[activeview]
+					local entries = view and view.entries or {}
+					usedmsg, usedline = 0, 0
+					for index, entry in ipairs(entries) do
+						bindat(index, entry, entries[index - 1])
+					end
+					for i = usedmsg + 1, #msgpool do
+						msgpool[i].frame.Visible = false
+						msgpool[i].entry = nil
+					end
+					for i = usedline + 1, #linepool do
+						linepool[i].frame.Visible = false
+					end
+					empty.Visible = #entries == 0
+					if view then
+						renderedrev[view.id] = view.rev
+						view.rendered = #entries
+					end
+					scrolltobottom()
+				end
+
+				local function refreshentry(entry)
+					for i = 1, usedmsg do
+						local record = msgpool[i]
+						if record.entry == entry then
+							bindmsg(record, entry, record.grouped)
+							return
+						end
+					end
+				end
+
+				-- chips of the view strip
+				local chips = {}
+				local updatechips, updatebadge, switchview
+
+				local function makechip(view)
+					local chip = instance.textbutton(strip)
+					chip.Name = "View_" .. view.id
+					chip.AutoButtonColor = false
+					chip.AutomaticSize = Enum.AutomaticSize.X
+					chip.BackgroundColor3 = theme.Element
+					chip.BackgroundTransparency = 1
+					chip.BorderSizePixel = 0
+					chip.Size = UDim2.new(0, 0, 0, 22)
+					chip.Text = ""
+					chip.ZIndex = 3
+					instance.uicorner(chip).CornerRadius = UDim.new(1, 0)
+					local cstroke = instance.uistroke(chip)
+					cstroke.Color = theme.Stroke
+					cstroke.Thickness = 1
+					cstroke.Transparency = 0.4
+					local cpad = instance.uipadding(chip)
+					cpad.PaddingLeft = UDim.new(0, 10)
+					cpad.PaddingRight = UDim.new(0, view.kind == "pm" and 6 or 10)
+					local clayout = instance.uilistlayout(chip)
+					clayout.FillDirection = Enum.FillDirection.Horizontal
+					clayout.Padding = UDim.new(0, 5)
+					clayout.SortOrder = Enum.SortOrder.LayoutOrder
+					clayout.VerticalAlignment = Enum.VerticalAlignment.Center
+					if view.kind == "pm" then
+						local pmicon = icon(chip, "mail", 11, theme.Gold)
+						pmicon.LayoutOrder = 0
+						pmicon.ZIndex = 4
+					end
+					local label = instance.textlabel(chip)
+					label.AutomaticSize = Enum.AutomaticSize.X
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.LayoutOrder = 1
+					label.Size = UDim2.new(0, 0, 1, 0)
+					label.Text = view.label
+					label.TextColor3 = theme.SubText
+					label.TextSize = 11
+					label.ZIndex = 4
+					local count = instance.frame(chip)
+					count.AutomaticSize = Enum.AutomaticSize.X
+					count.BackgroundColor3 = theme.Bad
+					count.BorderSizePixel = 0
+					count.LayoutOrder = 2
+					count.Size = UDim2.new(0, 0, 0, 14)
+					count.Visible = false
+					count.ZIndex = 4
+					instance.uicorner(count).CornerRadius = UDim.new(1, 0)
+					local countpad = instance.uipadding(count)
+					countpad.PaddingLeft = UDim.new(0, 4)
+					countpad.PaddingRight = UDim.new(0, 4)
+					local counttext = instance.textlabel(count)
+					counttext.AutomaticSize = Enum.AutomaticSize.X
+					counttext.BackgroundTransparency = 1
+					counttext.Font = FONT_BOLD
+					counttext.Size = UDim2.new(0, 0, 1, 0)
+					counttext.Text = ""
+					counttext.TextColor3 = Color3.fromRGB(255, 255, 255)
+					counttext.TextSize = 9
+					counttext.ZIndex = 5
+					if view.kind == "pm" then
+						local closer = instance.imagebutton(chip)
+						closer.AutoButtonColor = false
+						closer.BackgroundTransparency = 1
+						closer.LayoutOrder = 3
+						closer.Size = UDim2.new(0, 14, 0, 14)
+						closer.ImageColor3 = theme.Dim
+						closer.ZIndex = 5
+						applyicon(closer, "x", 48)
+						closer.Activated:Connect(function()
+							elevate()
+							local wasactive = activeview == view.id
+							views[view.id] = nil
+							for i, id in ipairs(vieworder) do
+								if id == view.id then
+									table.remove(vieworder, i)
+									break
+								end
+							end
+							chips[view.id] = nil
+							chip:Destroy()
+							if wasactive then
+								switchview("general")
+							end
+							updatebadge()
+						end)
+					end
+					chip.MouseEnter:Connect(function()
+						if activeview ~= view.id then
+							chip.BackgroundTransparency = 0.5
+						end
+					end)
+					chip.MouseLeave:Connect(function()
+						if activeview ~= view.id then
+							chip.BackgroundTransparency = 1
+						end
+					end)
+					chip.Activated:Connect(function()
+						switchview(view.id)
+					end)
+					chip.LayoutOrder = #vieworder
+					chips[view.id] = { frame = chip, label = label, count = count, counttext = counttext, stroke = cstroke }
+				end
+
+				local function addview(id, label, kind, target)
+					if views[id] then
+						return views[id]
+					end
+					local view = { id = id, label = label, kind = kind, target = target, entries = {}, unread = 0, rev = 0 }
+					views[id] = view
+					vieworder[#vieworder + 1] = id
+					makechip(view)
+					return view
+				end
+				for _, r in ipairs(rooms) do
+					addview(r.id, r.label, "room")
+				end
+
+				local function pmview(name)
+					name = stripname(tostring(name or ""):gsub("^@", ""))
+					if name == "" then
+						return nil
+					end
+					return addview("pm:" .. name:lower(), name, "pm", name)
+				end
+
+				updatechips = function()
+					elevate()
+					for _, id in ipairs(vieworder) do
+						local view, chip = views[id], chips[id]
+						if view and chip then
+							local selected = activeview == id
+							chip.frame.BackgroundColor3 = selected and guiconfig.Color or theme.Element
+							chip.frame.BackgroundTransparency = selected and 0 or 1
+							chip.label.TextColor3 = selected and theme.AccentText or theme.SubText
+							chip.stroke.Transparency = selected and 1 or 0.4
+							local n = selected and 0 or view.unread
+							chip.count.Visible = n > 0
+							chip.counttext.Text = n > 99 and "99+" or tostring(n)
+						end
+					end
+				end
+
+				-- the sidebar count is opt-in (TabBadge = true); unread counts stay on the room chips
+				updatebadge = function()
+					if chatconfig.TabBadge ~= true then
+						return
+					end
+					local total = 0
+					for _, id in ipairs(vieworder) do
+						local view = views[id]
+						if view then
+							total = total + view.unread
+						end
+					end
+					pcall(function()
+						sections:SetBadge(total > 0 and total or nil)
+					end)
+				end
+
+				local function settitle()
+					local v = views[activeview]
+					if not v then
+						viewtitle.Text = tostring(chatconfig.Title)
+					elseif v.kind == "pm" then
+						viewtitle.Text = "Private  ·  " .. tostring(v.target)
+					else
+						viewtitle.Text = "# " .. v.label
+					end
+				end
+
+				switchview = function(id)
+					elevate()
+					closepop()
+					if not views[id] then
+						id = "general"
+					end
+					activeview = id
+					local view = views[id]
+					view.unread = 0
+					settitle()
+					updatechips()
+					updatebadge()
+					updateplaceholder()
+					applypause()
+					task.defer(function()
+						elevate()
+						pcall(function()
+							local chip = chips[id] and chips[id].frame
+							if chip and strip.Parent then
+								local relx = chip.AbsolutePosition.X - strip.AbsolutePosition.X + strip.CanvasPosition.X
+								local chipw = chip.AbsoluteSize.X
+								local vieww = strip.AbsoluteWindowSize.X
+								if relx < strip.CanvasPosition.X then
+									strip.CanvasPosition = Vector2.new(math.max(0, relx - 6), 0)
+								elseif relx + chipw > strip.CanvasPosition.X + vieww then
+									local maxscroll = math.max(0, strip.AbsoluteCanvasSize.X - vieww)
+									strip.CanvasPosition = Vector2.new(math.min(maxscroll, relx + chipw - vieww + 6), 0)
+								end
+							end
+						end)
+					end)
+					if chatonscreen() then
+						chatdirty = false
+						renderview()
+					else
+						chatdirty = true
+					end
+				end
+
+				-- incoming entries are batched: one bind pass per burst, not per message
+				local pending = {}
+				local flushqueued = false
+				local function flush()
+					flushqueued = false
+					elevate()
+					local batch = pending
+					pending = {}
+					local view = views[activeview]
+					if not view or not chatonscreen() then
+						chatdirty = true
+						return
+					end
+					local stick = nearbottom()
+					if renderedrev[view.id] ~= view.rev then
+						renderview()
+						return
+					end
+					local entries = view.entries
+					for _, entry in ipairs(batch) do
+						if entry.view == view.id then
+							local index = table.find(entries, entry)
+							if index and index > (view.rendered or 0) then
+								bindat(index, entry, entries[index - 1])
+								view.rendered = index
+							end
+						end
+					end
+					empty.Visible = #entries == 0
+					if stick then
+						scrolltobottom()
+					else
+						newcount = newcount + #batch
+						newtext.Text = newcount == 1 and "1 new message" or (tostring(newcount) .. " new messages")
+						newpill.Visible = true
+					end
+				end
+
+				local function pushentry(view, entry)
+					entry.view = view.id
+					local entries = view.entries
+					entries[#entries + 1] = entry
+					if #entries > maxshown then
+						table.remove(entries, 1)
+						view.rev = view.rev + 1
+					end
+					local visible = view.id == activeview and chatonscreen()
+					if visible then
+						pending[#pending + 1] = entry
+						if not flushqueued then
+							flushqueued = true
+							task.delay(0.15, flush)
+						end
+					else
+						if view.id == activeview then
+							chatdirty = true
+						end
+						if entry.type == "msg" and not (entry.data and entry.data.mine) then
+							view.unread = view.unread + 1
+							updatechips()
+							updatebadge()
+						end
+					end
+				end
+
+				-- A system line goes to the view you are in, never to every room.
+				local function systemline(text)
+					local view = views[activeview] or views.general
+					pushentry(view, {
+						type = "line",
+						text = '<font color="' .. dimhex .. '"><i>' .. escaperich(text) .. "</i></font>",
+						ts = os.time(),
+					})
+				end
+
+				local function notifymention(msg, text)
+					if msg.mine == true or (tonumber(msg.ts) or os.time()) < os.time() - 60 then
+						return
+					end
+					local me = localusername():lower()
+					local dn = localdisplayname():lower()
+					for tag in tostring(text or ""):gmatch("@([%w_]+)") do
+						local t = tag:lower()
+						if t == me or (dn ~= "" and t == dn) or (localowner and t == "pilat") then
+							pcall(function()
+								Chloex:Notify({
+									Title = "Pilat",
+									Description = "Live Chat",
+									Content = stripname(msg.name or "Someone") .. " mentioned you in chat",
+									Duration = 4,
+									Color = theme.Gold,
+								})
+							end)
+							return
+						end
+					end
+				end
+
+				local function senderkey(msg)
+					local key = tostring(msg.av or msg.uid or "")
+					if key == "" then
+						key = tostring(msg.name or "")
+					end
+					if msg.mine then
+						key = "me"
+					end
+					return key
+				end
+
+				local function append(msg)
+					if type(msg) ~= "table" then
+						return
+					end
+					local ts = tonumber(msg.ts) or os.time()
+					if ts < os.time() - chatttl() then
+						return
+					end
+					local view, cleanbody
+					if msg.pm then
+						view = pmview(msg.mine and msg.to_name or msg.name)
+						cleanbody = tostring(msg.text or "")
+					else
+						local room
+						room, cleanbody = parsemessageroom(msg)
+						view = views[room] or views.general
+					end
+					if not view then
+						return
+					end
+					-- the server copy of a line already shown as "sending" replaces it
+					if msg.mine then
+						for i = #view.entries, math.max(1, #view.entries - 12), -1 do
+							local e = view.entries[i]
+							if e.type == "msg" and e.pending and e.cleanbody == cleanbody and math.abs(ts - e.ts) <= 30 then
+								e.pending = false
+								e.failed = false
+								e.data = msg
+								e.ts = ts
+								e.info = nil
+								refreshentry(e)
+								return
+							end
+						end
+					end
+					local entry = { type = "msg", data = msg, cleanbody = cleanbody, ts = ts, senderkey = senderkey(msg) }
+					local info = describe(entry)
+					entry.info = info
+					if not info.hidden and not info.mine and info.cleanname ~= "" and info.cleanname:lower() ~= "unknown" then
+						unhiddenusers[info.cleanname] = { name = info.cleanname, ts = ts }
+					end
+					pushentry(view, entry)
+					notifymention(msg, cleanbody)
+					if msg.pm and not msg.mine and ts >= os.time() - 60 and not (activeview == view.id and chatonscreen()) then
+						pcall(function()
+							Chloex:Notify({
+								Title = "Pilat",
+								Description = "Private message",
+								Content = info.cleanname .. ": " .. tostring(cleanbody):sub(1, 80),
+								Duration = 4,
+								Color = theme.Gold,
+							})
+						end)
+					end
+				end
+
+				local function expire()
+					local cutoff = os.time() - chatttl()
+					local changed = false
+					for _, view in pairs(views) do
+						local entries = view.entries
+						while #entries > 0 and (tonumber(entries[1].ts) or 0) < cutoff and not entries[1].pending do
+							table.remove(entries, 1)
+							view.rev = view.rev + 1
+							if view.id == activeview then
+								changed = true
+							end
+						end
+					end
+					if changed and chatonscreen() then
+						renderview()
+					end
+				end
+
+				local function refreshifdirty()
+					if chatdirty and chatonscreen() then
+						chatdirty = false
+						pending = {}
+						local view = views[activeview]
+						if view then
+							view.unread = 0
+							updatechips()
+							updatebadge()
+						end
+						renderview()
+					end
+				end
+
+				-- mention picker
+				local picker = popover("MentionPicker", 210)
+				picker.AnchorPoint = Vector2.new(1, 1)
 
 				local function inserttag(name)
 					local tagstr = "@" .. name .. " "
@@ -6831,699 +9125,122 @@ function Chloex:Window(guiconfig)
 					end)
 				end
 
-				local function populatetagdropdown()
-					for _, child in ipairs(tagscroll:GetChildren()) do
+				local function clearpop(frame)
+					for _, child in ipairs(frame:GetChildren()) do
 						if child:IsA("GuiObject") then
-							pcall(function()
-								child:Destroy()
-							end)
+							child:Destroy()
 						end
 					end
+				end
 
-					local list = {}
+				local function poptitle(frame, text)
+					local title = instance.textlabel(frame)
+					title.BackgroundTransparency = 1
+					title.Font = FONT_BOLD
+					title.LayoutOrder = 0
+					title.Size = UDim2.new(1, 0, 0, 22)
+					title.Text = text
+					title.TextColor3 = theme.SubText
+					title.TextSize = 11
+					title.TextTruncate = Enum.TextTruncate.AtEnd
+					title.TextXAlignment = Enum.TextXAlignment.Left
+					title.ZIndex = 31
+					local tpad = instance.uipadding(title)
+					tpad.PaddingLeft = UDim.new(0, 6)
+					return title
+				end
+
+				local function openpicker()
+					elevate()
+					clearpop(picker)
+					poptitle(picker, "MENTION A PLAYER")
+					local people = {}
 					for _, v in pairs(unhiddenusers) do
-						table.insert(list, v)
+						people[#people + 1] = v
 					end
-					table.sort(list, function(a, b)
+					table.sort(people, function(a, b)
 						return (a.ts or 0) > (b.ts or 0)
 					end)
-
-					if #list == 0 then
-						local empty = instance.textlabel(tagscroll)
-						empty.BackgroundTransparency = 1
-						empty.Size = UDim2.new(1, 0, 0, 50)
-						empty.Font = Enum.Font.Gotham
-						empty.Text = "No unhidden players in chat yet.\n(Hidden users cannot be tagged)"
-						empty.TextColor3 = theme.Dim
-						empty.TextSize = 11
-						empty.TextWrapped = true
-						empty.ZIndex = 22
-						return
+					if #people == 0 then
+						poprow(picker, 1, "user", "Nobody to mention yet", "Players with a hidden name can't be mentioned", nil, true)
 					end
-
-					for idx, info in ipairs(list) do
-						local uname = info.name
-						local btn = instance.textbutton(tagscroll)
-						btn.Name = "User_" .. uname
-						btn.LayoutOrder = idx
-						btn.BackgroundColor3 = theme.Element
-						btn.BackgroundTransparency = 0
-						btn.BorderSizePixel = 0
-						btn.Size = UDim2.new(1, 0, 0, 24)
-						btn.Font = Enum.Font.GothamMedium
-						btn.Text = "  @" .. uname
-						btn.TextColor3 = theme.Text
-						btn.TextSize = 11
-						btn.TextXAlignment = Enum.TextXAlignment.Left
-						btn.AutoButtonColor = true
-						btn.ZIndex = 22
-						instance.uicorner(btn).CornerRadius = UDim.new(1, 0)
-
-						btn.Activated:Connect(function()
-							elevate()
-							tagdropdown.Visible = false
-							inserttag(uname)
+					for index, person in ipairs(people) do
+						if index > 8 then
+							break
+						end
+						poprow(picker, index, "at-sign", person.name, nil, function()
+							closepop()
+							inserttag(person.name)
 						end)
 					end
+					picker.Position = UDim2.new(1, -(pad + sendw + 6), 1, -(pad + barh + 6))
+					showpop(picker)
 				end
-
-				toggletagdropdown = function()
-					elevate()
-					tagdropdown.Visible = not tagdropdown.Visible
-					if tagdropdown.Visible then
-						populatetagdropdown()
-					end
-				end
-				tagbtn.Activated:Connect(toggletagdropdown)
-
-				local shown = 0
-
-				local function nearbottom()
-					local ok, result = pcall(function()
-						return scroll.AbsoluteCanvasSize.Y - scroll.AbsoluteWindowSize.Y - scroll.CanvasPosition.Y < 40
-					end)
-					return not ok or result
-				end
-
-				local function scrolltobottom()
-					task.defer(function()
-						elevate()
-						pcall(function()
-							local y = scroll.AbsoluteCanvasSize.Y - scroll.AbsoluteWindowSize.Y
-							scroll.CanvasPosition = Vector2.new(0, math.max(0, y))
-						end)
-					end)
-				end
-
-				local function trim()
-					if shown <= maxshown then
-						return
-					end
-					local oldest, oldestorder
-					for _, child in ipairs(scroll:GetChildren()) do
-						if child:IsA("GuiObject") then
-							if not oldestorder or child.LayoutOrder < oldestorder then
-								oldest, oldestorder = child, child.LayoutOrder
-							end
-						end
-					end
-					if oldest then
-						pcall(function()
-							oldest:Destroy()
-						end)
-					end
-				end
-
-				local function addline(richtext, ts)
-					if not chat.Parent then
-						return
-					end
-					local stick = nearbottom()
-					shown = shown + 1
-					local line = instance.textlabel(scroll)
-					line.Name = "Line"
-					line.LayoutOrder = shown
-					line.BackgroundTransparency = 1
-					line.Size = UDim2.new(1, 0, 0, 0)
-					line.AutomaticSize = Enum.AutomaticSize.Y
-					line.Font = Enum.Font.Gotham
-					line.RichText = true
-					line.Text = richtext
-					line.TextColor3 = theme.Text
-					line.TextSize = 11
-					line.TextWrapped = true
-					line.TextXAlignment = Enum.TextXAlignment.Center
-					line.TextYAlignment = Enum.TextYAlignment.Top
-					line.ZIndex = 3
-					pcall(function()
-						line:SetAttribute("ts", tonumber(ts) or os.time())
-					end)
-					trim()
-					if stick then
-						scrolltobottom()
-					end
-				end
-
-				local function namecolor(name)
-					local h = 0
-					for i = 1, #name do
-						h = (h * 31 + name:byte(i)) % 360
-					end
-					return Color3.fromHSV(h / 360, 0.42, 0.92)
-				end
-
-				local avatarsize = 26
-				local nametoid = {}
-
-				local rainbowowner = '<font color="#EF4444"><b>[OWNER]</b></font>'
-
-				local function addmessage(msg, overridetext)
-					if not chat.Parent then
-						return
-					end
-					local stick = nearbottom()
-					shown = shown + 1
-					local name = tostring(msg.name or "??****")
-					local mine = msg.mine == true
-					local ts = tonumber(msg.ts) or os.time()
-					local tint = namecolor(name)
-					local rawav = tostring(msg.av or msg.uid or "")
-					if rawav == "" and mine then
-						rawav = localuserid()
-					end
-
-					-- owner badge only from what the server decided (by uid); the
-					-- name is free text anyone can set to "Pilat"
-					local ownermsg = (msg.owner == true)
-						or (msg.tier == "owner")
-						or (mine and localowner)
-					-- staff is decided by the server from the Roblox UserId, never by name
-					local staffmsg = not ownermsg and (msg.staff == true or msg.tier == "staff")
-					local staffhex = "#A855F7"
-
-					local cleanname = name:gsub("%s*%[DONATOR%]", ""):gsub("%s*%[TRIAL%]", ""):gsub("%s*%[VIP%]", ""):gsub("%s*%[OWNER%]", ""):gsub("%s*%[STAFF%]", "")
-					local hidden = (msg.hidden == true) or (name:find("%*") ~= nil)
-					if ownermsg then
-						cleanname = "Pilat"
-						hidden = false
-					elseif staffmsg then
-						hidden = false
-					end
-
-					local item = instance.frame(scroll)
-					item.Name = "Msg"
-					item.LayoutOrder = shown
-					item.BackgroundTransparency = 1
-					item.BorderSizePixel = 0
-					item.Size = UDim2.new(1, 0, 0, 0)
-					item.AutomaticSize = Enum.AutomaticSize.Y
-					item.ZIndex = 3
-					if mine then
-						roundbg(item, 6, theme.Mine)
-					end
-					pcall(function()
-						item:SetAttribute("ts", ts)
-					end)
-
-					local avatar = instance.imagelabel(item)
-					avatar.Name = "Avatar"
-					avatar.BackgroundColor3 = ownermsg and Color3.fromRGB(255, 255, 255)
-						or (staffmsg and Color3.fromRGB(168, 85, 247))
-						or tint
-					avatar.BorderSizePixel = 0
-					avatar.Position = UDim2.new(0, 6, 0, 5)
-					avatar.Size = UDim2.new(0, avatarsize, 0, avatarsize)
-					avatar.Image = ""
-					avatar.ZIndex = 4
-					instance.uicorner(avatar).CornerRadius = UDim.new(1, 0)
-
-					local initial = nil
-					local function showinitial()
-						if initial then
-							return
-						end
-						initial = instance.textlabel(avatar)
-						initial.BackgroundTransparency = 1
-						initial.Size = UDim2.new(1, 0, 1, 0)
-						initial.Font = Enum.Font.GothamBold
-						initial.Text = ownermsg and "S" or name:sub(1, 1):upper()
-						initial.TextColor3 = Color3.fromRGB(255, 255, 255)
-						initial.TextSize = 12
-						initial.ZIndex = 5
-					end
-
-					local function applyheadshot(targetuid)
-						if not avatar or not avatar.Parent then
-							return
-						end
-						avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(targetuid) .. "&w=48&h=48"
-						if initial then
-							initial:Destroy()
-							initial = nil
-						end
-					end
-
-					local av = rawav
-					if ownermsg then
-						av = "8478064806"
-						applyheadshot(av)
-					elseif av:match("^%d+$") and av ~= "0" then
-						applyheadshot(av)
-					elseif not name:find("%*") and name ~= "" then
-						if nametoid[name] then
-							applyheadshot(nametoid[name])
-						else
-							showinitial()
-							task.spawn(function()
-								elevate()
-								local ingame = sv.plrs:FindFirstChild(name)
-								if ingame and ingame.UserId > 0 then
-									nametoid[name] = tostring(ingame.UserId)
-									applyheadshot(ingame.UserId)
-								end
-							end)
-						end
+				tagbtn.Activated:Connect(function()
+					if openpop == picker then
+						closepop()
 					else
-						showinitial()
-					end
-
-					local left = 6 + avatarsize + 9
-					if not hidden and cleanname ~= "" and cleanname:lower() ~= "unknown" then
-						unhiddenusers[cleanname] = {
-							name = cleanname,
-							av = ownermsg and "8478064806" or av,
-							ts = ts,
-						}
-					end
-
-					item.InputBegan:Connect(function(input)
-						if
-							input.UserInputType == Enum.UserInputType.MouseButton1
-							or input.UserInputType == Enum.UserInputType.Touch
-						then
-							elevate()
-							if hidden then
-								systemline("Cannot tag " .. cleanname .. " — user has Hide Name ON")
-							else
-								inserttag(cleanname)
-								systemline("Tagged @" .. cleanname)
-							end
-						end
-					end)
-
-					local trialmsg = not ownermsg and not staffmsg
-						and ((msg.trial == true) or (msg.tier == "trial") or (name:find("%[TRIAL%]") ~= nil) or (mine and istrial()))
-					local donatormsg = not ownermsg
-						and not staffmsg
-						and not trialmsg
-						and ((msg.donator == true) or (msg.tier == "donator") or (name:find("%[DONATOR%]") ~= nil) or (mine and isdonator()))
-
-					local whocolor = ownermsg and "#FFFFFF" or (staffmsg and staffhex) or (mine and minehex or hexcolor(tint))
-					local whotext = string.format('<font color="%s"><b>%s</b></font>', whocolor, escaperich(cleanname))
-					if ownermsg then
-						whotext = whotext .. "  " .. rainbowowner
-					elseif staffmsg then
-						whotext = whotext .. '  <font color="' .. staffhex .. '"><b>[STAFF]</b></font>'
-					elseif donatormsg then
-						whotext = whotext .. '  <font color="' .. goldhex .. '"><b>DONATOR</b></font>'
-					elseif trialmsg then
-						whotext = whotext .. '  <font color="' .. bluehex .. '"><b>TRIAL</b></font>'
-					end
-					if msg.pm then
-						whotext = '<font color="' .. goldhex .. '">PM</font>  ' .. whotext
-						if mine and msg.to_name then
-							whotext = whotext .. '  <font color="' .. dimhex .. '">to</font>  <font color="' .. goldhex .. '">' .. escaperich(msg.to_name) .. "</font>"
-						end
-					end
-
-					local who = instance.textlabel(item)
-					who.Name = "Who"
-					who.BackgroundTransparency = 1
-					who.Position = UDim2.new(0, left, 0, 5)
-					who.Size = UDim2.new(1, -left - 8, 0, 14)
-					who.Font = Enum.Font.GothamBold
-					who.RichText = true
-					who.Text = string.format(
-						'%s  <font color="%s" size="10">%s · %s</font>',
-						whotext,
-						dimhex,
-						escaperich(msg.game or "?"),
-						os.date("%H:%M", ts)
-					)
-					who.TextColor3 = theme.Text
-					who.TextSize = 12
-					who.TextXAlignment = Enum.TextXAlignment.Left
-					who.TextTruncate = Enum.TextTruncate.AtEnd
-					who.ZIndex = 4
-
-					local rawbody = tostring(overridetext or msg.text or "")
-					local escapedbody = escaperich(rawbody)
-					local myuname = localusername()
-					local mydname = localdisplayname()
-					if mydname == "" then
-						mydname = myuname
-					end
-					local mentionedme = false
-
-					local formattedbody = escapedbody:gsub("@([%w_]+)", function(taguser)
-						local isme = (taguser:lower() == myuname:lower())
-							or (taguser:lower() == mydname:lower())
-							or (localowner and taguser:lower() == "Pilat")
-						if isme then
-							mentionedme = true
-							return '<font color="' .. goldhex .. '"><b>@' .. taguser .. "</b></font>"
-						end
-						return '<font color="' .. bluehex .. '"><b>@' .. taguser .. "</b></font>"
-					end)
-
-					if mentionedme and not mine then
-						local mentionstroke = instance.uistroke(item)
-						mentionstroke.Color = theme.Gold
-						mentionstroke.Thickness = 1
-						mentionstroke.Transparency = 0.4
-						local mentionbg = item:FindFirstChild("Bg") or roundbg(item, 6, theme.Mention)
-						mentionbg.ImageColor3 = theme.Mention
-					end
-
-					local body = instance.textlabel(item)
-					body.Name = "Body"
-					body.BackgroundTransparency = 1
-					body.Position = UDim2.new(0, left, 0, 21)
-					body.Size = UDim2.new(1, -left - 8, 0, 0)
-					body.AutomaticSize = Enum.AutomaticSize.Y
-					body.Font = Enum.Font.Gotham
-					body.RichText = true
-					body.Text = formattedbody
-					body.TextColor3 = mine and theme.Text or theme.SubText
-					body.TextSize = 12
-					body.TextWrapped = true
-					body.TextXAlignment = Enum.TextXAlignment.Left
-					body.TextYAlignment = Enum.TextYAlignment.Top
-					body.ZIndex = 4
-
-					trim()
-					if stick then
-						scrolltobottom()
-					end
-				end
-
-				local roombuttons = {}
-				local roomunread = {}
-				local roommessages = {}
-				for _, r in ipairs(rooms) do
-					roomunread[r.id] = 0
-					roommessages[r.id] = {}
-				end
-
-				updatecategorybuttons = function()
-					elevate()
-					for _, r in ipairs(rooms) do
-						local entry = roombuttons[r.id]
-						if entry then
-							local selected = (activeroom == r.id)
-							local unread = roomunread[r.id] or 0
-							local text = r.label
-							if not selected and unread > 0 then
-								text = string.format('%s  <font color="%s">●</font>', r.label, badhex)
-							end
-							entry.label.Text = text
-							entry.frame.BackgroundColor3 = selected and guiconfig.Color or theme.Element
-							entry.frame.BackgroundTransparency = 0
-							entry.label.TextColor3 = selected and theme.AccentText or theme.SubText
-							entry.stroke.Transparency = selected and 1 or 0.35
-						end
-					end
-				end
-
-				switchroom = function(targetroom)
-					elevate()
-					if not roommessages[targetroom] then
-						targetroom = "general"
-					end
-					activeroom = targetroom
-					roomunread[activeroom] = 0
-					updatecategorybuttons()
-
-					if mode ~= "pm" then
-						box.PlaceholderText = "Message in #" .. activeroom .. "..."
-					end
-
-					task.defer(function()
-						elevate()
-						pcall(function()
-							local entry = roombuttons[targetroom]
-							local btn = entry and entry.frame
-							if btn and catbar.Parent then
-								local relx = btn.AbsolutePosition.X - catbar.AbsolutePosition.X + catbar.CanvasPosition.X
-								local btnw = btn.AbsoluteSize.X
-								local vieww = catbar.AbsoluteWindowSize.X
-								if relx < catbar.CanvasPosition.X then
-									catbar.CanvasPosition = Vector2.new(math.max(0, relx - 6), 0)
-								elseif relx + btnw > catbar.CanvasPosition.X + vieww then
-									local maxscroll = math.max(0, catbar.AbsoluteCanvasSize.X - vieww)
-									catbar.CanvasPosition = Vector2.new(math.min(maxscroll, relx + btnw - vieww + 6), 0)
-								end
-							end
-						end)
-					end)
-
-					for _, child in ipairs(scroll:GetChildren()) do
-						if child:IsA("GuiObject") then
-							pcall(function()
-								child:Destroy()
-							end)
-						end
-					end
-					shown = 0
-
-					for _, entry in ipairs(roommessages[activeroom] or {}) do
-						if entry.type == "msg" then
-							addmessage(entry.data, entry.cleanbody)
-						elseif entry.type == "line" then
-							addline(entry.text, entry.ts)
-						end
-					end
-					scrolltobottom()
-				end
-
-				for idx, r in ipairs(rooms) do
-					local rid = r.id
-					local frame, label, stroke = pill(catbar, "Room_" .. rid, r.label, true)
-					frame.LayoutOrder = idx
-					roombuttons[rid] = { frame = frame, label = label, stroke = stroke }
-					frame.Activated:Connect(function()
-						switchroom(rid)
-					end)
-				end
-				updatecategorybuttons()
-
-				local function chatonscreen()
-					return chatenabled
-						and chat.Parent ~= nil
-						and opensection
-						and chloeex.Enabled
-						and dropshadowholder.Visible
-						and layerspagelayout.CurrentPage == scrollayers
-				end
-
-				local renderqueue = {}
-				local flushqueued = false
-				local function pushrender(entry)
-					if not chatonscreen() then
-						chatdirty = true
-						return
-					end
-					renderqueue[#renderqueue + 1] = entry
-					if flushqueued then
-						return
-					end
-					flushqueued = true
-					task.delay(0.2, function()
-						flushqueued = false
-						elevate()
-						local batch = renderqueue
-						renderqueue = {}
-						if not chatonscreen() then
-							chatdirty = true
-							return
-						end
-						if #batch > maxshown then
-							switchroom(activeroom)
-							return
-						end
-						for _, e in ipairs(batch) do
-							if e[1] == "msg" then
-								addmessage(e[2], e[3])
-							else
-								addline(e[2], e[3])
-							end
-						end
-					end)
-				end
-
-				local function refreshifdirty()
-					if chatdirty and chatonscreen() then
-						chatdirty = false
-						renderqueue = {}
-						switchroom(activeroom)
-					end
-				end
-
-				local function notifymention(msg, text)
-					if msg.mine == true or (tonumber(msg.ts) or os.time()) < os.time() - 60 then
-						return
-					end
-					local me = localusername():lower()
-					local dn = localdisplayname():lower()
-					for tag in tostring(text or ""):gmatch("@([%w_]+)") do
-						local t = tag:lower()
-						if t == me or (dn ~= "" and t == dn) or (localowner and t == "Pilat") then
-							pcall(function()
-								Chloex:Notify({
-									Title = "Pilat",
-									Description = "Live Chat",
-									Content = tostring(msg.name or "Someone") .. " mentioned you in chat",
-									Duration = 4,
-									Color = theme.Gold,
-								})
-							end)
-							return
-						end
-					end
-				end
-
-				local function expire()
-					local cutoff = os.time() - chatttl()
-					for _, child in ipairs(scroll:GetChildren()) do
-						if child:IsA("GuiObject") then
-							local ts = tonumber(child:GetAttribute("ts")) or 0
-							if ts < cutoff then
-								pcall(function()
-									child:Destroy()
-								end)
-							end
-						end
-					end
-					for _, list in pairs(roommessages) do
-						while #list > 0 and (tonumber(list[1].ts) or 0) < cutoff do
-							table.remove(list, 1)
-						end
-					end
-				end
-
-				local function append(msg)
-					if type(msg) ~= "table" then
-						return
-					end
-					local ts = tonumber(msg.ts) or os.time()
-					if ts < os.time() - chatttl() then
-						return
-					end
-
-					if msg.pm then
-						for _, r in ipairs(rooms) do
-							local list = roommessages[r.id]
-							if list then
-								list[#list + 1] = { type = "msg", data = msg, cleanbody = msg.text, ts = ts }
-								if #list > maxshown then
-									table.remove(list, 1)
-								end
-							end
-						end
-						notifymention(msg, msg.text)
-						pushrender({ "msg", msg, msg.text })
-						return
-					end
-
-					local room, cleanbody = parsemessageroom(msg)
-					local list = roommessages[room] or roommessages.general
-					list[#list + 1] = { type = "msg", data = msg, cleanbody = cleanbody, ts = ts }
-					if #list > maxshown then
-						table.remove(list, 1)
-					end
-
-					notifymention(msg, cleanbody)
-					if room == activeroom then
-						pushrender({ "msg", msg, cleanbody })
-					else
-						roomunread[room] = (roomunread[room] or 0) + 1
-						updatecategorybuttons()
-					end
-				end
-
-				systemline = function(text)
-					local ts = os.time()
-					local formatted = '<font color="' .. dimhex .. '"><i>' .. escaperich(text) .. "</i></font>"
-					for _, r in ipairs(rooms) do
-						local list = roommessages[r.id]
-						if list then
-							list[#list + 1] = { type = "line", text = formatted, ts = ts }
-							if #list > maxshown then
-								table.remove(list, 1)
-							end
-						end
-					end
-					pushrender({ "line", formatted, ts })
-				end
-
-				local sending = false
-				local lastsent = -math.huge
-
-				-- Maintenance (/pauseglobalchat): the bot refuses sends anyway; this keeps the box honest
-				local chatpause = { chat = false, dm = false, msg = "" }
-				local function sendblocked()
-					if mode == "pm" then
-						return chatpause.dm
-					end
-					return chatpause.chat
-				end
-
-				local function setsend(enabled, label)
-					if enabled and sendblocked() then
-						enabled, label = false, "Paused"
-					end
-					send.Text = label or "Send"
-					send.Active = enabled
-					send.BackgroundColor3 = enabled and guiconfig.Color or theme.Track
-					send.TextColor3 = enabled and theme.AccentText or theme.SubText
-				end
-
-				local function countdown(seconds)
-					for i = seconds, 1, -1 do
-						if not chat.Parent then
-							return
-						end
-						setsend(false, tostring(i) .. "s")
-						task.wait(1)
-					end
-				end
-
-				local function applypause()
-					if sendblocked() then
-						box.PlaceholderText = mode == "pm" and "Private messages are paused (maintenance)"
-							or "Global chat is under maintenance"
-						setsend(false, "Paused")
-					else
-						box.PlaceholderText = (mode == "pm" and pmtarget) and ("Private message to " .. pmtarget .. "...")
-							or ("Message in #" .. activeroom .. "...")
-						if not sending and send.Text == "Paused" then
-							setsend(true, "Send")
-						end
-					end
-				end
-
-				setmode = function(m, target)
-					elevate()
-					if m == "pm" then
-						if target and target ~= "" then
-							pmtarget = tostring(target):gsub("^@", "")
-						end
-						if not pmtarget then
-							systemline("Pick someone first: /pm <player>")
-							return
-						end
-						mode = "pm"
-						modelabel.Text = '<font color="' .. goldhex .. '">PM</font>  ' .. escaperich(pmtarget)
-						box.PlaceholderText = "Private message to " .. pmtarget .. "..."
-					else
-						mode = "global"
-						modelabel.Text = "Rooms"
-						box.PlaceholderText = "Message in #" .. activeroom .. "..."
-					end
-					applypause()
-				end
-
-				modebtn.Activated:Connect(function()
-					if mode == "global" then
-						setmode("pm")
-					else
-						setmode("global")
+						openpicker()
 					end
 				end)
 
-				local function togglehidename()
+				-- help card (replaces ten system lines spread over every room)
+				local helpcard = popover("Commands", 260)
+				helpcard.AnchorPoint = Vector2.new(1, 0)
+				local function openhelp()
 					elevate()
-					hidename = not hidename
+					clearpop(helpcard)
+					poptitle(helpcard, "COMMANDS")
+					local lines = {
+						{ "/pm <player> [text]", "Private message, opens a thread" },
+						{ "/requestjoin <player>", "Ask to join their server" },
+						{ "/accept   /decline", "Answer the latest join request" },
+						{ "/tag <player>", "Mention a player" },
+						{ "/hide   /unhide", "Hide or show your name" },
+						{ "/id  /ph  /vn  /br  /global", "Switch room" },
+					}
+					for index, line in ipairs(lines) do
+						local row = instance.frame(helpcard)
+						row.BackgroundTransparency = 1
+						row.LayoutOrder = index
+						row.Size = UDim2.new(1, 0, 0, 34)
+						row.ZIndex = 31
+						local cmd = instance.textlabel(row)
+						cmd.BackgroundTransparency = 1
+						cmd.Font = FONT_BOLD
+						cmd.Position = UDim2.new(0, 6, 0, 2)
+						cmd.Size = UDim2.new(1, -12, 0, 15)
+						cmd.Text = line[1]
+						cmd.TextColor3 = theme.Text
+						cmd.TextSize = 12
+						cmd.TextTruncate = Enum.TextTruncate.AtEnd
+						cmd.TextXAlignment = Enum.TextXAlignment.Left
+						cmd.ZIndex = 32
+						local what = instance.textlabel(row)
+						what.BackgroundTransparency = 1
+						what.Font = FONT_MEDIUM
+						what.Position = UDim2.new(0, 6, 0, 18)
+						what.Size = UDim2.new(1, -12, 0, 14)
+						what.Text = line[2]
+						what.TextColor3 = theme.Dim
+						what.TextSize = 11
+						what.TextTruncate = Enum.TextTruncate.AtEnd
+						what.TextXAlignment = Enum.TextXAlignment.Left
+						what.ZIndex = 32
+					end
+					poprow(helpcard, 20, "info", "Tip: tap a message for more options", nil, nil, true)
+					helpcard.Position = UDim2.new(1, -8, 0, headerh)
+					showpop(helpcard)
+				end
+
+				-- name visibility (also used by the forum when it has no setting of its own)
+				local menu = popover("ChatMenu", 236)
+				menu.AnchorPoint = Vector2.new(1, 0)
+				local setmenuchat, setmenuname
+
+				local function sethidename(on, quiet)
+					elevate()
+					hidename = on == true
 					if getgenv then
 						getgenv().PilatHideName = hidename
 					end
@@ -7531,22 +9248,124 @@ function Chloex:Window(guiconfig)
 						_G.PilatHideName = hidename
 					end
 					Chloex.HideName = hidename
-					hidelabel.Text = hidetext()
-					systemline("Name visibility: " .. (hidename and "Hidden (Anonymous — others cannot tag you)" or "Public (Real Name — taggable)"))
+					if setmenuname then
+						setmenuname(not hidename)
+					end
+					if not quiet then
+						setstatus(hidename and "Your name is hidden, others can't mention you" or "Your name is visible to everyone", "info", 4)
+					end
 				end
-				hidebtn.Activated:Connect(togglehidename)
 
-				local function help()
-					systemline("Commands:")
-					systemline("/help - this list")
-					systemline("/hide or /anon - toggle hiding your name (anonymous mode)")
-					systemline("/tag <player> - mention an unhidden player (or click @)")
-					systemline("/pm <player> [message] - private message (switches you to PM mode)")
-					systemline("/global or /gen - switch to General room")
-					systemline("/id  /ph  /vn  /br - switch room")
-					systemline("/requestjoin <player> - ask to join their server")
-					systemline("/accept  /decline - answer the latest join request")
-					systemline("Tip: click the room pills at the top to change room.")
+				do
+					poptitle(menu, "LIVE CHAT")
+					local chatrow = poprow(menu, 1, "power", "Live chat", "Off saves FPS when you don't need it", function()
+						setchatenabled(not chatenabled)
+						if setmenuchat then
+							setmenuchat(chatenabled)
+						end
+					end)
+					setmenuchat = rowswitch(chatrow)
+					local namerow = poprow(menu, 2, "eye", "Show my name", "Lets others see and mention you", function()
+						sethidename(not hidename)
+					end)
+					setmenuname = rowswitch(namerow)
+					poprow(menu, 3, "circle-help", "Commands", nil, function()
+						openhelp()
+					end)
+				end
+				menu.Position = UDim2.new(1, -8, 0, headerh)
+				menubtn.Activated:Connect(function()
+					pcall(pesseffect, menubtn)
+					if openpop == menu then
+						closepop()
+					else
+						if setmenuchat then
+							setmenuchat(chatenabled)
+						end
+						if setmenuname then
+							setmenuname(not hidename)
+						end
+						showpop(menu)
+					end
+				end)
+
+				-- tap a message: what you can do with it
+				local actions = popover("MessageActions", 210)
+				actions.AnchorPoint = Vector2.new(1, 0)
+				local submit
+				local requestjoin
+
+				local function openpm(name)
+					local view = pmview(name)
+					if view then
+						switchview(view.id)
+						box:CaptureFocus()
+					end
+				end
+
+				openactions = function(record)
+					elevate()
+					local entry = record.entry
+					if not entry or entry.type ~= "msg" then
+						return
+					end
+					local info = entry.info or describe(entry)
+					clearpop(actions)
+					poptitle(actions, string.upper(info.cleanname))
+					local order = 1
+					if entry.failed then
+						poprow(actions, order, "rotate-ccw", "Retry sending", nil, function()
+							closepop()
+							local view = views[entry.view]
+							if view then
+								local index = table.find(view.entries, entry)
+								if index then
+									table.remove(view.entries, index)
+									view.rev = view.rev + 1
+								end
+							end
+							renderview()
+							box.Text = tostring(entry.cleanbody or "")
+							submit()
+						end)
+						order = order + 1
+					end
+					if not info.mine then
+						if info.hidden then
+							poprow(actions, order, "eye-off", "Name hidden", "Can't mention or message this player", nil, true)
+						else
+							poprow(actions, order, "at-sign", "Mention", nil, function()
+								closepop()
+								inserttag(info.cleanname)
+							end)
+							poprow(actions, order + 1, "mail", "Private message", nil, function()
+								closepop()
+								openpm(info.cleanname)
+							end)
+							poprow(actions, order + 2, "log-in", "Request to join", "Ask to join their server", function()
+								closepop()
+								requestjoin(info.cleanname)
+							end)
+						end
+					elseif not entry.failed then
+						poprow(actions, order, "check", entry.pending and "Sending..." or "Sent", nil, nil, true)
+					end
+					local y = record.frame.AbsolutePosition.Y - chat.AbsolutePosition.Y + 18
+					local maxy = math.max(headerh, chat.AbsoluteSize.Y - 150)
+					actions.Position = UDim2.new(1, -16, 0, math.clamp(y, headerh, maxy))
+					showpop(actions)
+				end
+
+				requestjoin = function(who)
+					task.spawn(function()
+						elevate()
+						local ok, res = Chloex:RequestJoin(who)
+						if ok then
+							systemline("Asked " .. tostring(res or who) .. " to join their server. Waiting for an answer...")
+						else
+							setstatus("Couldn't send the join request" .. (res and res ~= "" and ("  ·  " .. tostring(res)) or ""), "bad", 5)
+						end
+					end)
 				end
 
 				local roomcommands = {
@@ -7565,23 +9384,19 @@ function Chloex:Window(guiconfig)
 					cmd = cmd:lower()
 
 					if cmd == "help" or cmd == "h" or cmd == "cmd" then
-						help()
+						openhelp()
 						return nil
 					elseif roomcommands[cmd] then
-						local room = roomcommands[cmd]
-						switchroom(room)
-						setmode("global")
-						systemline(room:sub(1, 1):upper() .. room:sub(2) .. " room")
+						switchview(roomcommands[cmd])
 						return nil
 					elseif cmd == "pm" or cmd == "w" or cmd == "msg" or cmd == "dm" then
 						local who, body = rest:match("^(%S+)%s*(.*)$")
 						if not who then
-							systemline("Usage: /pm <player> [message]")
+							setstatus("Usage: /pm <player> [message]", "info", 4)
 							return nil
 						end
-						setmode("pm", who)
+						openpm(who)
 						if body == "" then
-							systemline("PM mode: everything you type now goes to " .. tostring(pmtarget))
 							return nil
 						end
 						return body
@@ -7589,51 +9404,37 @@ function Chloex:Window(guiconfig)
 						local cleanrest = rest:gsub("^[%.%s@\"']+", ""):gsub("[\"']+$", "")
 						local who = cleanrest:match("^(%S+)")
 						if not who or who == "" then
-							systemline("Usage: /requestjoin <player username or display name>")
+							setstatus("Usage: /requestjoin <player>", "info", 4)
 							return nil
 						end
-						task.spawn(function()
-							elevate()
-							local ok, res = Chloex:RequestJoin(who)
-							if ok then
-								systemline("Asked " .. tostring(res or who) .. " to join their server. Waiting for the answer...")
-							else
-								systemline("Request join failed: " .. tostring(res))
-							end
-						end)
+						requestjoin(who)
 						return nil
 					elseif cmd == "hide" or cmd == "anon" or cmd == "incognito" then
-						togglehidename()
+						sethidename(not hidename)
 						return nil
 					elseif cmd == "unhide" or cmd == "showname" then
 						if hidename then
-							togglehidename()
+							sethidename(false)
 						end
 						return nil
 					elseif cmd == "tag" or cmd == "mention" then
 						local target = rest:match("^(%S+)")
 						if not target or target == "" then
-							toggletagdropdown()
+							openpicker()
 							return nil
 						end
 						target = target:gsub("^@", "")
-						local found = nil
 						for uname in pairs(unhiddenusers) do
 							if uname:lower() == target:lower() then
-								found = uname
-								break
+								inserttag(uname)
+								return nil
 							end
 						end
-						if found then
-							inserttag(found)
-							systemline("Tagged @" .. found)
-						else
-							systemline("Player '" .. target .. "' not found or has Hide Name ON")
-						end
+						setstatus(target .. " isn't in chat, or their name is hidden", "info", 4)
 						return nil
 					elseif cmd == "accept" or cmd == "decline" or cmd == "deny" then
 						if not lastincoming then
-							systemline("No join request waiting")
+							setstatus("No join request is waiting", "info", 4)
 							return nil
 						end
 						local id = lastincoming
@@ -7645,17 +9446,17 @@ function Chloex:Window(guiconfig)
 							if ok then
 								systemline(accept and "Accepted, they are on the way." or "Declined.")
 							else
-								systemline("Could not answer: " .. tostring(err))
+								setstatus("Couldn't answer the request" .. (err and err ~= "" and ("  ·  " .. tostring(err)) or ""), "bad", 5)
 							end
 						end)
 						return nil
 					end
 
-					systemline("Unknown command. /help")
+					setstatus("Unknown command, type /help", "info", 4)
 					return nil
 				end
 
-				local function submit()
+				submit = function()
 					elevate()
 					if sending then
 						return
@@ -7679,50 +9480,77 @@ function Chloex:Window(guiconfig)
 					end
 
 					if sendblocked() then
-						systemline((mode == "pm" and "Private messages are" or "Global chat is") .. " under maintenance"
-							.. (chatpause.msg ~= "" and (": " .. chatpause.msg) or ""))
+						setstatus(pausetext(), "warn", 5)
 						return
 					end
 
 					local remaining = cooldown - (os.clock() - lastsent)
 					if remaining > 0 then
-						systemline("Wait " .. tostring(math.ceil(remaining)) .. "s before sending again")
+						setstatus("Wait " .. tostring(math.ceil(remaining)) .. "s before sending again", "warn", math.ceil(remaining))
 						return
 					end
 
+					local view = views[activeview] or views.general
+					local b = Chloex:GetBackend()
+					-- local echo: the line shows at once as "sending"; the server copy
+					-- replaces it (append), or it turns "failed" with a retry
+					local entry = {
+						type = "msg",
+						pending = true,
+						cleanbody = text,
+						ts = os.time(),
+						senderkey = "me",
+						data = {
+							name = localdisplayname() ~= "" and localdisplayname() or localusername(),
+							mine = true,
+							ts = os.time(),
+							text = text,
+							av = localuserid(),
+							game = b and b.Game or "",
+							pm = view.kind == "pm",
+							to_name = view.target,
+						},
+					}
+					pushentry(view, entry)
+					box.Text = ""
 					sending = true
 					setsend(false, "...")
-					local sendroom = activeroom
+					local sendkind, target, room = view.kind, view.target, view.id
 					task.spawn(function()
 						elevate()
 						local ok, err
-						if mode == "pm" then
-							ok, err = Chloex:SendDM(pmtarget, text)
+						if sendkind == "pm" then
+							ok, err = Chloex:SendDM(target, text)
 						else
-							ok, err = Chloex:SendChat(text, sendroom, hidename)
+							ok, err = Chloex:SendChat(text, room, hidename)
+						end
+						sending = false
+						if not chat.Parent then
+							return
 						end
 						if ok then
 							lastsent = os.clock()
-							box.Text = ""
-							countdown(cooldown)
+							task.delay(30, function()
+								if entry.pending then
+									entry.pending = false
+									refreshentry(entry)
+								end
+							end)
+							task.spawn(countdown, cooldown)
 						else
-							err = tostring(err or "")
-							local wait = err:match("^cooldown:(%d+)")
-							if wait then
-								systemline("Slow down, " .. wait .. "s left")
-								countdown(tonumber(wait) or cooldown)
-							elseif err:match("^maintenance") then
-								local why = err:match("^maintenance:(.*)") or ""
-								systemline("Chat is under maintenance" .. (why ~= "" and (": " .. why) or ""))
-							elseif err == "no response" then
-								systemline("Chat server not reachable")
-							else
-								systemline("Failed to send: " .. err)
+							entry.pending = false
+							entry.failed = true
+							refreshentry(entry)
+							local text2, tone, seconds = friendlyerror(err)
+							if text2 then
+								setstatus(text2, tone, seconds or 5)
 							end
-						end
-						sending = false
-						if chat.Parent then
-							setsend(true, "Send")
+							local wait = tostring(err or ""):match("^cooldown:(%d+)")
+							if wait then
+								task.spawn(countdown, tonumber(wait) or cooldown)
+							else
+								setsend(true, "Send")
+							end
 						end
 					end)
 				end
@@ -7730,23 +9558,67 @@ function Chloex:Window(guiconfig)
 				box.Focused:Connect(function()
 					elevate()
 					box.BackgroundColor3 = theme.ElementHover
-					boxstroke.Transparency = 0
+					boxstroke.Color = guiconfig.Color
+					boxstroke.Transparency = 0.3
 				end)
 				box.FocusLost:Connect(function(enterpressed)
 					elevate()
 					box.BackgroundColor3 = theme.Element
+					boxstroke.Color = theme.Stroke
 					boxstroke.Transparency = 0.35
 					if enterpressed then
 						submit()
 					end
 				end)
+				-- the limit is visible: a counter shows near it instead of cutting silently
 				box:GetPropertyChangedSignal("Text"):Connect(function()
 					local limit = maxlength()
 					if #box.Text > limit then
 						box.Text = box.Text:sub(1, limit)
+						return
+					end
+					local n = #box.Text
+					counter.Visible = n >= math.floor(limit * 0.8)
+					counter.Text = tostring(n) .. "/" .. tostring(limit)
+					counter.TextColor3 = n >= limit and theme.Bad or theme.Dim
+					boxpad.PaddingRight = UDim.new(0, counter.Visible and 56 or 12)
+				end)
+				send.Activated:Connect(function()
+					if send.Active then
+						pcall(pesseffect, send)
+						submit()
 					end
 				end)
-				send.Activated:Connect(submit)
+
+				local function targetheight()
+					if not chatenabled then
+						return headerh + 84 + pad
+					end
+					if not fill then
+						return fixedheight
+					end
+					local h = scrollayers.AbsoluteWindowSize.Y
+					if h <= 1 then
+						h = layers.AbsoluteSize.Y
+					end
+					return math.max(240, math.floor(h) - 2)
+				end
+
+				layoutchat = function()
+					local top = headerh + striph + 4
+					local bottom = pad + barh + 4 + (statusline.Visible and (statush + 2) or 0)
+					list.Position = UDim2.new(0, pad, 0, top)
+					list.Size = UDim2.new(1, -pad * 2, 1, -(top + bottom))
+					newpill.Position = UDim2.new(0.5, 0, 1, -(bottom + 8))
+				end
+
+				local function applyheight()
+					chat.Size = UDim2.new(1, 0, 0, targetheight())
+					layoutchat()
+				end
+				if fill then
+					scrollayers:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(applyheight)
+				end
 
 				local chatbackend = Chloex:GetBackend()
 				if not chatbackend then
@@ -7757,10 +9629,12 @@ function Chloex:Window(guiconfig)
 				end
 
 				if not chatbackend then
-					systemline("Not connected. Call Chloex:ConnectBackend({ Api = ..., Key = ..., Game = ... }) first.")
+					setsticky("Chat is offline right now", "bad")
 					setsend(false, "Send")
-					onlinelabel.Text = '<font color="' .. badhex .. '">●</font>  offline'
+					presence.Text = '<font color="' .. badhex .. '">●</font>  offline'
 				else
+					chatbackend.Watchers = chatbackend.Watchers or {}
+					table.insert(chatbackend.Watchers, chatonscreen)
 					Chloex:OnChat(function(msg)
 						if chat.Parent and chatenabled then
 							append(msg)
@@ -7770,15 +9644,9 @@ function Chloex:Window(guiconfig)
 						if not chat.Parent then
 							return
 						end
-						local was = chatpause.chat
 						chatpause.chat = p.chat == true
 						chatpause.dm = p.dm == true
 						chatpause.msg = tostring(p.chatmsg or "")
-						if chatpause.chat ~= was then
-							systemline(chatpause.chat
-								and ("Global chat is under maintenance" .. (chatpause.msg ~= "" and (": " .. chatpause.msg) or ""))
-								or "Global chat is back on")
-						end
 						applypause()
 					end)
 					Chloex:OnDM(function(msg)
@@ -7790,18 +9658,18 @@ function Chloex:Window(guiconfig)
 						if not chat.Parent then
 							return
 						end
-						local status = tostring(req.status or "")
+						local state = tostring(req.status or "")
 						if req.incoming then
-							if status == "pending" then
+							if state == "pending" then
 								lastincoming = req.id
-								systemline(tostring(req.name or "Someone") .. " wants to join your server - /accept or /decline (or use the popup)")
+								systemline(stripname(req.name or "Someone") .. " wants to join your server. Answer in the popup, or /accept and /decline")
 							end
-						elseif status == "accepted" then
-							systemline(tostring(req.to_name or "They") .. " accepted your request, teleporting...")
-						elseif status == "declined" then
-							systemline(tostring(req.to_name or "They") .. " declined your request")
-						elseif status == "expired" then
-							systemline(tostring(req.to_name or "They") .. " did not answer")
+						elseif state == "accepted" then
+							systemline(stripname(req.to_name or "They") .. " accepted, teleporting...")
+						elseif state == "declined" then
+							systemline(stripname(req.to_name or "They") .. " declined your request")
+						elseif state == "expired" then
+							systemline(stripname(req.to_name or "They") .. " did not answer")
 						end
 					end)
 
@@ -7809,6 +9677,7 @@ function Chloex:Window(guiconfig)
 						elevate()
 						local ticks = 0
 						local lasttext = nil
+						local wasconnected = nil
 						while chat.Parent and not Chloex.Unloaded do
 							ticks = ticks + 1
 							if chatonscreen() then
@@ -7822,7 +9691,16 @@ function Chloex:Window(guiconfig)
 									end
 									if text ~= lasttext then
 										lasttext = text
-										onlinelabel.Text = text
+										presence.Text = text
+									end
+									local connected = chatbackend.Connected == true
+									if connected ~= wasconnected then
+										wasconnected = connected
+										if not connected and not sendblocked() then
+											setsticky("Reconnecting to chat...", "bad")
+										elseif connected and status.sticky and status.sticky[1] == "Reconnecting to chat..." then
+											setsticky(nil)
+										end
 									end
 								end
 							end
@@ -7836,29 +9714,32 @@ function Chloex:Window(guiconfig)
 
 				setchatenabled = function(on, silent)
 					elevate()
+					closepop()
 					chatenabled = on == true
 					if not silent then
 						savechatpref(chatenabled)
 					end
-					powerlabel.Text = chatenabled and ('<font color="' .. goodhex .. '">●</font>  Chat On')
-						or ('<font color="' .. badhex .. '">●</font>  Chat Off')
-					catbar.Visible = chatenabled
-					scroll.Visible = chatenabled
+					strip.Visible = chatenabled
+					list.Visible = chatenabled
 					bar.Visible = chatenabled
-					modebtn.Visible = chatenabled
-					hidebtn.Visible = chatenabled
-					onlinepill.Visible = chatenabled
-					if tagdropdown then
-						tagdropdown.Visible = false
-					end
+					presence.Visible = chatenabled
 					offcard.Visible = not chatenabled
-					chat.Size = UDim2.new(1, 0, 0, chatenabled and height or (headerh + offh))
-					renderqueue = {}
+					if not chatenabled then
+						statusline.Visible = false
+						newpill.Visible = false
+						viewtitle.Text = tostring(chatconfig.Title)
+					else
+						settitle()
+					end
+					applyheight()
+					pending = {}
+					for _, view in pairs(views) do
+						view.entries = {}
+						view.unread = 0
+						view.rev = view.rev + 1
+					end
 					if chatenabled then
 						local b = Chloex:GetBackend()
-						for _, r in ipairs(rooms) do
-							roommessages[r.id] = {}
-						end
 						if b then
 							for _, msg in ipairs(b.History or {}) do
 								append(msg)
@@ -7869,27 +9750,41 @@ function Chloex:Window(guiconfig)
 						end
 						chatdirty = true
 						refreshifdirty()
+						if status.sticky then
+							drawstatus(status.sticky[1], status.sticky[2])
+						end
 					else
-						for _, r in ipairs(rooms) do
-							roommessages[r.id] = {}
-						end
-						for _, child in ipairs(scroll:GetChildren()) do
-							if child:IsA("GuiObject") then
-								child:Destroy()
-							end
-						end
-						shown = 0
+						renderview()
 					end
+					updatechips()
+					updatebadge()
 				end
-				powerbtn.Activated:Connect(function()
-					setchatenabled(not chatenabled)
-				end)
 				onbtn.Activated:Connect(function()
+					pcall(pesseffect, onbtn)
 					setchatenabled(true)
 				end)
+
+				settitle()
+				updateplaceholder()
 				setchatenabled(chatenabled, true)
+				sethidename(hidename, true)
 				layerspagelayout:GetPropertyChangedSignal("CurrentPage"):Connect(function()
-					task.defer(refreshifdirty)
+					task.defer(function()
+						elevate()
+						closepop()
+						if chatonscreen() then
+							local view = views[activeview]
+							if view and view.unread > 0 then
+								view.unread = 0
+								updatechips()
+								updatebadge()
+							end
+							refreshifdirty()
+							if fill then
+								applyheight()
+							end
+						end
+					end)
 				end)
 
 				registerSearchItem(chatconfig.Title, chat)
@@ -7902,7 +9797,7 @@ function Chloex:Window(guiconfig)
 					setchatenabled(on)
 				end
 
-				function chatfunc:IPilatbled()
+				function chatfunc:IsEnabled()
 					return chatenabled
 				end
 
@@ -7915,25 +9810,22 @@ function Chloex:Window(guiconfig)
 				end
 
 				function chatfunc:SetRoom(room)
-					switchroom(room)
+					switchview(room)
 				end
 
 				function chatfunc:GetRoom()
-					return activeroom
+					return activeview
 				end
 
 				function chatfunc:Clear()
-					for _, r in ipairs(rooms) do
-						roommessages[r.id] = {}
+					for _, view in pairs(views) do
+						view.entries = {}
+						view.unread = 0
+						view.rev = view.rev + 1
 					end
-					for _, child in ipairs(scroll:GetChildren()) do
-						if child:IsA("GuiObject") then
-							pcall(function()
-								child:Destroy()
-							end)
-						end
-					end
-					shown = 0
+					renderview()
+					updatechips()
+					updatebadge()
 				end
 
 				function chatfunc:Send(text)
@@ -7947,443 +9839,7 @@ function Chloex:Window(guiconfig)
 			items.AddChat = items.AddLiveChat
 
 			function items:AddSupportCard(cardconfig)
-				cardconfig = cardconfig or {}
-				local cardtitle = tostring(cardconfig.Title or "Get Key & Support Pilat")
-				local carddesc = tostring(
-					cardconfig.Description
-						or cardconfig.Content
-						or "Complete checkpoint verification at Pilathub.xyz/key for free 12h access, or upgrade to Donator VIP for permanent execution and zero wait."
-				)
-				local freekeyurl = tostring(cardconfig.FreeKeyUrl or "https://Pilathub.xyz/key")
-				local donateurl = tostring(cardconfig.Url or cardconfig.Link or "https://Pilathub.xyz/#donator")
-				local discordurl = tostring(cardconfig.Discord or "https://dsc.gg/Pilathub")
-
-				local card = instance.frame(sectionadd)
-				card.Name = "SupportCard"
-				card.BorderSizePixel = 0
-				card.LayoutOrder = countitem
-				card.Size = UDim2.new(1, 0, 0, 0)
-				card.AutomaticSize = Enum.AutomaticSize.Y
-				roundbg(card, 4, theme.Row, true)
-
-				local cardpad = instance.uipadding(card)
-				cardpad.PaddingLeft = UDim.new(0, 10)
-				cardpad.PaddingRight = UDim.new(0, 10)
-				cardpad.PaddingTop = UDim.new(0, 10)
-				cardpad.PaddingBottom = UDim.new(0, 10)
-
-				local cardlayout = instance.uilistlayout(card)
-				cardlayout.Padding = UDim.new(0, 8)
-				cardlayout.SortOrder = Enum.SortOrder.LayoutOrder
-				cardlayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-				local order = 0
-				local function nextorder()
-					order = order + 1
-					return order
-				end
-
-				local function label(parent, text, size, color, font, xalign, layoutorder, fixedheight)
-					local lbl = instance.textlabel(parent)
-					lbl.BackgroundTransparency = 1
-					lbl.LayoutOrder = layoutorder or 0
-					lbl.Font = font or Enum.Font.GothamBold
-					lbl.RichText = true
-					lbl.Text = text
-					lbl.TextColor3 = color or theme.Text
-					lbl.TextSize = size or 12
-					lbl.TextWrapped = true
-					lbl.TextXAlignment = xalign or Enum.TextXAlignment.Left
-					lbl.TextYAlignment = Enum.TextYAlignment.Top
-					if fixedheight then
-						lbl.Size = UDim2.new(1, 0, 0, fixedheight)
-					else
-						lbl.Size = UDim2.new(1, 0, 0, 0)
-						lbl.AutomaticSize = Enum.AutomaticSize.Y
-					end
-					return lbl
-				end
-
-				local function box(parent, layoutorder, transparency)
-					local frame = instance.frame(parent)
-					frame.BorderSizePixel = 0
-					frame.LayoutOrder = layoutorder
-					frame.Size = UDim2.new(1, 0, 0, 0)
-					frame.AutomaticSize = Enum.AutomaticSize.Y
-					roundbg(frame, 4, theme.Box, true)
-
-					local pad = instance.uipadding(frame)
-					pad.PaddingLeft = UDim.new(0, 10)
-					pad.PaddingRight = UDim.new(0, 10)
-					pad.PaddingTop = UDim.new(0, 8)
-					pad.PaddingBottom = UDim.new(0, 8)
-
-					local layout = instance.uilistlayout(frame)
-					layout.Padding = UDim.new(0, 4)
-					layout.SortOrder = Enum.SortOrder.LayoutOrder
-					return frame
-				end
-
-				local function button(parent, text, layoutorder, accent)
-					local btn = instance.textbutton(parent)
-					btn.LayoutOrder = layoutorder or 0
-					btn.Size = UDim2.new(1, 0, 0, 30)
-					btn.BorderSizePixel = 0
-					btn.Font = Enum.Font.GothamBold
-					btn.Text = text
-					btn.TextColor3 = accent and theme.AccentText or Color3.fromRGB(255, 255, 255)
-					btn.TextTransparency = accent and 0 or 0.3
-					btn.TextSize = 12
-					btn.TextTruncate = Enum.TextTruncate.AtEnd
-					btn.AutoButtonColor = false
-					if accent then
-						hoverbg(btn, roundbg(btn, 4, guiconfig.Color), guiconfig.Color, Color3.fromRGB(255, 255, 255))
-					else
-						hoverbg(btn, roundbg(btn, 4, theme.Inner), theme.Inner, theme.InnerHover)
-					end
-					btn.MouseButton1Down:Connect(function()
-						pcall(pesseffect, btn)
-					end)
-					return btn
-				end
-
-				local header = instance.frame(card)
-				header.BackgroundTransparency = 1
-				header.LayoutOrder = nextorder()
-				header.Size = UDim2.new(1, 0, 0, 0)
-				header.AutomaticSize = Enum.AutomaticSize.Y
-				local headerlayout = instance.uilistlayout(header)
-				headerlayout.Padding = UDim.new(0, 3)
-				headerlayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-				local titlelabel = label(header, cardtitle, 14, theme.Text, Enum.Font.GothamBold, Enum.TextXAlignment.Center, 1)
-				local desclabel = label(header, carddesc, 11, theme.SubText, Enum.Font.Gotham, Enum.TextXAlignment.Center, 2)
-
-				local pricing = instance.frame(card)
-				pricing.BackgroundTransparency = 1
-				pricing.LayoutOrder = nextorder()
-				pricing.Size = UDim2.new(1, 0, 0, 0)
-				pricing.AutomaticSize = Enum.AutomaticSize.Y
-				local pricinglayout = instance.uilistlayout(pricing)
-				pricinglayout.FillDirection = Enum.FillDirection.Horizontal
-				pricinglayout.Padding = UDim.new(0, 8)
-				pricinglayout.SortOrder = Enum.SortOrder.LayoutOrder
-				pricinglayout.VerticalAlignment = Enum.VerticalAlignment.Top
-
-				local function tier(layoutorder, badge, price, sub, highlight)
-					local t = box(pricing, layoutorder)
-					t.Size = UDim2.new(0.5, -4, 0, 0)
-					if highlight then
-						local s = instance.uistroke(t)
-						s.Color = guiconfig.Color
-						s.Thickness = 1
-						s.Transparency = 0.6
-					end
-					label(t, badge, 10, theme.SubText, Enum.Font.GothamBold, nil, 1, 14)
-					label(t, price, 15, theme.Text, Enum.Font.GothamBold, nil, 2, 20)
-					label(t, sub, 10, theme.Dim, Enum.Font.Gotham, nil, 3, 14)
-					return t
-				end
-
-				tier(1, "7 DAYS ACCESS", tostring(cardconfig.WeeklyPrice or "$1.00 USD"), tostring(cardconfig.WeeklySub or "Rp 15.000 / Weekly Access"), false)
-				tier(2, "30 DAYS ACCESS", tostring(cardconfig.MonthlyPrice or "$2.00 USD"), tostring(cardconfig.MonthlySub or "Rp 30.000 / Monthly (Stacks)"), true)
-
-				local benefits = box(card, nextorder())
-				label(benefits, "DONATOR VIP BENEFITS", 11, theme.Text, Enum.Font.GothamBold, nil, 1, 16)
-				local benefitlist = cardconfig.Benefits or {
-					{ "Early Updates", "first access to new scripts, game updates and bypasses before public release" },
-					{ "More Features Unlocked", "donator-only modules and every locked toggle in this hub" },
-					{ "Suggestion Priority", "your feature requests and bug reports get handled first" },
-					{ "Private Key & Multi-Device", "dedicated key with up to 3 HWID slots and self-service reset" },
-				}
-				for i, b in ipairs(benefitlist) do
-					label(
-						benefits,
-						string.format("•  <b>%s</b> — %s", escaperich(b[1] or b.Title or ""), escaperich(b[2] or b.Description or "")),
-						10,
-						theme.SubText,
-						Enum.Font.Gotham,
-						nil,
-						i + 1
-					)
-				end
-
-				local tutorial = box(card, nextorder())
-				label(tutorial, "HOW TO GET YOUR KEY", 11, theme.Text, Enum.Font.GothamBold, nil, 1, 16)
-				local steps = cardconfig.Steps or {
-					"Visit <b>Pilathub.xyz</b> (or press Get VIP below)",
-					"Pick a VIP Pass (7D / 30D) and pay via instant QRIS",
-					"Your private key shows up on screen right away — copy it",
-					"<b>OPTIONAL:</b> enter your Discord username at checkout to receive the VIP role automatically",
-				}
-				for i, text in ipairs(steps) do
-					local row = instance.frame(tutorial)
-					row.BackgroundTransparency = 1
-					row.LayoutOrder = i + 1
-					row.Size = UDim2.new(1, 0, 0, 0)
-					row.AutomaticSize = Enum.AutomaticSize.Y
-
-					local num = instance.frame(row)
-					num.BorderSizePixel = 0
-					num.Size = UDim2.new(0, 18, 0, 18)
-					roundbg(num, 4, theme.Inner)
-
-					local numtext = instance.textlabel(num)
-					numtext.BackgroundTransparency = 1
-					numtext.Size = UDim2.new(1, 0, 1, 0)
-					numtext.Font = Enum.Font.GothamBold
-					numtext.Text = tostring(i)
-					numtext.TextColor3 = theme.Text
-					numtext.TextSize = 10
-
-					local steptext = label(row, text, 10, theme.SubText, Enum.Font.Gotham, nil, 2)
-					steptext.Position = UDim2.new(0, 24, 0, 0)
-					steptext.Size = UDim2.new(1, -24, 0, 0)
-				end
-
-				local actions = instance.frame(card)
-				actions.BackgroundTransparency = 1
-				actions.LayoutOrder = nextorder()
-				actions.Size = UDim2.new(1, 0, 0, 0)
-				actions.AutomaticSize = Enum.AutomaticSize.Y
-				local actionlayout = instance.uilistlayout(actions)
-				actionlayout.Padding = UDim.new(0, 6)
-				actionlayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-				local freekeybtn = button(actions, "Get Free Key (12h Access via Checkpoint)", 1, false)
-
-				local subrow = instance.frame(actions)
-				subrow.BackgroundTransparency = 1
-				subrow.LayoutOrder = 2
-				subrow.Size = UDim2.new(1, 0, 0, 30)
-				local sublayout = instance.uilistlayout(subrow)
-				sublayout.FillDirection = Enum.FillDirection.Horizontal
-				sublayout.Padding = UDim.new(0, 6)
-				sublayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-				local discordbtn = button(subrow, "Join Discord", 1, false)
-				discordbtn.Size = UDim2.new(0.5, -3, 1, 0)
-				local vipbtn = button(subrow, "Get VIP (Pilathub.xyz)", 2, false)
-				vipbtn.Size = UDim2.new(0.5, -3, 1, 0)
-
-				local function copyaction(url, btn, origtext, successtext)
-					elevate()
-					clipboardwrite(url)
-					if type(openurl) == "function" then
-						pcall(openurl, url)
-					end
-					Chloex:Notify({ Title = "Pilat", Description = "Link Copied", Content = url, Duration = 4, Color = theme.Good })
-					btn.Text = successtext
-					task.delay(2.5, function()
-						if btn and btn.Parent then
-							btn.Text = origtext
-						end
-					end)
-				end
-
-				freekeybtn.Activated:Connect(function()
-					copyaction(freekeyurl, freekeybtn, "Get Free Key (12h Access via Checkpoint)", "Copied Key Link! ✓")
-				end)
-				discordbtn.Activated:Connect(function()
-					copyaction(discordurl, discordbtn, "Join Discord", "Copied Discord Link! ✓")
-				end)
-				vipbtn.Activated:Connect(function()
-					copyaction(donateurl, vipbtn, "Get VIP (Pilathub.xyz)", "Copied Website Link! ✓")
-				end)
-
-				local keybox = box(card, nextorder())
-
-				local donator = isdonator()
-				local doninfo = Chloex.DonatorInfo or (getgenv and getgenv().PilatDonatorInfo)
-				local daysleft = doninfo and tonumber(doninfo.days_left) or 0
-
-				local keyheaderrow = instance.frame(keybox)
-				keyheaderrow.BackgroundTransparency = 1
-				keyheaderrow.LayoutOrder = 1
-				keyheaderrow.Size = UDim2.new(1, 0, 0, 18)
-
-				local keyheader = instance.textlabel(keyheaderrow)
-				keyheader.BackgroundTransparency = 1
-				keyheader.Size = UDim2.new(1, -120, 1, 0)
-				keyheader.Font = Enum.Font.GothamBold
-				keyheader.Text = donator and "Donator Status: Active" or "License Key Activation"
-				keyheader.TextColor3 = theme.Text
-				keyheader.TextSize = 11
-				keyheader.TextXAlignment = Enum.TextXAlignment.Left
-
-				local statusbadge = instance.frame(keyheaderrow)
-				statusbadge.AnchorPoint = Vector2.new(1, 0)
-				statusbadge.Position = UDim2.new(1, 0, 0, 0)
-				statusbadge.Size = UDim2.new(0, 110, 1, 0)
-				statusbadge.BorderSizePixel = 0
-				local statusbg = roundbg(statusbadge, 4, donator and Color3.fromRGB(25, 47, 33) or theme.Inner)
-
-				local statusbadgetext = instance.textlabel(statusbadge)
-				statusbadgetext.BackgroundTransparency = 1
-				statusbadgetext.Size = UDim2.new(1, 0, 1, 0)
-				statusbadgetext.Font = Enum.Font.GothamBold
-				statusbadgetext.Text = donator and (daysleft > 0 and (tostring(daysleft) .. " Days Left") or "Active") or "Not Active"
-				statusbadgetext.TextColor3 = donator and theme.Good or theme.SubText
-				statusbadgetext.TextSize = 10
-
-				local inputrow = instance.frame(keybox)
-				inputrow.BackgroundTransparency = 1
-				inputrow.LayoutOrder = 2
-				inputrow.Size = UDim2.new(1, 0, 0, 28)
-
-				local keyinput = instance.textbox(inputrow)
-				keyinput.Name = "KeyInput"
-				keyinput.Size = UDim2.new(1, -70, 1, 0)
-				keyinput.BackgroundColor3 = theme.Field
-				keyinput.BackgroundTransparency = 0
-				keyinput.BorderSizePixel = 0
-				keyinput.Font = Enum.Font.GothamBold
-				keyinput.PlaceholderText = "Paste your license key (Pilat-XXXX-...)"
-				keyinput.PlaceholderColor3 = theme.Dim
-				keyinput.Text = Chloex:GetSavedKey() or ""
-				keyinput.TextColor3 = theme.Text
-				keyinput.TextSize = 11
-				keyinput.TextXAlignment = Enum.TextXAlignment.Left
-				keyinput.ClearTextOnFocus = false
-				keyinput.ClipsDescendants = true
-				keyinput.TextTruncate = Enum.TextTruncate.AtEnd
-				instance.uicorner(keyinput).CornerRadius = UDim.new(0, 4)
-				instance.uipadding(keyinput).PaddingLeft = UDim.new(0, 6)
-				keyinput.BackgroundTransparency = 0
-
-				local pastebtn = button(inputrow, "Paste", 2, false)
-				pastebtn.AnchorPoint = Vector2.new(1, 0)
-				pastebtn.Position = UDim2.new(1, 0, 0, 0)
-				pastebtn.Size = UDim2.new(0, 64, 1, 0)
-
-				pastebtn.Activated:Connect(function()
-					elevate()
-					local cb = clipboardread()
-					if cb and cb:gsub("%s+", "") ~= "" then
-						keyinput.Text = cb:gsub("%s+", "")
-						Chloex:Notify({ Title = "Pilat", Description = "Key Pasted", Content = "Pasted license key from clipboard.", Duration = 2 })
-					else
-						Chloex:Notify({ Title = "Pilat", Description = "Clipboard", Content = "No text found in clipboard.", Duration = 2, Color = theme.Bad })
-					end
-				end)
-
-				local redeembtn = button(keybox, donator and "Key Active (Enter new key to renew)" or "Redeem License Key", 3, true)
-
-				local statuslabel = label(
-					keybox,
-					donator and string.format("Donator VIP Active (%d days remaining). All features unlocked.", daysleft > 0 and daysleft or 30)
-						or "Enter your license key above to activate Donator VIP.",
-					10,
-					theme.SubText,
-					Enum.Font.Gotham,
-					Enum.TextXAlignment.Center,
-					4
-				)
-
-				local redeeming = false
-				local function doredeem()
-					if redeeming then
-						return
-					end
-					local raw = keyinput.Text
-					if not raw or raw:gsub("%s+", "") == "" then
-						statuslabel.Text = "Please enter a license key before redeeming."
-						statuslabel.TextColor3 = theme.Bad
-						return
-					end
-
-					redeeming = true
-					local entered = raw:gsub("%s+", ""):upper()
-					redeembtn.Text = "Verifying license..."
-					redeembtn.Active = false
-					statuslabel.Text = "Contacting Pilat license server..."
-					statuslabel.TextColor3 = theme.SubText
-
-					task.spawn(function()
-						elevate()
-						local ok, res = Chloex:CheckDonatorKey(entered)
-						if ok and type(res) == "table" and res.valid then
-							-- CheckDonatorKey already set the tier (trial keys stay trial)
-							local days = tonumber(res.days_left) or 30
-							redeembtn.Text = "Activated Successfully! ✓"
-							keyheader.Text = "Donator Status: Active"
-							statusbg.ImageColor3 = Color3.fromRGB(25, 47, 33)
-							statusbadgetext.Text = tostring(days) .. " Days Left"
-							statusbadgetext.TextColor3 = theme.Good
-							statuslabel.Text = string.format("Donator VIP Active! (%d days remaining)", days)
-							statuslabel.TextColor3 = theme.Good
-
-							Chloex:Notify({
-								Title = "Pilat",
-								Description = "Donator VIP",
-								Content = string.format("License verified! %d days of Donator access active.", days),
-								Duration = 6,
-								Color = theme.Good,
-							})
-
-							task.delay(3, function()
-								if redeembtn and redeembtn.Parent then
-									redeembtn.Text = "Key Active (Enter new key to renew)"
-									redeembtn.Active = true
-								end
-								redeeming = false
-							end)
-						else
-							local reason = (type(res) == "table" and res.reason) or tostring(res or "Invalid key")
-							if reason:find("hwid limit") then
-								reason = "HWID limit reached (3/3). Reset in Discord."
-							elseif reason:find("expired") then
-								reason = "Key has expired. Please renew."
-							elseif reason == "network_error" then
-								reason = "Could not reach the license server."
-							end
-
-							redeembtn.Text = "Redeem Failed ✗"
-							statuslabel.Text = "Failed: " .. reason
-							statuslabel.TextColor3 = theme.Bad
-
-							Chloex:Notify({ Title = "Pilat", Description = "Activation Failed", Content = reason, Duration = 5, Color = theme.Bad })
-
-							task.delay(2.5, function()
-								if redeembtn and redeembtn.Parent then
-									redeembtn.Text = isdonator() and "Key Active (Enter new key to renew)" or "Redeem License Key"
-									redeembtn.Active = true
-								end
-								redeeming = false
-							end)
-						end
-					end)
-				end
-
-				redeembtn.Activated:Connect(doredeem)
-				keyinput.FocusLost:Connect(function(enterpressed)
-					if enterpressed then
-						doredeem()
-					end
-				end)
-
-				registerSearchItem(cardtitle, card)
-				countitem = countitem + 1
-				yieldbuild()
-
-				local cardfunc = {}
-
-				function cardfunc:SetTitle(text)
-					titlelabel.Text = tostring(text or "")
-				end
-
-				function cardfunc:SetDescription(text)
-					desclabel.Text = tostring(text or "")
-				end
-
-				function cardfunc:Redeem(key)
-					if key then
-						keyinput.Text = tostring(key)
-					end
-					doredeem()
-				end
-
-				return cardfunc
+				return {}
 			end
 
 			items.AddDonationCard = items.AddSupportCard
@@ -8429,16 +9885,28 @@ function Chloex:Window(guiconfig)
 				background.BorderSizePixel = 0
 				instance.uicorner(background).CornerRadius = UDim.new(0, 6)
 
+				-- Small-caps divider: the label, then a hairline to the row's end.
+				local display = string.upper(tostring(sectiontext))
 				local label = instance.textlabel(subsection)
 				label.AnchorPoint = Vector2.new(0, 0.5)
-				label.Position = UDim2.new(0, 10, 0.5, 0)
+				label.Position = UDim2.new(0, 10, 0.5, 1)
 				label.Size = UDim2.new(1, -20, 1, 0)
 				label.BackgroundTransparency = 1
-				label.Font = Enum.Font.GothamBold
-				label.Text = tostring(sectiontext)
-				label.TextColor3 = theme.SubText
-				label.TextSize = 13
+				label.Font = FONT_BOLD
+				label.Text = display
+				label.TextColor3 = theme.Dim
+				label.TextSize = 11
+				label.TextTruncate = Enum.TextTruncate.AtEnd
 				label.TextXAlignment = Enum.TextXAlignment.Left
+
+				local labelwidth = textwidth(display, 11, FONT_BOLD)
+				local hairline = instance.frame(subsection)
+				hairline.Name = "Hairline"
+				hairline.AnchorPoint = Vector2.new(0, 0.5)
+				hairline.BackgroundColor3 = theme.Stroke
+				hairline.BorderSizePixel = 0
+				hairline.Position = UDim2.new(0, 10 + labelwidth + 8, 0.5, 1)
+				hairline.Size = UDim2.new(1, -(10 + labelwidth + 8 + 10), 0, 1)
 
 				countitem = countitem + 1
 				currentSubSection = tostring(sectiontext)
@@ -8643,6 +10111,8 @@ function Chloex:Window(guiconfig)
 				}
 			end
 
+			-- Config Forum. Browse first: the share form lives in its own sheet, and
+			-- applying a setup always goes through a preview with Undo.
 			function items:AddForum(forumconfig)
 				forumconfig = forumconfig or {}
 				local fixedheight = tonumber(forumconfig.Height)
@@ -8650,18 +10120,22 @@ function Chloex:Window(guiconfig)
 					if fixedheight then
 						return math.max(320, fixedheight)
 					end
-					-- fill the visible page (section header is 30px, list padding a few px)
-					return math.max(320, math.floor(scrollayers.AbsoluteSize.Y - 38))
+					local h = scrollayers.AbsoluteWindowSize.Y
+					if h <= 1 then
+						h = layers.AbsoluteSize.Y
+					end
+					return math.max(320, math.floor(h) - 2)
 				end
-				local height = fitheight()
 				local pad = 8
 				local forum = {
 					Sort = "top",
-					Offset = 0,
 					Posts = {},
 					Mine = nil,
 					Game = nil,
 					Busy = false,
+					Loading = false,
+					Search = "",
+					DeviceFilter = "Any",
 					Device = { ram = "Any", ping = "Any", platform = "Any" },
 					Options = {
 						ram = { "Any", "2GB", "3GB", "4GB", "6GB", "8GB+" },
@@ -8675,25 +10149,11 @@ function Chloex:Window(guiconfig)
 				local goldhex = hexcolor(theme.Gold)
 
 				local function httprequest()
-					return (type(request) == "function" and request)
-						or (type(http_request) == "function" and http_request)
-						or (type(syn) == "table" and type(syn.request) == "function" and syn.request)
-						or (type(http) == "table" and type(http.request) == "function" and http.request)
-						or nil
+					return nil
 				end
 
 				local function deviceid()
-					local ok, id = pcall(function()
-						if type(gethwid) == "function" then
-							return gethwid()
-						end
-						return game:GetService("RbxAnalyticsService"):GetClientId()
-					end)
-					id = ok and id and tostring(id) or ""
-					if id == "" then
-						id = localuserid() .. ":" .. executorname()
-					end
-					return id
+					return ""
 				end
 
 				local function currentping()
@@ -8708,6 +10168,7 @@ function Chloex:Window(guiconfig)
 					return ok and tonumber(ms) or nil
 				end
 
+				local myplatform = isMobile and "Mobile" or "PC"
 				local function defaultdevice()
 					local ms = currentping()
 					local ping = "Any"
@@ -8720,9 +10181,23 @@ function Chloex:Window(guiconfig)
 						end
 					end
 					forum.Device.ping = ping
-					forum.Device.platform = isMobile and "Mobile" or "PC"
+					forum.Device.platform = myplatform
 				end
 				defaultdevice()
+
+				-- name on posts: the forum's own setting (it used to follow the chat pill)
+				local namefile = "Pilat/forum_showname.txt"
+				local showname = false
+				pcall(function()
+					if isfile and isfile(namefile) then
+						showname = readfile(namefile) == "1"
+					elseif getgenv and getgenv().PilatHideName ~= nil then
+						showname = getgenv().PilatHideName ~= true
+					end
+				end)
+				if isowner() then
+					showname = true
+				end
 
 				local function basepayload(extra)
 					local trial = istrial()
@@ -8744,7 +10219,7 @@ function Chloex:Window(guiconfig)
 
 				local function forumpost(path, extra)
 					if not backend then
-						return nil, "Not connected to Pilat yet"
+						return nil, "not connected"
 					end
 					local payload = basepayload(extra)
 					local fn = httprequest()
@@ -8766,35 +10241,42 @@ function Chloex:Window(guiconfig)
 								return data, nil
 							end
 						end
-						return nil, "No response from Pilat"
+						return nil, "no response"
 					end
 					return Chloex:BackendCall(path, extra)
 				end
 
-				local function friendlyerror(err)
+				-- the server's words never reach the player as-is; "what" names the
+				-- action so a cooldown says what is cooling down
+				local function cleanwhy(why)
+					return (tostring(why or ""):gsub("^%s+", ""):gsub("^[Mm]aintenance[%s,:%.%-]*", ""))
+				end
+				local function friendlyerror(err, what)
 					err = tostring(err or "error")
 					if err:match("^maintenance") then
-						local why = err:match("^maintenance:(.*)") or ""
-						return "Forum is under maintenance" .. (why ~= "" and (": " .. why) or "")
+						local why = cleanwhy(err:match("^maintenance:(.*)") or "")
+						return "The forum is under maintenance" .. (why ~= "" and ("  ·  " .. why) or "")
 					end
 					local secs = err:match("^cooldown:(%d+)")
 					if secs then
-						return "Wait " .. secs .. "s before sharing again"
+						return "Wait " .. secs .. "s before " .. (what or "trying again")
 					end
 					if err:match("^badword:") then
-						return "Title has blocked words"
+						return "The title has blocked words"
 					end
 					if err:match("^key_share") then
-						return "Title can't contain a license key"
+						return "The title can't contain a license key"
 					end
-					if err == "not connected" then
-						return "Not connected to Pilat yet"
+					if err == "not connected" or err == "bad key" or err == "missing uid" then
+						return "Not connected to Pilat yet, try again in a moment"
 					end
-					return err
-				end
-
-				local function note(text, good)
-					chloex(text, 3, good and theme.Good or theme.Bad)
+					if err == "no response" then
+						return "Pilat didn't answer, try again in a moment"
+					end
+					if err == "blacklisted" then
+						return "Your account can't use the forum"
+					end
+					return "Something went wrong, try again"
 				end
 
 				local function timeago(ts)
@@ -8809,54 +10291,6 @@ function Chloex:Window(guiconfig)
 					return math.floor(s / 86400) .. "d ago"
 				end
 
-				local function makepill(parent, text, accent, clickable)
-					local frame = clickable and instance.textbutton(parent) or instance.frame(parent)
-					frame.BackgroundColor3 = accent and theme.Accent or theme.Element
-					frame.BorderSizePixel = 0
-					frame.AutomaticSize = Enum.AutomaticSize.X
-					frame.Size = UDim2.new(0, 0, 0, 22)
-					if clickable then
-						frame.Text = ""
-						frame.AutoButtonColor = true
-					end
-					instance.uicorner(frame).CornerRadius = UDim.new(1, 0)
-					if not accent then
-						local stroke = instance.uistroke(frame)
-						stroke.Color = theme.Stroke
-						stroke.Transparency = 0.35
-					end
-					local padding = instance.uipadding(frame)
-					padding.PaddingLeft = UDim.new(0, 10)
-					padding.PaddingRight = UDim.new(0, 10)
-					local label = instance.textlabel(frame)
-					label.Name = "Label"
-					label.BackgroundTransparency = 1
-					label.AutomaticSize = Enum.AutomaticSize.X
-					label.Size = UDim2.new(0, 0, 1, 0)
-					label.Font = accent and Enum.Font.GothamBold or Enum.Font.GothamMedium
-					label.RichText = true
-					label.Text = text
-					label.TextColor3 = accent and theme.AccentText or theme.SubText
-					label.TextSize = 11
-					if clickable then
-						frame.Activated:Connect(function()
-							pesseffect(frame)
-						end)
-					end
-					return frame, label
-				end
-
-				local function hlist(parent, spacing, align)
-					local layout = instance.uilistlayout(parent)
-					layout.FillDirection = Enum.FillDirection.Horizontal
-					layout.HorizontalAlignment = align or Enum.HorizontalAlignment.Left
-					layout.VerticalAlignment = Enum.VerticalAlignment.Center
-					layout.Padding = UDim.new(0, spacing or 6)
-					layout.SortOrder = Enum.SortOrder.LayoutOrder
-					return layout
-				end
-
-				-- names shown to people: "Toggle_Auto Steal" -> "Auto Steal"
 				local function shownname(key)
 					return (tostring(key):gsub("^%a+_", ""))
 				end
@@ -8873,6 +10307,7 @@ function Chloex:Window(guiconfig)
 					return table.concat(out, ", ")
 				end
 
+				-- full description of a shared config, plus counts for the short line
 				local function describe(cfgtable)
 					local enabled, filters, values, unknown = {}, {}, {}, 0
 					for key, value in pairs(cfgtable or {}) do
@@ -8931,7 +10366,11 @@ function Chloex:Window(guiconfig)
 					if #lines == 0 then
 						lines[1] = '<font color="' .. dimhex .. '">Nothing from this hub version</font>'
 					end
-					return table.concat(lines, "\n"), #enabled, #filters
+					local short = #enabled > 0 and joinlist(enabled, 3) or "No features"
+					if #filters > 0 then
+						short = short .. '  <font color="' .. dimhex .. '">·  ' .. #filters .. " filter" .. (#filters == 1 and "" or "s") .. "</font>"
+					end
+					return table.concat(lines, "\n"), #enabled, #filters, #values, short
 				end
 
 				local function collectconfig()
@@ -8963,6 +10402,17 @@ function Chloex:Window(guiconfig)
 					return out
 				end
 
+				local function copyvalue(v)
+					if type(v) ~= "table" then
+						return v
+					end
+					local out = {}
+					for k, x in pairs(v) do
+						out[k] = copyvalue(x)
+					end
+					return out
+				end
+
 				-- apply a shared setup: features / filters / sliders from the post,
 				-- everything else off; the player's own text inputs (webhooks, names) stay
 				local function injectconfig(cfgtable)
@@ -8982,416 +10432,1239 @@ function Chloex:Window(guiconfig)
 					config:loadelements()
 				end
 
+				-- what applying cfgtable would do to the player's current settings
+				local function diffconfig(cfgtable)
+					local turnon, turnoff, changes = {}, {}, {}
+					local function same(a, b)
+						if type(a) == "table" or type(b) == "table" then
+							local x = type(a) == "table" and a or (a ~= nil and { a } or {})
+							local y = type(b) == "table" and b or (b ~= nil and { b } or {})
+							if #x ~= #y then
+								return false
+							end
+							local seen = {}
+							for _, v in ipairs(x) do
+								seen[tostring(v)] = true
+							end
+							for _, v in ipairs(y) do
+								if not seen[tostring(v)] then
+									return false
+								end
+							end
+							return true
+						end
+						return tostring(a) == tostring(b)
+					end
+					for key, element in pairs(config.elements) do
+						if not metakeys[key] then
+							local now = element.Value
+							local want = cfgtable[key]
+							if key:match("^Toggle_") then
+								local on = want == true
+								if on and now ~= true then
+									turnon[#turnon + 1] = shownname(key)
+								elseif not on and now == true then
+									turnoff[#turnoff + 1] = shownname(key)
+								end
+							elseif key:match("^Dropdown_") then
+								local nowempty = now == nil or now == "" or (type(now) == "table" and #now == 0)
+								if want == nil then
+									if not nowempty then
+										changes[#changes + 1] = shownname(key) .. " → cleared"
+									end
+								elseif not same(now, want) then
+									local shown = type(want) == "table" and table.concat(want, ", ") or tostring(want)
+									changes[#changes + 1] = shownname(key) .. " → " .. shown
+								end
+							elseif key:match("^Slider_") and tonumber(want) and not same(now, want) then
+								changes[#changes + 1] = shownname(key) .. " → " .. tostring(want)
+							end
+						end
+					end
+					table.sort(turnon)
+					table.sort(turnoff)
+					table.sort(changes)
+					return turnon, turnoff, changes
+				end
+
+				-- what a post asks of the device, compared with this one
+				local function devicefit(dev)
+					dev = type(dev) == "table" and dev or {}
+					local platform = tostring(dev.platform or "Any")
+					if platform ~= "Any" and platform ~= myplatform then
+						return false, "Made for " .. platform
+					end
+					local cap = tonumber(tostring(dev.ping or ""):match("(%d+)"))
+					local ms = currentping()
+					if cap and ms and ms >= cap then
+						return false, "Needs ping under " .. cap .. "ms"
+					end
+					return true, "Fits your device"
+				end
+
+				-- small building blocks ------------------------------------------------
+				local function icon(parent, name, size, color)
+					local img = instance.imagelabel(parent)
+					img.BackgroundTransparency = 1
+					img.ImageColor3 = color or theme.SubText
+					img.Size = UDim2.new(0, size, 0, size)
+					applyicon(img, name, 48)
+					return img
+				end
+
+				local function hlist(parent, spacing, align)
+					local layout = instance.uilistlayout(parent)
+					layout.FillDirection = Enum.FillDirection.Horizontal
+					layout.HorizontalAlignment = align or Enum.HorizontalAlignment.Left
+					layout.VerticalAlignment = Enum.VerticalAlignment.Center
+					layout.Padding = UDim.new(0, spacing or 6)
+					layout.SortOrder = Enum.SortOrder.LayoutOrder
+					return layout
+				end
+
+				-- read-only chip: no fill, dim text (in this window a fill means "pressable")
+				local function tag(parent, text, color, iconname)
+					local frame = instance.frame(parent)
+					frame.AutomaticSize = Enum.AutomaticSize.X
+					frame.BackgroundTransparency = 1
+					frame.Size = UDim2.new(0, 0, 0, 18)
+					hlist(frame, 4)
+					if iconname then
+						local img = icon(frame, iconname, 11, color or theme.Dim)
+						img.LayoutOrder = 0
+					end
+					local label = instance.textlabel(frame)
+					label.AutomaticSize = Enum.AutomaticSize.X
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.LayoutOrder = 1
+					label.RichText = true
+					label.Size = UDim2.new(0, 0, 1, 0)
+					label.Text = text
+					label.TextColor3 = color or theme.Dim
+					label.TextSize = 11
+					return frame, label
+				end
+
+				-- pressable button that sizes to its label
+				local function button(parent, text, kind, iconname)
+					local b = instance.textbutton(parent)
+					b.AutoButtonColor = false
+					b.AutomaticSize = Enum.AutomaticSize.X
+					b.BorderSizePixel = 0
+					b.Size = UDim2.new(0, 0, 0, 26)
+					b.Text = ""
+					local face, hover, ink = theme.Inner, theme.InnerHover, theme.Text
+					if kind == "primary" then
+						face, hover, ink = guiconfig.Color, guiconfig.Color:Lerp(Color3.new(1, 1, 1), 0.12), theme.AccentText
+					elseif kind == "danger" then
+						face, hover, ink = Color3.fromRGB(64, 30, 32), Color3.fromRGB(84, 36, 38), theme.Bad
+					elseif kind == "ghost" then
+						face, hover, ink = theme.Element, theme.ElementHover, theme.SubText
+					end
+					b.BackgroundColor3 = face
+					instance.uicorner(b).CornerRadius = UDim.new(1, 0)
+					local bpad = instance.uipadding(b)
+					bpad.PaddingLeft = UDim.new(0, iconname and 10 or 12)
+					bpad.PaddingRight = UDim.new(0, 12)
+					hlist(b, 5)
+					local img
+					if iconname then
+						img = icon(b, iconname, 13, ink)
+						img.LayoutOrder = 0
+					end
+					local label = instance.textlabel(b)
+					label.AutomaticSize = Enum.AutomaticSize.X
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.LayoutOrder = 1
+					label.RichText = true
+					label.Size = UDim2.new(0, 0, 1, 0)
+					label.Text = text
+					label.TextColor3 = ink
+					label.TextSize = 12
+					local enabled = true
+					b.MouseEnter:Connect(function()
+						if enabled then
+							b.BackgroundColor3 = hover
+						end
+					end)
+					b.MouseLeave:Connect(function()
+						b.BackgroundColor3 = face
+					end)
+					b.MouseButton1Down:Connect(function()
+						if enabled then
+							pcall(pesseffect, b)
+						end
+					end)
+					local api = { frame = b, label = label, icon = img }
+					function api.setenabled(on)
+						enabled = on
+						b.Active = on
+						b.BackgroundTransparency = on and 0 or 0.5
+						label.TextTransparency = on and 0 or 0.5
+						if img then
+							img.ImageTransparency = on and 0 or 0.5
+						end
+					end
+					function api.enabled()
+						return enabled
+					end
+					return api
+				end
+
+				-- layout -------------------------------------------------------------------
 				local root = instance.frame(sectionadd)
 				root.Name = "ConfigForum"
 				root.BorderSizePixel = 0
-				root.LayoutOrder = countitem
-				root.Size = UDim2.new(1, 0, 0, height)
 				root.ClipsDescendants = true
+				root.LayoutOrder = countitem
+				root.Size = UDim2.new(1, 0, 0, fitheight())
 				roundbg(root, 6, theme.Row)
 				countitem = countitem + 1
 				if not fixedheight then
-					scrollayers:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+					scrollayers:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(function()
 						root.Size = UDim2.new(1, 0, 0, fitheight())
 					end)
 				end
 
-				local headerh = 34
+				local headerh = 40
 				local title = instance.textlabel(root)
 				title.BackgroundTransparency = 1
-				title.Position = UDim2.new(0, 12, 0, 0)
-				title.Size = UDim2.new(0.35, 0, 0, headerh)
-				title.Font = Enum.Font.GothamBold
+				title.Font = FONT_BOLD
+				title.Position = UDim2.new(0, 12, 0, 6)
+				title.Size = UDim2.new(1, -250, 0, 16)
 				title.Text = tostring(forumconfig.Title or "Community Setups")
 				title.TextColor3 = theme.Text
 				title.TextSize = 13
-				title.TextXAlignment = Enum.TextXAlignment.Left
 				title.TextTruncate = Enum.TextTruncate.AtEnd
+				title.TextXAlignment = Enum.TextXAlignment.Left
 
-				local headerstrip = instance.frame(root)
-				headerstrip.AnchorPoint = Vector2.new(1, 0.5)
-				headerstrip.Position = UDim2.new(1, -pad, 0, headerh / 2)
-				headerstrip.Size = UDim2.new(0.65, -pad, 0, 22)
-				headerstrip.BackgroundTransparency = 1
-				hlist(headerstrip, 6, Enum.HorizontalAlignment.Right)
+				local subtitle = instance.textlabel(root)
+				subtitle.BackgroundTransparency = 1
+				subtitle.Font = FONT_MEDIUM
+				subtitle.Position = UDim2.new(0, 12, 0, 22)
+				subtitle.RichText = true
+				subtitle.Size = UDim2.new(1, -250, 0, 14)
+				subtitle.Text = "Loading..."
+				subtitle.TextColor3 = theme.Dim
+				subtitle.TextSize = 11
+				subtitle.TextTruncate = Enum.TextTruncate.AtEnd
+				subtitle.TextXAlignment = Enum.TextXAlignment.Left
 
-				local gamepill, gamelabel = makepill(headerstrip, '<font color="' .. goldhex .. '">●</font>  Detecting game...', false, false)
-				gamepill.LayoutOrder = 1
-				local countpill, countlabel = makepill(headerstrip, "0 setups", false, false)
-				countpill.LayoutOrder = 2
-				local refreshbtn = makepill(headerstrip, "Refresh", false, true)
-				refreshbtn.LayoutOrder = 3
+				local actionsbar = instance.frame(root)
+				actionsbar.AnchorPoint = Vector2.new(1, 0.5)
+				actionsbar.BackgroundTransparency = 1
+				actionsbar.Position = UDim2.new(1, -pad, 0, headerh / 2)
+				actionsbar.Size = UDim2.new(0, 240, 0, 26)
+				hlist(actionsbar, 6, Enum.HorizontalAlignment.Right)
 
-				-- share card
-				local sharey = headerh
-				local shareh = 100
-				local share = instance.frame(root)
-				share.Name = "Share"
-				share.Position = UDim2.new(0, pad, 0, sharey)
-				share.Size = UDim2.new(1, -pad * 2, 0, shareh)
-				share.BackgroundColor3 = theme.Box
-				share.BorderSizePixel = 0
-				instance.uicorner(share).CornerRadius = UDim.new(0, 6)
-				local sharestroke = instance.uistroke(share)
-				sharestroke.Color = theme.Stroke
-				sharestroke.Transparency = 0.5
+				local refreshbtn = instance.textbutton(actionsbar)
+				refreshbtn.AutoButtonColor = false
+				refreshbtn.LayoutOrder = 1
+				refreshbtn.Size = UDim2.new(0, 26, 0, 26)
+				refreshbtn.Text = ""
+				hoverbg(refreshbtn, roundbg(refreshbtn, 13, theme.Inner), theme.Inner, theme.InnerHover)
+				local refreshicon = icon(refreshbtn, "refresh-cw", 13, theme.Text)
+				refreshicon.AnchorPoint = Vector2.new(0.5, 0.5)
+				refreshicon.Position = UDim2.new(0.5, 0, 0.5, 0)
 
-				local sharew = 118
-				local titlebox = instance.textbox(share)
-				titlebox.Position = UDim2.new(0, 8, 0, 8)
-				titlebox.Size = UDim2.new(1, -(sharew + 24), 0, 28)
-				titlebox.BackgroundColor3 = theme.Element
-				titlebox.BorderSizePixel = 0
-				titlebox.Font = Enum.Font.Gotham
-				titlebox.Text = ""
-				titlebox.PlaceholderText = "Name your setup (e.g. Divine egg farm)"
-				titlebox.PlaceholderColor3 = theme.Dim
-				titlebox.TextColor3 = theme.Text
-				titlebox.TextSize = 12
-				titlebox.TextXAlignment = Enum.TextXAlignment.Left
-				titlebox.ClearTextOnFocus = false
-				titlebox.ClipsDescendants = true
-				instance.uicorner(titlebox).CornerRadius = UDim.new(1, 0)
-				local titlestroke = instance.uistroke(titlebox)
-				titlestroke.Color = theme.Stroke
-				titlestroke.Transparency = 0.35
-				local titlepad = instance.uipadding(titlebox)
-				titlepad.PaddingLeft = UDim.new(0, 12)
-				titlepad.PaddingRight = UDim.new(0, 12)
-				titlebox:GetPropertyChangedSignal("Text"):Connect(function()
-					if #titlebox.Text > 48 then
-						titlebox.Text = titlebox.Text:sub(1, 48)
+				local sharebtn = button(actionsbar, "Share my setup", "primary", "share-2")
+				sharebtn.frame.LayoutOrder = 2
+
+				-- toolbar: sort, search, device filter
+				local toolh = 28
+				local toolbar = instance.frame(root)
+				toolbar.BackgroundTransparency = 1
+				toolbar.Position = UDim2.new(0, pad, 0, headerh)
+				toolbar.Size = UDim2.new(1, -pad * 2, 0, toolh)
+
+				local sortframe = instance.frame(toolbar)
+				sortframe.AutomaticSize = Enum.AutomaticSize.X
+				sortframe.BackgroundColor3 = theme.Element
+				sortframe.BorderSizePixel = 0
+				sortframe.Size = UDim2.new(0, 0, 0, 26)
+				instance.uicorner(sortframe).CornerRadius = UDim.new(1, 0)
+				local sortpad = instance.uipadding(sortframe)
+				sortpad.PaddingLeft = UDim.new(0, 2)
+				sortpad.PaddingRight = UDim.new(0, 2)
+				hlist(sortframe, 2)
+				local sortchips = {}
+				local function sortchip(key, text, order)
+					local b = instance.textbutton(sortframe)
+					b.AutoButtonColor = false
+					b.AutomaticSize = Enum.AutomaticSize.X
+					b.BackgroundColor3 = guiconfig.Color
+					b.BackgroundTransparency = 1
+					b.BorderSizePixel = 0
+					b.LayoutOrder = order
+					b.Size = UDim2.new(0, 0, 0, 22)
+					b.Text = ""
+					instance.uicorner(b).CornerRadius = UDim.new(1, 0)
+					local bpad = instance.uipadding(b)
+					bpad.PaddingLeft = UDim.new(0, 10)
+					bpad.PaddingRight = UDim.new(0, 10)
+					local label = instance.textlabel(b)
+					label.AutomaticSize = Enum.AutomaticSize.X
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.Size = UDim2.new(0, 0, 1, 0)
+					label.Text = text
+					label.TextColor3 = theme.SubText
+					label.TextSize = 11
+					sortchips[key] = { frame = b, label = label }
+					return b
+				end
+				local topchip = sortchip("top", "Top liked", 1)
+				local newchip = sortchip("new", "Newest", 2)
+
+				local search = instance.textbox(toolbar)
+				search.AnchorPoint = Vector2.new(1, 0.5)
+				search.BackgroundColor3 = theme.Element
+				search.BorderSizePixel = 0
+				search.ClearTextOnFocus = false
+				search.ClipsDescendants = true
+				search.Font = FONT_MEDIUM
+				search.PlaceholderColor3 = theme.Dim
+				search.PlaceholderText = "Search setups"
+				search.Position = UDim2.new(1, -112, 0.5, 0)
+				search.Size = UDim2.new(0.4, -40, 0, 26)
+				search.Text = ""
+				search.TextColor3 = theme.Text
+				search.TextSize = 12
+				search.TextTruncate = Enum.TextTruncate.AtEnd
+				search.TextXAlignment = Enum.TextXAlignment.Left
+				instance.uicorner(search).CornerRadius = UDim.new(1, 0)
+				local searchpad = instance.uipadding(search)
+				searchpad.PaddingLeft = UDim.new(0, 28)
+				searchpad.PaddingRight = UDim.new(0, 10)
+				local searchicon = icon(search, "search", 12, theme.Dim)
+				searchicon.AnchorPoint = Vector2.new(0, 0.5)
+				searchicon.Position = UDim2.new(0, -19, 0.5, 0)
+
+				local devicebtn = button(toolbar, "Any device", "ghost", "chevron-down")
+				devicebtn.frame.AnchorPoint = Vector2.new(1, 0.5)
+				devicebtn.frame.Position = UDim2.new(1, 0, 0.5, 0)
+
+				-- banner for errors, maintenance and the post-apply Undo
+				local bannerh = 30
+				local banner = instance.frame(root)
+				banner.BackgroundColor3 = theme.Box
+				banner.BorderSizePixel = 0
+				banner.Position = UDim2.new(0, pad, 0, headerh + toolh + 4)
+				banner.Size = UDim2.new(1, -pad * 2, 0, bannerh)
+				banner.Visible = false
+				banner.ZIndex = 3
+				instance.uicorner(banner).CornerRadius = UDim.new(0, 6)
+				local bannerstroke = instance.uistroke(banner)
+				bannerstroke.Color = theme.Stroke
+				bannerstroke.Transparency = 0.4
+				local bannericon = icon(banner, "info", 13, theme.SubText)
+				bannericon.AnchorPoint = Vector2.new(0, 0.5)
+				bannericon.Position = UDim2.new(0, 10, 0.5, 0)
+				bannericon.ZIndex = 4
+				local bannertext = instance.textlabel(banner)
+				bannertext.BackgroundTransparency = 1
+				bannertext.Font = FONT_BOLD
+				bannertext.Position = UDim2.new(0, 30, 0, 0)
+				bannertext.Size = UDim2.new(1, -120, 1, 0)
+				bannertext.Text = ""
+				bannertext.TextColor3 = theme.SubText
+				bannertext.TextSize = 12
+				bannertext.TextTruncate = Enum.TextTruncate.AtEnd
+				bannertext.TextXAlignment = Enum.TextXAlignment.Left
+				bannertext.ZIndex = 4
+				local banneraction = button(banner, "Retry", "ghost")
+				banneraction.frame.AnchorPoint = Vector2.new(1, 0.5)
+				banneraction.frame.Position = UDim2.new(1, -4, 0.5, 0)
+				banneraction.frame.Size = UDim2.new(0, 0, 0, 22)
+				banneraction.frame.ZIndex = 4
+				banneraction.label.ZIndex = 5
+				local bannerfn = nil
+				banneraction.frame.Activated:Connect(function()
+					elevate()
+					if bannerfn then
+						local fn = bannerfn
+						fn()
 					end
 				end)
 
-				local sharebtn = instance.textbutton(share)
-				sharebtn.AnchorPoint = Vector2.new(1, 0)
-				sharebtn.Position = UDim2.new(1, -8, 0, 8)
-				sharebtn.Size = UDim2.new(0, sharew, 0, 28)
-				sharebtn.BackgroundColor3 = theme.Accent
-				sharebtn.BorderSizePixel = 0
-				sharebtn.Font = Enum.Font.GothamBold
-				sharebtn.Text = "Share Config"
-				sharebtn.TextColor3 = theme.AccentText
-				sharebtn.TextSize = 12
-				sharebtn.AutoButtonColor = true
-				instance.uicorner(sharebtn).CornerRadius = UDim.new(1, 0)
-
-				local devicerow = instance.frame(share)
-				devicerow.Position = UDim2.new(0, 8, 0, 42)
-				devicerow.Size = UDim2.new(1, -16, 0, 22)
-				devicerow.BackgroundTransparency = 1
-				hlist(devicerow, 6)
-
-				local devicelabel = instance.textlabel(devicerow)
-				devicelabel.BackgroundTransparency = 1
-				devicelabel.AutomaticSize = Enum.AutomaticSize.X
-				devicelabel.Size = UDim2.new(0, 0, 1, 0)
-				devicelabel.Font = Enum.Font.GothamBold
-				devicelabel.Text = "Device Requirement"
-				devicelabel.TextColor3 = theme.SubText
-				devicelabel.TextSize = 11
-				devicelabel.LayoutOrder = 0
-
-				local devicepills = {}
-				local deviceprefix = { ram = "RAM", ping = "Ping", platform = "Device" }
-				for order, field in ipairs({ "ram", "ping", "platform" }) do
-					local btn, label = makepill(devicerow, "", false, true)
-					btn.LayoutOrder = order
-					local function render()
-						label.Text = '<font color="' .. dimhex .. '">' .. deviceprefix[field] .. "</font>  " .. forum.Device[field]
-					end
-					render()
-					btn.Activated:Connect(function()
-						elevate()
-						local opts = forum.Options[field]
-						local idx = table.find(opts, forum.Device[field]) or 1
-						forum.Device[field] = opts[(idx % #opts) + 1]
-						render()
-					end)
-					devicepills[field] = render
-				end
-
-				local statusrow = instance.frame(share)
-				statusrow.Position = UDim2.new(0, 8, 0, 70)
-				statusrow.Size = UDim2.new(1, -16, 0, 22)
-				statusrow.BackgroundTransparency = 1
-
-				local statuslabel = instance.textlabel(statusrow)
-				statuslabel.BackgroundTransparency = 1
-				statuslabel.Size = UDim2.new(1, -120, 1, 0)
-				statuslabel.Font = Enum.Font.Gotham
-				statuslabel.RichText = true
-				statuslabel.Text = ""
-				statuslabel.TextColor3 = theme.Dim
-				statuslabel.TextSize = 11
-				statuslabel.TextXAlignment = Enum.TextXAlignment.Left
-				statuslabel.TextTruncate = Enum.TextTruncate.AtEnd
-
-				local deletebtn, deletelabel = makepill(statusrow, "Delete My Post", false, true)
-				deletebtn.AnchorPoint = Vector2.new(1, 0)
-				deletebtn.Position = UDim2.new(1, 0, 0, 0)
-				deletelabel.TextColor3 = theme.Bad
-				deletebtn.Visible = false
-
-				-- sort bar
-				local sorty = sharey + shareh + 6
-				local sortbar = instance.frame(root)
-				sortbar.Position = UDim2.new(0, pad, 0, sorty)
-				sortbar.Size = UDim2.new(1, -pad * 2, 0, 22)
-				sortbar.BackgroundTransparency = 1
-				hlist(sortbar, 6)
-				local topbtn, toplabel = makepill(sortbar, "Top Liked", false, true)
-				topbtn.LayoutOrder = 1
-				local newbtn, newlabel = makepill(sortbar, "Newest", false, true)
-				newbtn.LayoutOrder = 2
-
-				local listy = sorty + 28
 				local scroll = instance.scrollingframe(root)
 				scroll.Name = "Posts"
-				scroll.Position = UDim2.new(0, pad, 0, listy)
-				scroll.Size = UDim2.new(1, -pad * 2, 1, -(listy + pad))
+				scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 				scroll.BackgroundColor3 = theme.ChatBg
 				scroll.BorderSizePixel = 0
-				scroll.ScrollBarThickness = 3
-				scroll.ScrollBarImageColor3 = theme.Track
 				scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-				scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+				scroll.ScrollBarImageColor3 = theme.Bar
+				scroll.ScrollBarThickness = 3
 				scroll.ScrollingDirection = Enum.ScrollingDirection.Y
 				instance.uicorner(scroll).CornerRadius = UDim.new(0, 6)
 				local scrollpad = instance.uipadding(scroll)
+				scrollpad.PaddingBottom = UDim.new(0, 6)
 				scrollpad.PaddingLeft = UDim.new(0, 6)
 				scrollpad.PaddingRight = UDim.new(0, 8)
 				scrollpad.PaddingTop = UDim.new(0, 6)
-				scrollpad.PaddingBottom = UDim.new(0, 6)
 				local scrolllayout = instance.uilistlayout(scroll)
 				scrolllayout.Padding = UDim.new(0, 6)
 				scrolllayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-				local emptylabel = instance.textlabel(scroll)
-				emptylabel.Name = "Empty"
-				emptylabel.BackgroundTransparency = 1
-				emptylabel.Size = UDim2.new(1, 0, 0, 60)
-				emptylabel.Font = Enum.Font.Gotham
-				emptylabel.Text = "Loading setups..."
-				emptylabel.TextColor3 = theme.Dim
-				emptylabel.TextSize = 12
-				emptylabel.TextWrapped = true
-				emptylabel.LayoutOrder = 0
-
-				local refresh
-
-				local function updatesortpills()
-					local top = forum.Sort == "top"
-					topbtn.BackgroundColor3 = top and theme.Accent or theme.Element
-					toplabel.TextColor3 = top and theme.AccentText or theme.SubText
-					newbtn.BackgroundColor3 = top and theme.Element or theme.Accent
-					newlabel.TextColor3 = top and theme.SubText or theme.AccentText
+				local function layoutlist()
+					local top = headerh + toolh + 4 + (banner.Visible and (bannerh + 6) or 0)
+					scroll.Position = UDim2.new(0, pad, 0, top)
+					scroll.Size = UDim2.new(1, -pad * 2, 1, -(top + pad))
 				end
-				updatesortpills()
+				layoutlist()
+
+				local bannertoken = 0
+				local function showbanner(text, tone, actiontext, fn, seconds)
+					elevate()
+					bannertoken = bannertoken + 1
+					local token = bannertoken
+					if not text then
+						banner.Visible = false
+						bannerfn = nil
+						layoutlist()
+						return
+					end
+					local color = tone == "bad" and theme.Bad or (tone == "warn" and theme.Gold or (tone == "good" and theme.Good or theme.SubText))
+					local iconname = tone == "bad" and "triangle-alert" or (tone == "warn" and "hourglass" or (tone == "good" and "circle-check" or "info"))
+					bannertext.Text = text
+					bannertext.TextColor3 = color
+					bannericon.ImageColor3 = color
+					applyicon(bannericon, iconname, 48)
+					bannerstroke.Color = color
+					banneraction.frame.Visible = actiontext ~= nil
+					if actiontext then
+						banneraction.label.Text = actiontext
+					end
+					bannerfn = fn
+					banner.Visible = true
+					layoutlist()
+					if seconds then
+						task.delay(seconds, function()
+							if bannertoken == token then
+								elevate()
+								banner.Visible = false
+								bannerfn = nil
+								layoutlist()
+							end
+						end)
+					end
+				end
+
+				local emptybox = instance.frame(scroll)
+				emptybox.Name = "Empty"
+				emptybox.BackgroundTransparency = 1
+				emptybox.LayoutOrder = 0
+				emptybox.Size = UDim2.new(1, 0, 0, 110)
+				local emptyicon = icon(emptybox, "messages-square", 22, theme.Dim)
+				emptyicon.AnchorPoint = Vector2.new(0.5, 0)
+				emptyicon.Position = UDim2.new(0.5, 0, 0, 14)
+				local emptytext = instance.textlabel(emptybox)
+				emptytext.BackgroundTransparency = 1
+				emptytext.Font = FONT_MEDIUM
+				emptytext.Position = UDim2.new(0, 10, 0, 44)
+				emptytext.Size = UDim2.new(1, -20, 0, 30)
+				emptytext.Text = "Loading setups..."
+				emptytext.TextColor3 = theme.Dim
+				emptytext.TextSize = 12
+				emptytext.TextWrapped = true
+				local emptyshare = button(emptybox, "Share my setup", "primary", "share-2")
+				emptyshare.frame.AnchorPoint = Vector2.new(0.5, 0)
+				emptyshare.frame.Position = UDim2.new(0.5, 0, 0, 78)
+				emptyshare.frame.Visible = false
+
+				-- sheets and popovers sit over everything, with one click-outside layer
+				local scrim = instance.textbutton(root)
+				scrim.AutoButtonColor = false
+				scrim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				scrim.BackgroundTransparency = 1
+				scrim.Size = UDim2.new(1, 0, 1, 0)
+				scrim.Text = ""
+				scrim.Visible = false
+				scrim.ZIndex = 20
+				local openlayer = nil
+				local closepickerref = nil
+				local function closelayer()
+					if closepickerref then
+						closepickerref()
+					end
+					if openlayer then
+						openlayer.Visible = false
+					end
+					openlayer = nil
+					scrim.Visible = false
+				end
+				local function showlayer(frame, dim)
+					closelayer()
+					openlayer = frame
+					frame.Visible = true
+					scrim.BackgroundTransparency = dim and 0.45 or 1
+					scrim.Visible = true
+				end
+				scrim.Activated:Connect(closelayer)
+
+				local function sheet(name)
+					local frame = instance.frame(root)
+					frame.Name = name
+					frame.AnchorPoint = Vector2.new(0.5, 0.5)
+					frame.AutomaticSize = Enum.AutomaticSize.Y
+					frame.BackgroundColor3 = theme.Card
+					frame.BorderSizePixel = 0
+					frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+					frame.Size = UDim2.new(1, -40, 0, 0)
+					frame.Visible = false
+					frame.ZIndex = 30
+					instance.uicorner(frame).CornerRadius = UDim.new(0, 10)
+					local stroke = instance.uistroke(frame)
+					stroke.Color = theme.Stroke
+					local spad = instance.uipadding(frame)
+					spad.PaddingBottom = UDim.new(0, 12)
+					spad.PaddingLeft = UDim.new(0, 14)
+					spad.PaddingRight = UDim.new(0, 14)
+					spad.PaddingTop = UDim.new(0, 12)
+					local layout = instance.uilistlayout(frame)
+					layout.Padding = UDim.new(0, 8)
+					layout.SortOrder = Enum.SortOrder.LayoutOrder
+					local constraint = instance.uisizeconstraint(frame)
+					constraint.MaxSize = Vector2.new(460, 2000)
+					return frame
+				end
+
+				local function sheethead(frame, text)
+					local head = instance.frame(frame)
+					head.BackgroundTransparency = 1
+					head.LayoutOrder = 0
+					head.Size = UDim2.new(1, 0, 0, 22)
+					head.ZIndex = 31
+					local label = instance.textlabel(head)
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.Size = UDim2.new(1, -30, 1, 0)
+					label.Text = text
+					label.TextColor3 = theme.Text
+					label.TextSize = 14
+					label.TextTruncate = Enum.TextTruncate.AtEnd
+					label.TextXAlignment = Enum.TextXAlignment.Left
+					label.ZIndex = 31
+					local close = instance.imagebutton(head)
+					close.AnchorPoint = Vector2.new(1, 0.5)
+					close.BackgroundTransparency = 1
+					close.ImageColor3 = theme.SubText
+					close.Position = UDim2.new(1, 0, 0.5, 0)
+					close.Size = UDim2.new(0, 16, 0, 16)
+					close.ZIndex = 32
+					applyicon(close, "x", 48)
+					close.Activated:Connect(closelayer)
+					return head, label
+				end
+
+				local function sheettext(frame, order, text, color, size)
+					local label = instance.textlabel(frame)
+					label.AutomaticSize = Enum.AutomaticSize.Y
+					label.BackgroundTransparency = 1
+					label.Font = FONT_MEDIUM
+					label.LayoutOrder = order
+					label.RichText = true
+					label.Size = UDim2.new(1, 0, 0, 0)
+					label.Text = text
+					label.TextColor3 = color or theme.SubText
+					label.TextSize = size or 12
+					label.TextWrapped = true
+					label.TextXAlignment = Enum.TextXAlignment.Left
+					label.ZIndex = 31
+					return label
+				end
+
+				local function sheetrow(frame, order, height)
+					local row = instance.frame(frame)
+					row.BackgroundTransparency = 1
+					row.LayoutOrder = order
+					row.Size = UDim2.new(1, 0, 0, height or 28)
+					row.ZIndex = 31
+					return row
+				end
+
+				local function lift(gui, z)
+					gui.ZIndex = z
+					for _, d in ipairs(gui:GetDescendants()) do
+						if d:IsA("GuiObject") then
+							d.ZIndex = z + 1
+						end
+					end
+				end
+
+				-- option list popover used by the device filter and the requirement pickers
+				local picker = instance.frame(root)
+				picker.Name = "Picker"
+				picker.AutomaticSize = Enum.AutomaticSize.Y
+				picker.BackgroundColor3 = theme.Card
+				picker.BorderSizePixel = 0
+				picker.Size = UDim2.new(0, 170, 0, 0)
+				picker.Visible = false
+				picker.ZIndex = 40
+				instance.uicorner(picker).CornerRadius = UDim.new(0, 8)
+				local pickerstroke = instance.uistroke(picker)
+				pickerstroke.Color = theme.Stroke
+				local pickerpad = instance.uipadding(picker)
+				pickerpad.PaddingBottom = UDim.new(0, 4)
+				pickerpad.PaddingLeft = UDim.new(0, 4)
+				pickerpad.PaddingRight = UDim.new(0, 4)
+				pickerpad.PaddingTop = UDim.new(0, 4)
+				local pickerlayout = instance.uilistlayout(picker)
+				pickerlayout.Padding = UDim.new(0, 2)
+				pickerlayout.SortOrder = Enum.SortOrder.LayoutOrder
+				local pickerowner = nil
+
+				local function closepicker()
+					picker.Visible = false
+					pickerowner = nil
+					if not openlayer then
+						scrim.Visible = false
+					end
+				end
+				closepickerref = closepicker
+
+				local function openpicker(anchor, options, current, onpick)
+					elevate()
+					if pickerowner == anchor then
+						closepicker()
+						return
+					end
+					for _, child in ipairs(picker:GetChildren()) do
+						if child:IsA("GuiObject") then
+							child:Destroy()
+						end
+					end
+					for index, option in ipairs(options) do
+						local row = instance.textbutton(picker)
+						row.AutoButtonColor = false
+						row.BackgroundColor3 = theme.Element
+						row.BackgroundTransparency = option == current and 0 or 1
+						row.BorderSizePixel = 0
+						row.LayoutOrder = index
+						row.Size = UDim2.new(1, 0, 0, 26)
+						row.Text = ""
+						row.ZIndex = 41
+						instance.uicorner(row).CornerRadius = UDim.new(0, 6)
+						local label = instance.textlabel(row)
+						label.BackgroundTransparency = 1
+						label.Font = FONT_BOLD
+						label.Position = UDim2.new(0, 10, 0, 0)
+						label.Size = UDim2.new(1, -34, 1, 0)
+						label.Text = option
+						label.TextColor3 = option == current and theme.Text or theme.SubText
+						label.TextSize = 12
+						label.TextTruncate = Enum.TextTruncate.AtEnd
+						label.TextXAlignment = Enum.TextXAlignment.Left
+						label.ZIndex = 42
+						if option == current then
+							local mark = icon(row, "check", 12, guiconfig.Color)
+							mark.AnchorPoint = Vector2.new(1, 0.5)
+							mark.Position = UDim2.new(1, -8, 0.5, 0)
+							mark.ZIndex = 42
+						end
+						row.MouseEnter:Connect(function()
+							row.BackgroundTransparency = 0
+						end)
+						row.MouseLeave:Connect(function()
+							row.BackgroundTransparency = option == current and 0 or 1
+						end)
+						row.Activated:Connect(function()
+							elevate()
+							closepicker()
+							onpick(option)
+						end)
+					end
+					local ax = anchor.AbsolutePosition.X - root.AbsolutePosition.X + anchor.AbsoluteSize.X
+					local ay = anchor.AbsolutePosition.Y - root.AbsolutePosition.Y + anchor.AbsoluteSize.Y + 4
+					picker.AnchorPoint = Vector2.new(1, 0)
+					picker.Position = UDim2.new(0, math.max(170, ax), 0, ay)
+					picker.Visible = true
+					pickerowner = anchor
+					-- outside a sheet, a transparent scrim closes the list on any outside tap
+					if not openlayer then
+						scrim.BackgroundTransparency = 1
+						scrim.Visible = true
+					end
+				end
+
+				-- share sheet ---------------------------------------------------------------
+				local sharesheet = sheet("ShareSheet")
+				local _, sharetitle = sheethead(sharesheet, "Share your setup")
+
+				local namerow = sheetrow(sharesheet, 1, 32)
+				local titlebox = instance.textbox(namerow)
+				titlebox.BackgroundColor3 = theme.Element
+				titlebox.BorderSizePixel = 0
+				titlebox.ClearTextOnFocus = false
+				titlebox.ClipsDescendants = true
+				titlebox.Font = FONT_MEDIUM
+				titlebox.PlaceholderColor3 = theme.Dim
+				titlebox.PlaceholderText = "Name your setup, e.g. Divine egg farm"
+				titlebox.Size = UDim2.new(1, 0, 1, 0)
+				titlebox.Text = ""
+				titlebox.TextColor3 = theme.Text
+				titlebox.TextSize = 12
+				titlebox.TextXAlignment = Enum.TextXAlignment.Left
+				titlebox.ZIndex = 32
+				instance.uicorner(titlebox).CornerRadius = UDim.new(0, 6)
+				local titlepad = instance.uipadding(titlebox)
+				titlepad.PaddingLeft = UDim.new(0, 10)
+				titlepad.PaddingRight = UDim.new(0, 48)
+				local titlecount = instance.textlabel(namerow)
+				titlecount.AnchorPoint = Vector2.new(1, 0.5)
+				titlecount.BackgroundTransparency = 1
+				titlecount.Font = FONT_BOLD
+				titlecount.Position = UDim2.new(1, -10, 0.5, 0)
+				titlecount.Size = UDim2.new(0, 40, 0, 14)
+				titlecount.Text = "0/48"
+				titlecount.TextColor3 = theme.Dim
+				titlecount.TextSize = 10
+				titlecount.TextXAlignment = Enum.TextXAlignment.Right
+				titlecount.ZIndex = 33
+				titlebox:GetPropertyChangedSignal("Text"):Connect(function()
+					if #titlebox.Text > 48 then
+						titlebox.Text = titlebox.Text:sub(1, 48)
+						return
+					end
+					titlecount.Text = tostring(#titlebox.Text) .. "/48"
+				end)
+
+				sheettext(sharesheet, 2, "REQUIREMENTS", theme.Dim, 10).Font = FONT_BOLD
+				local reqrow = sheetrow(sharesheet, 3, 28)
+				hlist(reqrow, 6)
+				local deviceprefix = { ram = "RAM", ping = "Ping", platform = "Device" }
+				local reqbuttons = {}
+				for order, field in ipairs({ "ram", "ping", "platform" }) do
+					local b = button(reqrow, "", "ghost", "chevron-down")
+					b.frame.LayoutOrder = order
+					lift(b.frame, 32)
+					local function render()
+						b.label.Text = '<font color="' .. dimhex .. '">' .. deviceprefix[field] .. "</font>  " .. escaperich(forum.Device[field])
+					end
+					render()
+					reqbuttons[field] = render
+					b.frame.Activated:Connect(function()
+						openpicker(b.frame, forum.Options[field], forum.Device[field], function(option)
+							forum.Device[field] = option
+							render()
+						end)
+					end)
+				end
+
+				local summary = sheettext(sharesheet, 4, "", theme.SubText, 12)
+
+				local namerow2 = sheetrow(sharesheet, 5, 34)
+				local nametoggle = instance.textbutton(namerow2)
+				nametoggle.AutoButtonColor = false
+				nametoggle.BackgroundTransparency = 1
+				nametoggle.Size = UDim2.new(1, 0, 1, 0)
+				nametoggle.Text = ""
+				nametoggle.ZIndex = 32
+				local namelabel = instance.textlabel(namerow2)
+				namelabel.BackgroundTransparency = 1
+				namelabel.Font = FONT_BOLD
+				namelabel.Position = UDim2.new(0, 0, 0, 1)
+				namelabel.Size = UDim2.new(1, -50, 0, 16)
+				namelabel.Text = "Show my name on the post"
+				namelabel.TextColor3 = theme.Text
+				namelabel.TextSize = 12
+				namelabel.TextXAlignment = Enum.TextXAlignment.Left
+				namelabel.ZIndex = 33
+				local namesub = instance.textlabel(namerow2)
+				namesub.BackgroundTransparency = 1
+				namesub.Font = FONT_MEDIUM
+				namesub.Position = UDim2.new(0, 0, 0, 18)
+				namesub.Size = UDim2.new(1, -50, 0, 14)
+				namesub.Text = "Off: the post shows a masked name"
+				namesub.TextColor3 = theme.Dim
+				namesub.TextSize = 11
+				namesub.TextXAlignment = Enum.TextXAlignment.Left
+				namesub.ZIndex = 33
+				local track = instance.frame(namerow2)
+				track.AnchorPoint = Vector2.new(1, 0.5)
+				track.BackgroundColor3 = theme.Field
+				track.BorderSizePixel = 0
+				track.Position = UDim2.new(1, 0, 0.5, 0)
+				track.Size = UDim2.new(0, 34, 0, 18)
+				track.ZIndex = 33
+				instance.uicorner(track).CornerRadius = UDim.new(1, 0)
+				local knob = instance.frame(track)
+				knob.BackgroundColor3 = theme.Text
+				knob.BorderSizePixel = 0
+				knob.Position = UDim2.new(0, 2, 0, 2)
+				knob.Size = UDim2.new(0, 14, 0, 14)
+				knob.ZIndex = 34
+				instance.uicorner(knob).CornerRadius = UDim.new(1, 0)
+				local function rendername()
+					track.BackgroundColor3 = showname and guiconfig.Color or theme.Field
+					knob.BackgroundColor3 = showname and theme.AccentText or theme.Text
+					sv.ts:Create(knob, TweenInfo.new(0.15), { Position = showname and UDim2.new(0, 18, 0, 2) or UDim2.new(0, 2, 0, 2) }):Play()
+				end
+				rendername()
+				nametoggle.Activated:Connect(function()
+					elevate()
+					showname = not showname
+					rendername()
+					pcall(function()
+						if writefile then
+							writefile(namefile, showname and "1" or "0")
+						end
+					end)
+				end)
+
+				local sharewarn = sheettext(sharesheet, 6, "", theme.Gold, 11)
+				sharewarn.Visible = false
+
+				local sharebuttons = sheetrow(sharesheet, 7, 30)
+				local deletebtn = button(sharebuttons, "Delete my post", "danger", "trash-2")
+				lift(deletebtn.frame, 32)
+				deletebtn.frame.Visible = false
+				local rightbtns = instance.frame(sharebuttons)
+				rightbtns.AnchorPoint = Vector2.new(1, 0)
+				rightbtns.BackgroundTransparency = 1
+				rightbtns.Position = UDim2.new(1, 0, 0, 0)
+				rightbtns.Size = UDim2.new(0, 260, 1, 0)
+				rightbtns.ZIndex = 31
+				hlist(rightbtns, 6, Enum.HorizontalAlignment.Right)
+				local cancelbtn = button(rightbtns, "Cancel", "ghost")
+				cancelbtn.frame.LayoutOrder = 1
+				lift(cancelbtn.frame, 32)
+				local confirmshare = button(rightbtns, "Share", "primary", "share-2")
+				confirmshare.frame.LayoutOrder = 2
+				lift(confirmshare.frame, 32)
+				cancelbtn.frame.Activated:Connect(closelayer)
 
 				local function updateshare()
-					local _, ons, filters = describe(collectconfig())
+					local _, ons, filters, sliders = describe(collectconfig())
+					summary.Text = string.format(
+						'Will share <font color="%s"><b>%d</b></font> feature%s  ·  <font color="%s"><b>%d</b></font> filter%s  ·  <font color="%s"><b>%d</b></font> slider%s',
+						texthex, ons, ons == 1 and "" or "s",
+						texthex, filters, filters == 1 and "" or "s",
+						texthex, sliders, sliders == 1 and "" or "s"
+					)
 					local mine = forum.Mine
-					local text = "Will share <b>" .. ons .. "</b> feature(s) and <b>" .. filters .. "</b> filter(s)"
 					if mine and forum.MineHidden then
-						text = '<font color="' .. hexcolor(theme.Bad) .. '">Your post is hidden after reports. Ask an admin on Discord.</font>'
-						sharebtn.Text = "Update Config"
+						sharewarn.Text = "Your post is hidden after reports. Ask an admin on Discord."
+						sharewarn.TextColor3 = theme.Bad
+						sharewarn.Visible = true
 					elseif mine then
-						text = text .. '  ·  <font color="' .. goldhex .. '">Your post: ' .. (mine.likes or 0) .. " like(s)</font>"
-						sharebtn.Text = "Update Config"
+						local likes = tonumber(mine.likes) or 0
+						sharewarn.Text = likes > 0 and ("Updating resets your " .. likes .. " like" .. (likes == 1 and "" or "s") .. ".")
+							or "Updating replaces your current post."
+						sharewarn.TextColor3 = theme.Gold
+						sharewarn.Visible = true
 					else
-						sharebtn.Text = "Share Config"
+						sharewarn.Visible = false
 					end
-					statuslabel.Text = text
-					deletebtn.Visible = mine ~= nil
+					sharetitle.Text = mine and "Update your setup" or "Share your setup"
+					confirmshare.label.Text = mine and "Update" or "Share"
+					deletebtn.frame.Visible = mine ~= nil
+					sharebtn.label.Text = mine and "My setup" or "Share my setup"
+					confirmshare.setenabled(not forum.Paused and ons > 0)
 				end
 
+				local function openshare()
+					elevate()
+					if forum.Paused then
+						showbanner("The forum is under maintenance, sharing is closed", "warn", nil, nil, 4)
+						return
+					end
+					closepicker()
+					updateshare()
+					showlayer(sharesheet, true)
+				end
+				sharebtn.frame.Activated:Connect(openshare)
+				emptyshare.frame.Activated:Connect(openshare)
+
+				-- preview & apply sheet ------------------------------------------------
+				local applysheet = sheet("ApplySheet")
+				local _, applytitle = sheethead(applysheet, "Apply setup")
+				local applybody = sheettext(applysheet, 1, "", theme.SubText, 12)
+				local applywarn = sheettext(applysheet, 2, "", theme.Gold, 11)
+				local applybuttons = sheetrow(applysheet, 3, 30)
+				local applyright = instance.frame(applybuttons)
+				applyright.BackgroundTransparency = 1
+				applyright.Size = UDim2.new(1, 0, 1, 0)
+				applyright.ZIndex = 31
+				hlist(applyright, 6, Enum.HorizontalAlignment.Right)
+				local applycancel = button(applyright, "Cancel", "ghost")
+				applycancel.frame.LayoutOrder = 1
+				lift(applycancel.frame, 32)
+				local applyconfirm = button(applyright, "Apply", "primary", "check")
+				applyconfirm.frame.LayoutOrder = 2
+				lift(applyconfirm.frame, 32)
+				applycancel.frame.Activated:Connect(closelayer)
+				local applypost = nil
+
+				local function bulletlist(head, list, color, limit)
+					if #list == 0 then
+						return nil
+					end
+					local shown = {}
+					for i, v in ipairs(list) do
+						if i > limit then
+							shown[#shown + 1] = "+" .. (#list - limit) .. " more"
+							break
+						end
+						shown[#shown + 1] = escaperich(v)
+					end
+					return '<font color="' .. hexcolor(color) .. '"><b>' .. head .. "</b></font>\n" .. table.concat(shown, ", ")
+				end
+
+				local function openapply(post)
+					elevate()
+					if forum.Paused then
+						showbanner("The forum is under maintenance", "warn", nil, nil, 4)
+						return
+					end
+					applypost = post
+					applytitle.Text = tostring(post.title or "Untitled setup")
+					local on, off, changes = diffconfig(post.config or {})
+					local parts = {}
+					parts[#parts + 1] = bulletlist("Turns on", on, theme.Good, 12)
+					parts[#parts + 1] = bulletlist("Turns off", off, theme.Bad, 12)
+					parts[#parts + 1] = bulletlist("Changes", changes, theme.Gold, 8)
+					local text = table.concat(parts, "\n\n")
+					if text == "" then
+						text = "Your settings already match this setup."
+					end
+					applybody.Text = text .. '\n\n<font color="' .. dimhex .. '">Your own text fields (webhooks, names) are kept.</font>'
+					local fits, why = devicefit(post.device)
+					applywarn.Visible = not fits
+					applywarn.Text = fits and "" or ("Heads up: " .. why .. ".")
+					showlayer(applysheet, true)
+				end
+
+				local function snapshot()
+					local copy = {}
+					for k, v in pairs(config.data or {}) do
+						copy[k] = copyvalue(v)
+					end
+					return copy
+				end
+
+				applyconfirm.frame.Activated:Connect(function()
+					elevate()
+					local post = applypost
+					if not post then
+						return
+					end
+					closelayer()
+					local before = snapshot()
+					local ok, errmsg = pcall(injectconfig, post.config)
+					if not ok then
+						warn("[PILAT] forum apply failed:", errmsg)
+						showbanner("Couldn't apply this setup", "bad", nil, nil, 5)
+						return
+					end
+					showbanner("Applied: " .. tostring(post.title or "setup"), "good", "Undo", function()
+						config.data = before
+						config.loaded = true
+						config:loadelements()
+						showbanner("Your previous settings are back", "info", nil, nil, 3)
+					end, 12)
+				end)
+
+				-- cards ----------------------------------------------------------------------
 				local rankcolors = {
 					Color3.fromRGB(245, 196, 81),
 					Color3.fromRGB(196, 200, 210),
 					Color3.fromRGB(214, 144, 92),
 				}
 
+				local cardmenu = instance.frame(root)
+				cardmenu.AutomaticSize = Enum.AutomaticSize.Y
+				cardmenu.BackgroundColor3 = theme.Card
+				cardmenu.BorderSizePixel = 0
+				cardmenu.Size = UDim2.new(0, 180, 0, 0)
+				cardmenu.Visible = false
+				cardmenu.ZIndex = 30
+				instance.uicorner(cardmenu).CornerRadius = UDim.new(0, 8)
+				local cardmenustroke = instance.uistroke(cardmenu)
+				cardmenustroke.Color = theme.Stroke
+				local cardmenupad = instance.uipadding(cardmenu)
+				cardmenupad.PaddingBottom = UDim.new(0, 4)
+				cardmenupad.PaddingLeft = UDim.new(0, 4)
+				cardmenupad.PaddingRight = UDim.new(0, 4)
+				cardmenupad.PaddingTop = UDim.new(0, 4)
+				local cardmenulayout = instance.uilistlayout(cardmenu)
+				cardmenulayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+				local function report(post, card)
+					task.spawn(function()
+						local data, errmsg = forumpost("/forum/report", { id = post.id })
+						elevate()
+						if errmsg then
+							showbanner(friendlyerror(errmsg, "reporting again"), "bad", nil, nil, 5)
+							return
+						end
+						post.reported = true
+						showbanner("Thanks, the post was reported", "good", nil, nil, 3)
+						if data and data.hidden and card.Parent then
+							card:Destroy()
+						end
+					end)
+				end
+
+				local function opencardmenu(anchor, post, card)
+					elevate()
+					for _, child in ipairs(cardmenu:GetChildren()) do
+						if child:IsA("GuiObject") then
+							child:Destroy()
+						end
+					end
+					local confirm = false
+					local row = instance.textbutton(cardmenu)
+					row.AutoButtonColor = false
+					row.BackgroundColor3 = theme.Element
+					row.BackgroundTransparency = 1
+					row.BorderSizePixel = 0
+					row.Size = UDim2.new(1, 0, 0, 30)
+					row.Text = ""
+					row.ZIndex = 31
+					instance.uicorner(row).CornerRadius = UDim.new(0, 6)
+					local img = icon(row, "flag", 13, post.reported and theme.Dim or theme.Bad)
+					img.AnchorPoint = Vector2.new(0, 0.5)
+					img.Position = UDim2.new(0, 8, 0.5, 0)
+					img.ZIndex = 32
+					local label = instance.textlabel(row)
+					label.BackgroundTransparency = 1
+					label.Font = FONT_BOLD
+					label.Position = UDim2.new(0, 28, 0, 0)
+					label.Size = UDim2.new(1, -34, 1, 0)
+					label.Text = post.reported and "Reported" or "Report this post"
+					label.TextColor3 = post.reported and theme.Dim or theme.Text
+					label.TextSize = 12
+					label.TextTruncate = Enum.TextTruncate.AtEnd
+					label.TextXAlignment = Enum.TextXAlignment.Left
+					label.ZIndex = 32
+					if not post.reported then
+						row.MouseEnter:Connect(function()
+							row.BackgroundTransparency = 0
+						end)
+						row.MouseLeave:Connect(function()
+							row.BackgroundTransparency = 1
+						end)
+						row.Activated:Connect(function()
+							elevate()
+							if not confirm then
+								confirm = true
+								label.Text = "Tap again to confirm"
+								label.TextColor3 = theme.Bad
+								return
+							end
+							closelayer()
+							report(post, card)
+						end)
+					end
+					local ax = anchor.AbsolutePosition.X - root.AbsolutePosition.X + anchor.AbsoluteSize.X
+					local ay = anchor.AbsolutePosition.Y - root.AbsolutePosition.Y + anchor.AbsoluteSize.Y + 4
+					cardmenu.AnchorPoint = Vector2.new(1, 0)
+					cardmenu.Position = UDim2.new(0, ax, 0, math.min(ay, root.AbsoluteSize.Y - 50))
+					showlayer(cardmenu, false)
+				end
+
 				local function buildcard(post, order)
 					local card = instance.frame(scroll)
 					card.Name = "Post"
-					card.LayoutOrder = order
+					card.AutomaticSize = Enum.AutomaticSize.Y
 					card.BackgroundColor3 = post.mine and theme.Mine or theme.Card
 					card.BorderSizePixel = 0
+					card.LayoutOrder = order
 					card.Size = UDim2.new(1, 0, 0, 0)
-					card.AutomaticSize = Enum.AutomaticSize.Y
-					instance.uicorner(card).CornerRadius = UDim.new(0, 6)
+					instance.uicorner(card).CornerRadius = UDim.new(0, 8)
+					local first = post.rank == 1 and forum.Sort == "top"
 					local cardstroke = instance.uistroke(card)
-					cardstroke.Color = (post.rank == 1 and forum.Sort == "top") and theme.Gold or theme.Stroke
-					cardstroke.Transparency = (post.rank == 1 and forum.Sort == "top") and 0.4 or 0.55
+					cardstroke.Color = first and theme.Gold or theme.Stroke
+					cardstroke.Transparency = first and 0.4 or 0.55
 					local cardpad = instance.uipadding(card)
-					cardpad.PaddingLeft = UDim.new(0, 10)
-					cardpad.PaddingRight = UDim.new(0, 10)
-					cardpad.PaddingTop = UDim.new(0, 8)
-					cardpad.PaddingBottom = UDim.new(0, 8)
+					cardpad.PaddingBottom = UDim.new(0, 10)
+					cardpad.PaddingLeft = UDim.new(0, 12)
+					cardpad.PaddingRight = UDim.new(0, 12)
+					cardpad.PaddingTop = UDim.new(0, 10)
 					local cardlayout = instance.uilistlayout(card)
-					cardlayout.Padding = UDim.new(0, 5)
+					cardlayout.Padding = UDim.new(0, 6)
 					cardlayout.SortOrder = Enum.SortOrder.LayoutOrder
 
+					-- title line: rank, title, likes
 					local top = instance.frame(card)
 					top.BackgroundTransparency = 1
-					top.Size = UDim2.new(1, 0, 0, 22)
 					top.LayoutOrder = 1
-
+					top.Size = UDim2.new(1, 0, 0, 22)
 					local rank = tonumber(post.rank) or 0
 					local badge = instance.textlabel(top)
 					badge.AnchorPoint = Vector2.new(0, 0.5)
-					badge.Position = UDim2.new(0, 0, 0.5, 0)
-					badge.Size = UDim2.new(0, 30, 0, 20)
 					badge.BackgroundColor3 = rankcolors[rank] or theme.Inner
 					badge.BorderSizePixel = 0
-					badge.Font = Enum.Font.GothamBold
+					badge.Font = FONT_BOLD
+					badge.Position = UDim2.new(0, 0, 0.5, 0)
+					badge.Size = UDim2.new(0, 30, 0, 20)
 					badge.Text = rank > 0 and ("#" .. rank) or "-"
 					badge.TextColor3 = rankcolors[rank] and theme.AccentText or theme.SubText
 					badge.TextSize = 11
 					instance.uicorner(badge).CornerRadius = UDim.new(1, 0)
 
-					local likebtn, likelabel = makepill(top, "", false, true)
-					likebtn.AnchorPoint = Vector2.new(1, 0.5)
-					likebtn.Position = UDim2.new(1, 0, 0.5, 0)
+					local like = button(top, "", "ghost", "heart")
+					like.frame.AnchorPoint = Vector2.new(1, 0.5)
+					like.frame.Position = UDim2.new(1, 0, 0.5, 0)
+					like.frame.Size = UDim2.new(0, 0, 0, 24)
 					local function renderlike()
-						local heart = post.liked and ('<font color="' .. hexcolor(theme.Bad) .. '">♥</font>') or "♡"
-						likelabel.Text = heart .. "  " .. tostring(post.likes or 0)
-						likebtn.BackgroundColor3 = post.liked and theme.Mention or theme.Element
+						like.label.Text = tostring(post.likes or 0)
+						like.icon.ImageColor3 = post.liked and theme.Bad or theme.SubText
+						like.label.TextColor3 = post.liked and theme.Bad or theme.SubText
 					end
 					renderlike()
 
 					local posttitle = instance.textlabel(top)
 					posttitle.BackgroundTransparency = 1
+					posttitle.Font = FONT_BOLD
 					posttitle.Position = UDim2.new(0, 38, 0, 0)
 					posttitle.Size = UDim2.new(1, -110, 1, 0)
-					posttitle.Font = Enum.Font.GothamBold
 					posttitle.Text = tostring(post.title or "Untitled setup")
 					posttitle.TextColor3 = theme.Text
 					posttitle.TextSize = 13
-					posttitle.TextXAlignment = Enum.TextXAlignment.Left
 					posttitle.TextTruncate = Enum.TextTruncate.AtEnd
+					posttitle.TextXAlignment = Enum.TextXAlignment.Left
 
 					local meta = instance.textlabel(card)
 					meta.BackgroundTransparency = 1
-					meta.Size = UDim2.new(1, 0, 0, 14)
-					meta.Font = Enum.Font.Gotham
+					meta.Font = FONT_MEDIUM
+					meta.LayoutOrder = 2
 					meta.RichText = true
+					meta.Size = UDim2.new(1, 0, 0, 14)
 					local who = post.owner and ('<font color="' .. goldhex .. '">Pilat</font>') or escaperich(post.name or "??****")
-					local metatext = escaperich(post.game or forum.Game or "") .. "  ·  by " .. who .. "  ·  " .. timeago(post.updated or post.ts)
+					local metatext = "by " .. who .. "  ·  " .. timeago(post.updated or post.ts)
 					if post.cfg_version and post.cfg_version ~= "" then
 						metatext = metatext .. "  ·  v" .. escaperich(post.cfg_version)
 					end
 					meta.Text = metatext
 					meta.TextColor3 = theme.Dim
 					meta.TextSize = 11
-					meta.TextXAlignment = Enum.TextXAlignment.Left
 					meta.TextTruncate = Enum.TextTruncate.AtEnd
-					meta.LayoutOrder = 2
+					meta.TextXAlignment = Enum.TextXAlignment.Left
 
+					-- device needs, and whether this device meets them
 					local chips = instance.frame(card)
 					chips.BackgroundTransparency = 1
-					chips.Size = UDim2.new(1, 0, 0, 20)
 					chips.LayoutOrder = 3
-					hlist(chips, 5)
+					chips.Size = UDim2.new(1, 0, 0, 18)
+					hlist(chips, 10)
 					local dev = type(post.device) == "table" and post.device or {}
-					local anychip = false
+					local fits, fittext = devicefit(dev)
+					local fitchip = tag(chips, fittext, fits and theme.Good or theme.Gold, fits and "circle-check" or "triangle-alert")
+					fitchip.LayoutOrder = 0
 					for i, field in ipairs({ "ram", "ping", "platform" }) do
 						local v = tostring(dev[field] or "Any")
 						if v ~= "Any" then
-							anychip = true
-							local chip, chiplabel = makepill(chips, '<font color="' .. dimhex .. '">' .. deviceprefix[field] .. "</font>  " .. escaperich(v), false, false)
-							chip.Size = UDim2.new(0, 0, 0, 20)
-							chip.BackgroundColor3 = theme.Pill
+							local chip = tag(chips, deviceprefix[field] .. "  " .. escaperich(v), theme.Dim)
 							chip.LayoutOrder = i
-							chiplabel.TextSize = 10
 						end
 					end
-					if not anychip then
-						local chip, chiplabel = makepill(chips, "Runs on any device", false, false)
-						chip.Size = UDim2.new(0, 0, 0, 20)
-						chip.BackgroundColor3 = theme.Pill
-						chiplabel.TextSize = 10
-					end
 
-					local desc = instance.textlabel(card)
-					desc.BackgroundTransparency = 1
-					desc.Size = UDim2.new(1, 0, 0, 0)
-					desc.AutomaticSize = Enum.AutomaticSize.Y
-					desc.Font = Enum.Font.Gotham
-					desc.RichText = true
-					desc.TextWrapped = true
-					desc.Text = (describe(post.config))
-					desc.TextColor3 = theme.SubText
-					desc.TextSize = 12
-					desc.LineHeight = 1.1
-					desc.TextXAlignment = Enum.TextXAlignment.Left
-					desc.TextYAlignment = Enum.TextYAlignment.Top
-					desc.LayoutOrder = 4
+					-- short summary, full details on demand
+					local _, _, _, _, short = describe(post.config)
+					local summaryline = instance.textlabel(card)
+					summaryline.BackgroundTransparency = 1
+					summaryline.Font = FONT_MEDIUM
+					summaryline.LayoutOrder = 4
+					summaryline.RichText = true
+					summaryline.Size = UDim2.new(1, 0, 0, 16)
+					summaryline.Text = short
+					summaryline.TextColor3 = theme.SubText
+					summaryline.TextSize = 12
+					summaryline.TextTruncate = Enum.TextTruncate.AtEnd
+					summaryline.TextXAlignment = Enum.TextXAlignment.Left
+
+					local details = instance.textlabel(card)
+					details.AutomaticSize = Enum.AutomaticSize.Y
+					details.BackgroundTransparency = 1
+					details.Font = FONT_MEDIUM
+					details.LayoutOrder = 5
+					details.LineHeight = 1.1
+					details.RichText = true
+					details.Size = UDim2.new(1, 0, 0, 0)
+					details.Text = ""
+					details.TextColor3 = theme.SubText
+					details.TextSize = 12
+					details.TextWrapped = true
+					details.TextXAlignment = Enum.TextXAlignment.Left
+					details.TextYAlignment = Enum.TextYAlignment.Top
+					details.Visible = false
 
 					local actions = instance.frame(card)
 					actions.BackgroundTransparency = 1
+					actions.LayoutOrder = 6
 					actions.Size = UDim2.new(1, 0, 0, 26)
-					actions.LayoutOrder = 5
+					hlist(actions, 6)
+					local applyb = button(actions, "Preview & apply", "primary", "eye")
+					applyb.frame.LayoutOrder = 1
+					local detailsb = button(actions, "Details", "ghost", "chevron-down")
+					detailsb.frame.LayoutOrder = 2
 
-					local injectbtn = instance.textbutton(actions)
-					injectbtn.Size = UDim2.new(0, 120, 1, 0)
-					injectbtn.BackgroundColor3 = theme.Accent
-					injectbtn.BorderSizePixel = 0
-					injectbtn.Font = Enum.Font.GothamBold
-					injectbtn.Text = "Inject Config"
-					injectbtn.TextColor3 = theme.AccentText
-					injectbtn.TextSize = 12
-					injectbtn.AutoButtonColor = true
-					instance.uicorner(injectbtn).CornerRadius = UDim.new(1, 0)
-
-					local sidebtn, sidelabel
+					local more
 					if post.mine then
-						sidebtn, sidelabel = makepill(actions, "Your post", false, false)
-						sidelabel.TextColor3 = theme.Gold
+						local mytag = tag(card, "Your post", theme.Gold, "star")
+						mytag.Parent = actions
+						mytag.LayoutOrder = 3
 					else
-						sidebtn, sidelabel = makepill(actions, post.reported and "Reported" or "Report", false, not post.reported)
-						sidelabel.TextColor3 = theme.Dim
+						more = instance.textbutton(top)
+						more.AnchorPoint = Vector2.new(1, 0.5)
+						more.AutoButtonColor = false
+						more.BackgroundTransparency = 1
+						more.Position = UDim2.new(1, -like.frame.AbsoluteSize.X - 64, 0.5, 0)
+						more.Size = UDim2.new(0, 24, 0, 24)
+						more.Text = ""
+						local moreicon = icon(more, "ellipsis", 14, theme.SubText)
+						moreicon.AnchorPoint = Vector2.new(0.5, 0.5)
+						moreicon.Position = UDim2.new(0.5, 0, 0.5, 0)
+						-- keep the menu dots just left of the like button
+						like.frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+							more.Position = UDim2.new(1, -like.frame.AbsoluteSize.X - 6, 0.5, 0)
+						end)
+						task.defer(function()
+							if more.Parent then
+								more.Position = UDim2.new(1, -like.frame.AbsoluteSize.X - 6, 0.5, 0)
+							end
+						end)
+						posttitle.Size = UDim2.new(1, -140, 1, 0)
+						more.Activated:Connect(function()
+							opencardmenu(more, post, card)
+						end)
 					end
-					sidebtn.AnchorPoint = Vector2.new(1, 0.5)
-					sidebtn.Position = UDim2.new(1, 0, 0.5, 0)
 
-					injectbtn.Activated:Connect(function()
+					applyb.frame.Activated:Connect(function()
+						openapply(post)
+					end)
+					detailsb.frame.Activated:Connect(function()
 						elevate()
-						pesseffect(injectbtn)
-						if forum.Paused then
-							note("Forum is under maintenance", false)
-							return
+						details.Visible = not details.Visible
+						if details.Visible and details.Text == "" then
+							details.Text = (describe(post.config))
 						end
-						local ok, errmsg = pcall(injectconfig, post.config)
-						if ok then
-							injectbtn.Text = "Injected ✓"
-							note("Injected: " .. tostring(post.title or "setup"), true)
-							task.delay(2, function()
-								if injectbtn.Parent then
-									injectbtn.Text = "Inject Config"
-								end
-							end)
-							updateshare()
-						else
-							warn("[PILAT] forum inject failed:", errmsg)
-							note("Could not inject this config", false)
-						end
+						detailsb.label.Text = details.Visible and "Hide details" or "Details"
+						summaryline.Visible = not details.Visible
 					end)
 
-					likebtn.Activated:Connect(function()
+					local likebusy = false
+					like.frame.Activated:Connect(function()
 						elevate()
 						if post.mine then
-							note("You can't like your own post", false)
+							showbanner("You can't like your own post", "info", nil, nil, 3)
 							return
 						end
+						if likebusy then
+							return
+						end
+						likebusy = true
 						task.spawn(function()
 							local want = not post.liked
 							local data, errmsg = forumpost("/forum/like", { id = post.id, on = want and "1" or "0" })
 							elevate()
+							likebusy = false
 							if errmsg then
-								note(friendlyerror(errmsg), false)
+								showbanner(friendlyerror(errmsg, "liking again"), "bad", nil, nil, 4)
 								return
 							end
 							post.liked = data and data.liked == true
@@ -9400,101 +11673,141 @@ function Chloex:Window(guiconfig)
 						end)
 					end)
 
-					if not post.mine and not post.reported then
-						sidebtn.Activated:Connect(function()
-							elevate()
-							if post.reported then
-								return
-							end
-							if sidelabel.Text ~= "Tap again to report" then
-								sidelabel.Text = "Tap again to report"
-								sidelabel.TextColor3 = theme.Bad
-								task.delay(3, function()
-									if sidelabel.Parent and not post.reported then
-										sidelabel.Text = "Report"
-										sidelabel.TextColor3 = theme.Dim
-									end
-								end)
-								return
-							end
-							sidelabel.Text = "Reporting..."
-							task.spawn(function()
-								local data, errmsg = forumpost("/forum/report", { id = post.id })
-								elevate()
-								if errmsg then
-									sidelabel.Text = "Report"
-									sidelabel.TextColor3 = theme.Dim
-									note(friendlyerror(errmsg), false)
-									return
-								end
-								post.reported = true
-								sidelabel.Text = "Reported"
-								note("Thanks, the post was reported", true)
-								if data and data.hidden then
-									card:Destroy()
-								end
-							end)
-						end)
-					end
-
 					return card
 				end
 
-				local function render()
-					for _, child in ipairs(scroll:GetChildren()) do
-						if child.Name == "Post" or child.Name == "More" then
-							child:Destroy()
+				local function visibleposts()
+					local out = {}
+					local q = forum.Search:lower()
+					for _, post in ipairs(forum.Posts) do
+						local keep = true
+						if q ~= "" then
+							local hay = (tostring(post.title or "") .. " " .. tostring(post.name or "")):lower()
+							keep = hay:find(q, 1, true) ~= nil
+						end
+						if keep and forum.DeviceFilter ~= "Any" then
+							local platform = type(post.device) == "table" and tostring(post.device.platform or "Any") or "Any"
+							keep = platform == "Any" or platform == forum.DeviceFilter
+						end
+						if keep then
+							out[#out + 1] = post
 						end
 					end
-					emptylabel.Visible = #forum.Posts == 0
-					if #forum.Posts == 0 then
-						emptylabel.Text = "No setups shared for this game yet.\nBe the first: name your setup and press Share Config."
+					return out
+				end
+
+				local morebtn = nil
+				local renderedcount = 0
+
+				local function setsubtitle()
+					local gamename = forum.Game and forum.Game ~= "" and escaperich(forum.Game) or "This game"
+					local total = tonumber(forum.Total) or 0
+					local text = gamename .. '  <font color="' .. dimhex .. '">·  ' .. total .. " setup" .. (total == 1 and "" or "s") .. "</font>"
+					if forum.Paused then
+						text = gamename .. '  <font color="' .. goldhex .. '">·  Maintenance</font>'
 					end
-					for i, post in ipairs(forum.Posts) do
-						buildcard(post, i)
+					subtitle.Text = text
+				end
+
+				local function rendermore()
+					if morebtn then
+						morebtn:Destroy()
+						morebtn = nil
 					end
-					if forum.Total and #forum.Posts < forum.Total then
-						local more = instance.textbutton(scroll)
-						more.Name = "More"
-						more.LayoutOrder = #forum.Posts + 1
-						more.Size = UDim2.new(1, 0, 0, 26)
-						more.BackgroundColor3 = theme.Element
-						more.BorderSizePixel = 0
-						more.Font = Enum.Font.GothamMedium
-						more.Text = "Show more (" .. (forum.Total - #forum.Posts) .. ")"
-						more.TextColor3 = theme.SubText
-						more.TextSize = 12
-						instance.uicorner(more).CornerRadius = UDim.new(1, 0)
-						more.Activated:Connect(function()
+					local filtering = forum.Search ~= "" or forum.DeviceFilter ~= "Any"
+					if not filtering and forum.Total and #forum.Posts < forum.Total then
+						local b = button(scroll, "Show more  (" .. (forum.Total - #forum.Posts) .. ")", "ghost", "chevron-down")
+						b.frame.LayoutOrder = 100000
+						morebtn = b.frame
+						b.frame.Activated:Connect(function()
 							elevate()
-							refresh(true)
+							forum.refresh(true)
 						end)
 					end
-					countlabel.Text = tostring(forum.Total or 0) .. " setup" .. ((forum.Total or 0) == 1 and "" or "s")
+				end
+
+				-- full redraw for refresh/sort/filter; "Show more" only adds the new cards
+				local function render(appendonly)
+					elevate()
+					if not appendonly then
+						for _, child in ipairs(scroll:GetChildren()) do
+							if child.Name == "Post" then
+								child:Destroy()
+							end
+						end
+						renderedcount = 0
+					end
+					local list = visibleposts()
+					for i = renderedcount + 1, #list do
+						buildcard(list[i], i)
+					end
+					renderedcount = #list
+					emptybox.Visible = #list == 0
+					emptyshare.frame.Visible = false
+					if #list == 0 then
+						if forum.Paused then
+							emptytext.Text = "The forum is under maintenance. Check back soon."
+						elseif #forum.Posts > 0 then
+							emptytext.Text = "No setups match your search."
+						else
+							emptytext.Text = "No setups shared for this game yet. Be the first!"
+							emptyshare.frame.Visible = true
+						end
+					end
+					rendermore()
+					setsubtitle()
 					updateshare()
 				end
 
-				-- /pauseforum: the whole forum closes -- drop every loaded post (so nothing is left to
-				-- inject) and show a maintenance screen until the bot reopens it.
+				local function updatesort()
+					for key, chip in pairs(sortchips) do
+						local selected = forum.Sort == key
+						chip.frame.BackgroundTransparency = selected and 0 or 1
+						chip.label.TextColor3 = selected and theme.AccentText or theme.SubText
+					end
+				end
+				updatesort()
+
+				local spinning = false
+				local function setloading(on)
+					forum.Loading = on
+					scroll.ScrollBarImageTransparency = on and 0.8 or 0
+					for _, child in ipairs(scroll:GetChildren()) do
+						if child.Name == "Post" then
+							child.BackgroundTransparency = on and 0.4 or 0
+						end
+					end
+					if on and not spinning then
+						spinning = true
+						task.spawn(function()
+							while forum.Loading and refreshicon.Parent do
+								refreshicon.Rotation = (refreshicon.Rotation + 12) % 360
+								task.wait(0.03)
+							end
+							refreshicon.Rotation = 0
+							spinning = false
+						end)
+					end
+				end
+
 				local function showmaintenance(why)
 					forum.Paused = true
 					forum.Posts = {}
 					forum.Total = 0
 					forum.Mine = nil
+					closelayer()
 					render()
-					why = tostring(why or "")
-					emptylabel.Visible = true
-					emptylabel.Text = "Forum is under maintenance" .. (why ~= "" and (": " .. why) or "") .. "\nCheck back soon."
-					gamelabel.Text = '<font color="' .. goldhex .. '">●</font>  ' .. escaperich(forum.Game or "")
-						.. '  <font color="#F59E0B">· Maintenance</font>'
-					countlabel.Text = "Maintenance"
+					why = cleanwhy(why)
+					showbanner("The forum is under maintenance" .. (why ~= "" and ("  ·  " .. why) or ""), "warn")
+					sharebtn.setenabled(false)
 				end
 
-				refresh = function(append)
+				forum.refresh = function(append)
 					if forum.Busy then
 						return
 					end
 					forum.Busy = true
+					setloading(true)
 					task.spawn(function()
 						local offset = append and #forum.Posts or 0
 						local data, errmsg = forumpost("/forum/list", {
@@ -9504,27 +11817,40 @@ function Chloex:Window(guiconfig)
 						})
 						elevate()
 						forum.Busy = false
+						setloading(false)
 						if errmsg and tostring(errmsg):match("^maintenance") then
 							showmaintenance(tostring(errmsg):match("^maintenance:(.*)"))
 							return
 						end
 						if errmsg or type(data) ~= "table" then
-							emptylabel.Visible = true
-							emptylabel.Text = "Could not load setups: " .. friendlyerror(errmsg or "no response")
+							-- the old list is dropped rather than left under an error
+							forum.Posts = {}
+							forum.Total = 0
+							render()
+							emptytext.Text = "Setups couldn't load."
+							showbanner(friendlyerror(errmsg or "no response", "refreshing"), "bad", "Retry", function()
+								showbanner(nil)
+								forum.refresh(false)
+							end)
 							return
 						end
-						forum.Paused = false
+						if forum.Paused then
+							forum.Paused = false
+							sharebtn.setenabled(true)
+						end
+						if banner.Visible and banneraction.label.Text == "Retry" then
+							showbanner(nil)
+						end
 						forum.Game = tostring(data.game or forum.Game or "")
-						gamelabel.Text = '<font color="' .. goldhex .. '">●</font>  ' .. escaperich(forum.Game)
 						forum.Total = tonumber(data.total) or 0
 						forum.Mine = type(data.mine) == "table" and data.mine or nil
 						if forum.Mine and not append then
 							local d = forum.Mine.device
 							if type(d) == "table" then
-								for field, render in pairs(devicepills) do
+								for field, renderfield in pairs(reqbuttons) do
 									if d[field] then
 										forum.Device[field] = tostring(d[field])
-										render()
+										renderfield()
 									end
 								end
 							end
@@ -9533,28 +11859,30 @@ function Chloex:Window(guiconfig)
 							end
 						end
 						local posts = type(data.posts) == "table" and data.posts or {}
+						forum.MineHidden = data.mine_hidden == true
 						if append then
 							for _, p in ipairs(posts) do
 								forum.Posts[#forum.Posts + 1] = p
 							end
+							render(true)
 						else
 							forum.Posts = posts
 							scroll.CanvasPosition = Vector2.new(0, 0)
+							render()
 						end
-						forum.MineHidden = data.mine_hidden == true
-						render()
 					end)
 				end
 
-				-- live: an open forum tab closes / reopens as soon as /sync reports the switch
+				-- live: an open forum closes / reopens as soon as /sync reports the switch
 				Chloex:OnPause(function(p)
 					elevate()
 					if p.forum == true and not forum.Paused then
 						showmaintenance(p.forummsg)
 					elseif p.forum ~= true and forum.Paused then
 						forum.Paused = false
-						emptylabel.Text = "Loading setups..."
-						refresh(false)
+						sharebtn.setenabled(true)
+						showbanner(nil)
+						forum.refresh(false)
 					end
 				end)
 
@@ -9563,28 +11891,25 @@ function Chloex:Window(guiconfig)
 						return
 					end
 					if forum.Paused then
-						note("Forum is under maintenance", false)
+						showbanner("The forum is under maintenance, sharing is closed", "warn", nil, nil, 4)
 						return
 					end
 					local cfgtable = collectconfig()
 					local _, ons = describe(cfgtable)
 					if ons < 1 then
-						note("Turn on at least 1 feature before sharing", false)
+						showbanner("Turn on at least one feature before sharing", "info", nil, nil, 4)
 						return
 					end
 					forum.Busy = true
-					sharebtn.Text = "Sharing..."
+					confirmshare.label.Text = forum.Mine and "Updating..." or "Sharing..."
+					confirmshare.setenabled(false)
 					task.spawn(function()
-						local hide = true
-						if getgenv and getgenv().PilatHideName ~= nil then
-							hide = getgenv().PilatHideName == true
-						end
 						local data, errmsg = forumpost("/forum/post", {
 							title = titlebox.Text,
 							config = sv.http:JSONEncode(cfgtable),
 							cfg_version = tostring(config.version or ""),
 							dev = deviceid(),
-							hide = hide and "1" or "0",
+							hide = showname and "0" or "1",
 							ram = forum.Device.ram,
 							ping = forum.Device.ping,
 							platform = forum.Device.platform,
@@ -9592,77 +11917,109 @@ function Chloex:Window(guiconfig)
 						})
 						elevate()
 						forum.Busy = false
+						updateshare()
 						if errmsg then
-							updateshare()
-							note(friendlyerror(errmsg), false)
+							showbanner(friendlyerror(errmsg, "sharing again"), "bad", nil, nil, 5)
 							return
 						end
-						note(data and data.updated and "Your setup was updated (likes reset)" or "Your setup is live on the forum!", true)
-						forum.Sort = data and data.updated and forum.Sort or "new"
-						updatesortpills()
-						refresh(false)
+						closelayer()
+						showbanner(data and data.updated and "Your setup was updated" or "Your setup is live on the forum", "good", nil, nil, 4)
+						if not (data and data.updated) then
+							forum.Sort = "new"
+							updatesort()
+						end
+						forum.refresh(false)
 					end)
 				end
-
-				sharebtn.Activated:Connect(function()
+				confirmshare.frame.Activated:Connect(function()
 					elevate()
-					pesseffect(sharebtn)
-					doshare()
+					if confirmshare.enabled() then
+						doshare()
+					end
 				end)
 
-				deletebtn.Activated:Connect(function()
+				local deleteconfirm = false
+				deletebtn.frame.Activated:Connect(function()
 					elevate()
 					if not forum.Mine or forum.Busy then
 						return
 					end
-					if deletelabel.Text ~= "Tap again to delete" then
-						deletelabel.Text = "Tap again to delete"
+					if not deleteconfirm then
+						deleteconfirm = true
+						deletebtn.label.Text = "Tap again to delete"
 						task.delay(3, function()
-							if deletelabel.Parent then
-								deletelabel.Text = "Delete My Post"
+							deleteconfirm = false
+							if deletebtn.label.Parent then
+								deletebtn.label.Text = "Delete my post"
 							end
 						end)
 						return
 					end
-					deletelabel.Text = "Delete My Post"
+					deleteconfirm = false
+					deletebtn.label.Text = "Delete my post"
 					task.spawn(function()
 						local _, errmsg = forumpost("/forum/delete", { id = forum.Mine.id, dev = deviceid() })
 						elevate()
 						if errmsg then
-							note(friendlyerror(errmsg), false)
+							showbanner(friendlyerror(errmsg, "deleting again"), "bad", nil, nil, 5)
 							return
 						end
 						forum.Mine = nil
-						note("Your post was deleted", true)
-						refresh(false)
+						closelayer()
+						showbanner("Your post was deleted", "info", nil, nil, 3)
+						forum.refresh(false)
 					end)
 				end)
 
 				refreshbtn.Activated:Connect(function()
 					elevate()
-					refresh(false)
+					pcall(pesseffect, refreshbtn)
+					forum.refresh(false)
 				end)
-				topbtn.Activated:Connect(function()
+				topchip.Activated:Connect(function()
 					elevate()
-					if forum.Sort ~= "top" then
+					if forum.Sort ~= "top" and not forum.Busy then
 						forum.Sort = "top"
-						updatesortpills()
-						refresh(false)
+						updatesort()
+						forum.refresh(false)
 					end
 				end)
-				newbtn.Activated:Connect(function()
+				newchip.Activated:Connect(function()
 					elevate()
-					if forum.Sort ~= "new" then
+					if forum.Sort ~= "new" and not forum.Busy then
 						forum.Sort = "new"
-						updatesortpills()
-						refresh(false)
+						updatesort()
+						forum.refresh(false)
 					end
 				end)
 
+				local searchqueued = false
+				search:GetPropertyChangedSignal("Text"):Connect(function()
+					forum.Search = search.Text
+					if searchqueued then
+						return
+					end
+					searchqueued = true
+					task.delay(0.2, function()
+						searchqueued = false
+						elevate()
+						render()
+					end)
+				end)
+
+				devicebtn.frame.Activated:Connect(function()
+					openpicker(devicebtn.frame, { "Any", "PC", "Mobile" }, forum.DeviceFilter, function(option)
+						forum.DeviceFilter = option
+						devicebtn.label.Text = option == "Any" and "Any device" or option
+						render()
+					end)
+				end)
+
+				-- the share summary only matters while the sheet is open
 				task.spawn(function()
 					while root.Parent do
 						task.wait(1.5)
-						if root.Parent and root.AbsoluteSize.Y > 0 and scrollayers.Visible and not forum.Busy then
+						if sharesheet.Visible and not forum.Busy then
 							elevate()
 							pcall(updateshare)
 						end
@@ -9675,6 +12032,8 @@ function Chloex:Window(guiconfig)
 					end)
 					if ok and type(info) == "table" and info.Name and not forum.Game then
 						forum.Game = tostring(info.Name)
+						elevate()
+						setsubtitle()
 					end
 					local t0 = os.clock()
 					while not backend and os.clock() - t0 < 15 do
@@ -9686,24 +12045,48 @@ function Chloex:Window(guiconfig)
 						task.wait(0.5)
 					end
 					elevate()
-					refresh(false)
+					forum.refresh(false)
 				end)
 
-				return {
-					Refresh = function()
-						refresh(false)
-					end,
-					Share = doshare,
-					Inject = injectconfig,
-					Describe = function(_, cfgtable)
-						return (describe(cfgtable))
-					end,
-				}
+				local api = {}
+				api.Refresh = function()
+					forum.refresh(false)
+				end
+				api.Share = function()
+					openshare()
+				end
+				-- works as api.Inject(cfg) and api:Inject(cfg)
+				api.Inject = function(a, b)
+					local cfgtable = a
+					if a == api then
+						cfgtable = b
+					end
+					return injectconfig(cfgtable)
+				end
+				api.Describe = function(a, b)
+					local cfgtable = b
+					if a ~= api and b == nil then
+						cfgtable = a
+					end
+					return (describe(cfgtable))
+				end
+				return api
 			end
 
 			countsection = countsection + 1
 			return items
 		end
+
+		tabentries[#tabentries + 1] = {
+			tab = tab,
+			page = scrollayers,
+			select = selecttab,
+			order = layoutOrder,
+			gated = tabgated,
+			first = isFirstTab,
+			name = tabconfig.Name,
+		}
+		applykeygate()
 
 		counttab = counttab + 1
 		-- kept for Chloe X scripts that reach tabs through _G, but never over an
@@ -9745,7 +12128,8 @@ function Chloex:Window(guiconfig)
 		})
 		local holder = { Tab = forumtab }
 		forumtab:OnOpen(function()
-			local section = forumtab:AddSection(forumconfig.Section or "Config Forum", true)
+			-- headerless: the forum carries its own title, no second heading above it
+			local section = forumtab:AddSection({ Header = false })
 			holder.Forum = section:AddForum(forumconfig)
 		end)
 		return holder
@@ -9778,6 +12162,15 @@ end)
 Chloex.Elevate = elevate
 function Chloex:Elevate()
 	elevate()
+end
+
+-- Lucide icon (or asset id) on any ImageLabel / ImageButton, same pack the window
+-- uses. Works as Chloex.ApplyIcon(image, name) and Chloex:ApplyIcon(image, name).
+function Chloex.ApplyIcon(a, b, c, d)
+	if a == Chloex then
+		a, b, c = b, c, d
+	end
+	return applyicon(a, b, c)
 end
 
 getgenv().ChloeX = Chloex
