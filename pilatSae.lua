@@ -892,7 +892,7 @@ local function fn30(character)
 end
 
 localPlayer.CharacterAdded:Connect(fn30)
-local pilatV4Config = {AutoSteal = false, HelpFriend = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = false, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
+local pilatV4Config = {AutoSteal = false, HelpFriend = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
 local EggState = require(game:GetService("ReplicatedStorage").Client.EggState)
 EggState.GetAreaEggSnapshot = EggState.ReadFieldEggs
 EggState.GetAreaEggRecord = EggState.ReadFieldEgg
@@ -986,8 +986,8 @@ end
 local pilatV4TaskLadder = {}
 
 do
-	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}
-	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", treadmill = "Treadmill"}
+	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "halloween", "treadmill"}
+	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", halloween = "Halloween / Phantom Express", treadmill = "Treadmill"}
 	pilatV4TaskLadder.PINNED = {treadmill = true}
 	local tbl5 = {}
 
@@ -5460,7 +5460,7 @@ local v8 = (function()
 	index._BETA_SCALE_MIN = 0.4
 	index._BETA_SCALE_START = 0.5
 
-	-- beta is only active for plain Instant mode, never during capture objectives
+	-- instant v2 (formerly beta) is only active for plain Instant mode, never during capture objectives
 	index._beta = function(arg)
 		return arg.config.instantBeta == true and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
 	end
@@ -5490,7 +5490,7 @@ local v8 = (function()
 		return enabled
 	end
 
-	-- Instant Steal V2 (ported from chilli) is plain Instant plus the V2 flow for Titan Temple / Light Dark / Enchanted Forest
+	-- Instant Steal Tes (formerly V2, ported from chilli) is plain Instant plus the Tes flow for Titan Temple / Light Dark / Enchanted Forest
 	index._v2 = function(arg)
 		return arg.config.instantV2 == true and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
 	end
@@ -5543,14 +5543,14 @@ local v8 = (function()
 	end
 
 	-- ===== BETA: FUSE-BIOME PORTAL TIMING (edit these) =====
-	-- Only used by Instant Steal Beta when "Boost For Instant Steal" sends you through the fuse biome.
+	-- Only used by Instant Steal V2 when "Boost For Instant Steal" sends you through the fuse biome.
 	-- Values below are the original timings, except BETA_EXIT_WAIT_RAGDOLL (now false: keep touching ExitPart instead of waiting).
 	index.BETA_EXIT_TIMEOUT = 8          -- max seconds spent trying to get out through ExitPart
 	index.BETA_EXIT_TOUCH_GAP = 0.04     -- seconds between ExitPart touch attempts
 	index.BETA_EXIT_POLL = 0             -- loop tick while exiting (0 = every frame)
 	index.BETA_EXIT_WAIT_RAGDOLL = false -- true = wait out the server ragdoll timer before touching ExitPart (original behaviour)
 	index.BETA_EXIT_POST_WAIT = 0.35     -- wait after leaving the biome, before the carry request
-	index.BETA_USE_DECOY = true          -- true = copy-character decoy like normal Instant, false = no clone (also a toggle in the Steal Mode panel)
+	index.BETA_USE_DECOY = true          -- true = copy-character decoy for all Instant methods, false = no clone for all Instant methods (also a toggle in the Steal Mode panel as "Instant Decoy")
 	index.BETA_LOG_TIMING = true         -- print how long ExitPart took and how much of it was ragdoll wait (F9 console)
 	index.BETA_ENTER_WAIT_SCALE = 1      -- multiplier on the wait before entering the portal (0.3-1s, ping based)
 
@@ -6416,14 +6416,19 @@ local v8 = (function()
 		end
 	end
 
-	-- Instant Beta decoy switch. ON = copy-character decoy, OFF = no clone, real character stays visible.
+	-- Instant Decoy switch. ON = copy-character decoy for all Instant methods, OFF = no clone for all Instant methods.
 	index._betaDecoyOn = function(arg)
 		return pilatV4Config.BetaDecoy ~= false and arg.BETA_USE_DECOY ~= false
 	end
 
+	index._instantDecoyOn = function(arg)
+		return arg:_betaDecoyOn()
+	end
+
 	index._showTreadmillDecoy = function(arg)
-		-- instant beta with decoy off: no character clone, no hidden real character, no camera swap
-		if arg:_beta() and not arg:_betaDecoyOn() then
+		-- instant mode with decoy off: no character clone, no hidden real character, no camera swap
+		local isAnyInstant = arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
+		if isAnyInstant and not arg:_betaDecoyOn() then
 			if arg.treadmillDecoy then
 				arg:_hideTreadmillDecoy(true)
 			end
@@ -6628,7 +6633,8 @@ local v8 = (function()
 	end
 
 	index._restoreTreadmillVisualAtSafe = function(arg, forceSafeTeleport)
-		if not arg.treadmillDecoy and not (forceSafeTeleport and arg:_beta() and not arg:_betaDecoyOn()) then
+		local isAnyInstant2 = arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
+		if not arg.treadmillDecoy and not (forceSafeTeleport and isAnyInstant2 and not arg:_betaDecoyOn()) then
 			arg:_hideTreadmillDecoy()
 			return true
 		end
@@ -10015,7 +10021,7 @@ local v8 = (function()
 				break
 			end
 
-			arg:_setStatus(string.format("Instant Steal V2: grab and drop %d/%d", i, total))
+			arg:_setStatus(string.format("Instant Steal Tes: grab and drop %d/%d", i, total))
 			arg:_v2Grab(uid, index.V2.GrabWindow, abort, nil)
 
 			if v2Carried(uid) then
@@ -10108,7 +10114,7 @@ local v8 = (function()
 		local safeCF = arg:_resolveSafeCFrame(root)
 
 		if safeCF and not arg:_isInSafeArea(root) then
-			arg:_setStatus("Instant Steal V2: flying to the safe zone")
+			arg:_setStatus("Instant Steal Tes: flying to the safe zone")
 			arg:_glideRoot(safeCF, aborted)
 
 			if aborted() then
@@ -10123,7 +10129,7 @@ local v8 = (function()
 		end)
 
 		if safeCF then
-			arg:_setStatus("Instant Steal V2: in the safe zone, letting the server catch up")
+			arg:_setStatus("Instant Steal Tes: in the safe zone, letting the server catch up")
 			local untilAt = os.clock() + math.clamp(V2.SafeWait + ping, V2.SafeWait, V2.SafeWaitMax)
 
 			while os.clock() < untilAt and not aborted() do
@@ -10149,7 +10155,7 @@ local v8 = (function()
 		end
 
 		-- 2) lane portal -> fuse biome -> ExitPart
-		arg:_setStatus("Instant Steal V2: heading to the lane portal")
+		arg:_setStatus("Instant Steal Tes: heading to the lane portal")
 		arg:_guardLagback(true)
 		RunService2.PreSimulation:Wait()
 		humanoid.PlatformStand = true
@@ -10163,7 +10169,7 @@ local v8 = (function()
 		end
 
 		arg:_stopHoverPad()
-		arg:_setStatus("Instant Steal V2: touching the lane portal")
+		arg:_setStatus("Instant Steal Tes: touching the lane portal")
 		local entered = arg:_crossPortal(lanePortals, aborted, 6)
 		arg:_guardLagback(false)
 
@@ -10172,7 +10178,7 @@ local v8 = (function()
 			return
 		end
 
-		arg:_setStatus("Instant Steal V2: inside the Fuse Biome, touching its exit")
+		arg:_setStatus("Instant Steal Tes: inside the Fuse Biome, touching its exit")
 
 		if not arg:_crossPortal(exitPart, aborted, 8) then
 			fail("Could not reach the egg - retrying")
@@ -10231,7 +10237,7 @@ local v8 = (function()
 			return
 		end
 
-		arg:_setStatus("Instant Steal V2: taking the egg for real")
+		arg:_setStatus("Instant Steal Tes: taking the egg for real")
 
 		task.spawn(function()
 			pcall(function()
@@ -10267,7 +10273,7 @@ local v8 = (function()
 
 		-- step the egg to the line in WalkSpeed-scaled hops, pinned at the hop height
 		while true do
-			arg:_setStatus("Instant Steal V2: stepping the egg to the line")
+			arg:_setStatus("Instant Steal Tes: stepping the egg to the line")
 			root, humanoid = v2Root()
 
 			if not root or not humanoid or not alive() then
@@ -10280,7 +10286,7 @@ local v8 = (function()
 
 			while v2Carried(uid) and alive() and curX - step > lineCF.Position.X do
 				curX = curX - step
-				arg:_setStatus(string.format("Instant Steal V2: stepping home, X %d", math.floor(curX)))
+				arg:_setStatus(string.format("Instant Steal Tes: stepping home, X %d", math.floor(curX)))
 				local held = 0
 
 				while held < V2.HopGap and v2Carried(uid) and alive() do
@@ -10316,11 +10322,11 @@ local v8 = (function()
 			falls = falls + 1
 
 			if falls > V2.FallTries then
-				arg:_setStatus("Instant Steal V2: the egg kept falling, giving up on it")
+				arg:_setStatus("Instant Steal Tes: the egg kept falling, giving up on it")
 				return false
 			end
 
-			arg:_setStatus("Instant Steal V2: the egg fell, going straight back for it")
+			arg:_setStatus("Instant Steal Tes: the egg fell, going straight back for it")
 
 			if not arg:_v2Grab(uid, 10, stop, {stand = true}) then
 				return false
@@ -10339,7 +10345,7 @@ local v8 = (function()
 		end
 
 		if v2Carried(uid) then
-			arg:_setStatus("Instant Steal V2: dropping the egg at the line")
+			arg:_setStatus("Instant Steal Tes: dropping the egg at the line")
 			pcall(EggState2.DropFieldEgg, "PlayerRequest")
 			local dropWait = 0
 
@@ -10353,7 +10359,7 @@ local v8 = (function()
 		end
 
 		-- reset on the treadmill (wear still, then doff)
-		arg:_setStatus("Instant Steal V2: resetting on the treadmill")
+		arg:_setStatus("Instant Steal Tes: resetting on the treadmill")
 		arg:_treadmillReset(stop)
 
 		if not alive() then
@@ -10361,7 +10367,7 @@ local v8 = (function()
 		end
 
 		-- take the egg back from where it lies
-		arg:_setStatus("Instant Steal V2: grabbing the egg back")
+		arg:_setStatus("Instant Steal Tes: grabbing the egg back")
 		local got, reason = arg:_v2Grab(uid, V2.RegrabTime, stop, {stand = true, nestFail = true, gap = V2.RegrabGap})
 
 		if not alive() then
@@ -10369,12 +10375,12 @@ local v8 = (function()
 		end
 
 		if not got then
-			arg:_setStatus(reason == "nest" and "Instant Steal V2: the egg went back to its nest" or "Instant Steal V2: could not grab the egg back")
+			arg:_setStatus(reason == "nest" and "Instant Steal Tes: the egg went back to its nest" or "Instant Steal Tes: could not grab the egg back")
 			return false
 		end
 
 		-- straight into the safe zone
-		arg:_setStatus("Instant Steal V2: stepping into the safe zone")
+		arg:_setStatus("Instant Steal Tes: stepping into the safe zone")
 		root, humanoid = v2Root()
 
 		if root and humanoid then
@@ -12306,7 +12312,7 @@ local v8 = (function()
 			arg:_installGuardHitDistanceBoost()
 			arg:_startMovementProtection()
 			arg:_showTreadmillDecoy()
-			arg.stats.lastResult = "Instant Steal V2"
+			arg.stats.lastResult = "Instant Steal Tes"
 			task.spawn(arg._v2Steal, arg, v10)
 			return
 		end
@@ -14351,6 +14357,17 @@ local v11 = (function()
 	end
 
 	index._requestUnequip = function(arg)
+		-- jump first: that is what lifts the character off the belt, then ask the server to doff
+		if arg.activeTreadmill ~= nil or arg.treadmillEquipPending then
+			pcall(function()
+				local character = localPlayer2.Character
+				local hum = character and character:FindFirstChildOfClass("Humanoid")
+				if hum and hum.Health > 0 then
+					hum.Jump = true
+					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+				end
+			end)
+		end
 		local ok, result, result2 = pcall(function()
 			return Remotes.Treadmill.AskDoff:InvokeServer()
 		end)
@@ -14900,6 +14917,25 @@ local v11 = (function()
 						arg:_setStatus("Idle", string.format("Starting in %.0fs", math.ceil(n21)))
 						task.wait(math.min(n21, 0.25))
 						continue
+					end
+
+					-- coming from the Halloween Dimension: take the exit portal first, only then head for the treadmill
+					local hwTools = genv.__PilatV4HalloweenTools
+					if hwTools and type(hwTools.InDim) == "function" and hwTools.InDim() then
+						arg:_setStatus("Moving", "Leaving the Halloween Dimension")
+						local left = false
+
+						if type(hwTools.LeaveDim) == "function" then
+							local okLeave, leftResult = pcall(hwTools.LeaveDim, function()
+								return not arg.destroyed and not arg.busy and arg.config.idleFarm and idleGeneration == arg.idleGeneration and not fn63()
+							end)
+							left = okLeave and leftResult == true
+						end
+
+						if not left then
+							task.wait(1)
+							continue
+						end
 					end
 
 					local v11 = arg:_resolveStandCFrame()
@@ -28037,7 +28073,7 @@ local function fn65()
 		return tbl30
 	end
 
-	local tbl30 = {{"Instant Steal V1", "V1"}, {"Instant Steal V2", "V2"}, {"Instant Steal Beta (Not Recommended)", "Beta"}, {"High Speed User Normal", "High"}, {"High Speed User (Fly)", "High Fly"}, {"Zig-Zag High Speed User", "Zig-Zag"}}
+	local tbl30 = {{"Instant Steal V1", "V1"}, {"Instant Steal Tes", "Tes"}, {"Instant Steal V2", "V2"}, {"High Speed User Normal", "High"}, {"High Speed User (Fly)", "High Fly"}, {"Zig-Zag High Speed User", "Zig-Zag"}}
 
 	local function fn92()
 		local flag6 = type(pilatPanels.getStealMode) == "function" and pilatPanels.getStealMode() or nil
@@ -33039,8 +33075,8 @@ local function fn66()
 		local str5 = str4:lower()
 		local flag11 = str5:find("zig") ~= nil
 		local stealMode = (str4:find("Fly") or str4:find("High") or flag11) and "Fly" or "Instant"
-		local instantV2 = stealMode == "Instant" and str5:find("v2", 1, true) ~= nil
-		local instantBeta = stealMode == "Instant" and not instantV2 and str5:find("beta") ~= nil
+		local instantV2 = stealMode == "Instant" and str5:find("tes", 1, true) ~= nil
+		local instantBeta = stealMode == "Instant" and not instantV2 and str5:find("v2", 1, true) ~= nil
 		pilatV4Config.InstantV2 = instantV2
 		pilatV4Config.InstantBeta = instantBeta
 		local flyAerial = stealMode == "Fly" and not flag11 and (str4:find("%(Fly%)") ~= nil or str5:find("aerial") ~= nil)
@@ -33865,7 +33901,7 @@ local function fn66()
 
 	tbl24.godMode = v40:AddToggle({Title = "Aura Bat", Content = "", Default = false, Callback = fn144(fn80)})
 
-	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal Beta is experimental: shorter settle that tunes itself, may fail more often. Instant Steal V2 only applies to Titan Temple, Light Dark and Enchanted Forest (grab and drop, line hops, treadmill reset, regrab), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal V2", "Instant Steal Beta (Not Recommended)", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V1", Multi = false, Callback = fn144(function(arg)
+	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes only applies to Titan Temple, Light Dark and Enchanted Forest (grab and drop, line hops, treadmill reset, regrab), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
 		fn89(arg)
 
 		if type(pilatPanels.syncStealMode) == "function" then
@@ -33873,7 +33909,7 @@ local function fn66()
 		end
 	end)})
 
-	tbl24.betaDecoy = v40:AddToggle({Title = "Beta Decoy", Content = "Instant Steal Beta only. ON = copy-character decoy like normal Instant. OFF = no clone, your real character stays visible.", Default = true, Callback = fn144(function(arg)
+	tbl24.betaDecoy = v40:AddToggle({Title = "Instant Decoy", Content = "All Instant modes. ON = copy-character decoy used for all Instant methods. OFF = no clone for all Instant methods.", Default = true, Callback = fn144(function(arg)
 		pilatV4Config.BetaDecoy = arg == true
 
 		if v13 then
@@ -33999,7 +34035,7 @@ local function fn66()
 	end)})
 
 	fn68 = v30:AddSection("Task Order")
-	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", treadmill = "activity"}
+	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", halloween = "ghost", treadmill = "activity"}
 	local tbl28 = {}
 
 	for i, v45 in ipairs(pilatV4TaskLadder.DEFAULT) do
@@ -34560,7 +34596,29 @@ local function fn66()
 
 	do
 		-- Halloween (ported from Chilli Hub) -- stage 1: Auto Buy Dimension Egg
-		local hwSection = tbl24.section(v35, "Halloween", "ghost")
+		local hwSectionRaw = tbl24.section(v35, "Halloween", "ghost")
+		-- config autoload: fn144 swallows every callback while the UI is still being built, and the Halloween controls were never
+		-- re-applied afterwards (unlike the other tabs, see the fn157 list at the end). Record each control + callback here so the
+		-- end of the UI build can replay the loaded values through them.
+		tbl24.hwControls = {}
+		local hwSection = setmetatable({}, {__index = function(_, key)
+			local member = hwSectionRaw[key]
+			if type(member) ~= "function" then
+				return member
+			end
+			if key == "AddToggle" or key == "AddSlider" or key == "AddDropdown" or key == "AddInput" then
+				return function(_, props, ...)
+					local control = member(hwSectionRaw, props, ...)
+					if type(props) == "table" and type(props.Callback) == "function" then
+						table.insert(tbl24.hwControls, {control = control, callback = props.Callback})
+					end
+					return control
+				end
+			end
+			return function(_, ...)
+				return member(hwSectionRaw, ...)
+			end
+		end})
 		local hwRuntime = {status = "Off", lastResult = "Nothing bought yet", bought = 0, nextBuyAt = 0}
 		genv.__PilatV4HalloweenRuntime = hwRuntime
 
@@ -34649,12 +34707,15 @@ local function fn66()
 			local CollectionService = game:GetService("CollectionService")
 			local cfg = pilatV4Config
 			local rt = hwRuntime
-			local hw = {Bad = {}, Known = {}, Names = {}, Rarities = {}, MinValue = 0, Step = 40, MonsterKinds = {}, MonsterOrder = "Closest", MonsterSpeed = 300, Weapons = {}, PumpkinSpeed = 300, Charge = 0.875, LuckName = "x1.5 Perfect", FishAt = 0, DogAt = 0, Eggs = 0, Kills = 0, Fish = 0, Status = "Off"}
-			local tr = {At = 0, Prompts = {}, Missing = {}, GhostMode = "Rarest First", GhostSpeed = 300, GhostGap = 12, Rides = 0, Status = "Off"}
+			local hw = {Bad = {}, Known = {}, Names = {}, Rarities = {}, MinValue = 0, Step = 40, MonsterKinds = {}, MonsterOrder = "Closest", MonsterSpeed = 300, Weapons = {}, RegrabSettle = 0.8, PumpkinSpeed = 300, Charge = 0.875, LuckName = "x1.5 Perfect", FishAt = 0, DogAt = 0, Eggs = 0, Kills = 0, Fish = 0, Status = "Off"}
+			local tr = {At = 0, Prompts = {}, Missing = {}, GhostMode = "Rarest First", GhostSpeed = 300, GhostGap = 12, FlyHeight = 9, Rides = 0, Status = "Off", DropWords = {}, NewDrops = setmetatable({}, {__mode = "k"})}
 			genv.__PilatV4HalloweenTools = hw
 
 			if cfg.HwPumpkin == nil then cfg.HwPumpkin = true end
 			if cfg.HwInstant == nil then cfg.HwInstant = true end
+			if cfg.HwForceExit == nil then cfg.HwForceExit = true end
+			if cfg.HwMonsterWait == nil then cfg.HwMonsterWait = true end
+			if cfg.HwDimNoclip == nil then cfg.HwDimNoclip = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
 
 			-- ---------------------------------------------------------------- basics
@@ -34668,6 +34729,38 @@ local function fn66()
 
 			local function attr(name)
 				return localPlayer:GetAttribute(name)
+			end
+
+			-- night / reset wall check (same signals the egg steal uses): night phase or the wall being sealed/closed
+			local nightCycle, nightWall
+			pcall(function()
+				nightCycle = require(ReplicatedStorage.Shared.Util.AreaEggCycle)
+				nightWall = require(ReplicatedStorage.Client.AreaEggResetWall)
+			end)
+
+			local function wallClosed()
+				if nightCycle and type(nightCycle.IsNightPhase) == "function" then
+					local ok, res = pcall(nightCycle.IsNightPhase, Workspace:GetServerTimeNow())
+					if ok and res == true then
+						return true
+					end
+				end
+				if nightWall then
+					for _, fname in ipairs({"IsSealed", "IsClosed"}) do
+						if type(nightWall[fname]) == "function" then
+							local ok, res = pcall(nightWall[fname])
+							if ok and res == true then
+								return true
+							end
+						end
+					end
+				end
+				return false
+			end
+
+			-- true while monster farming should hold off (night / wall closed)
+			local function monsterWaiting()
+				return on("HwMonsterWait", true) and wallClosed()
 			end
 
 			local function rootPart()
@@ -34864,11 +34957,59 @@ local function fn66()
 				end
 			end
 
+			-- the treadmill holds the character still: jump off it and wait until it let go before any job below moves the character
+			local function leaveTreadmill(alive)
+				local mgr = genv.__PilatV4TreadmillManager
+				if not mgr or mgr.destroyed or not mgr:isEngaged() then
+					return true
+				end
+				hw.Status = "Jumping off the treadmill"
+				local deadline = os.clock() + 8
+				while mgr:isEngaged() and os.clock() < deadline do
+					if alive and not alive() then
+						return false
+					end
+					pcall(mgr._requestUnequip, mgr) -- jumps, then AskDoff
+					sleep(0.3, alive)
+					pcall(mgr._syncActiveTreadmillSnapshot, mgr)
+				end
+				return not mgr:isEngaged()
+			end
+
+			-- a task ranked above Halloween in Task Order that is running right now (egg delivery, race, boss fight...), or nil
+			local higherAt, higherValue = 0, nil
+			local function higherTask()
+				if os.clock() - higherAt < 0.25 then
+					return higherValue
+				end
+				higherAt = os.clock()
+				local ladder = genv.__PilatV4TaskLadder
+				local ok, found = pcall(function()
+					if ladder.bossFighting() then
+						return "mech_boss"
+					end
+					if ladder.stealCarrying() then
+						return "auto_steal"
+					end
+					for _, id in ipairs(ladder.order()) do
+						if id == "halloween" then
+							return nil
+						end
+						if ladder.active(id) then
+							return id
+						end
+					end
+					return nil
+				end)
+				higherValue = ok and found or nil
+				return higherValue
+			end
+
 			-- noclip while we move by CFrame
 			local noclip, touched = false, {}
 			local noclipConn = RunService.Stepped:Connect(function()
 				local char = localPlayer.Character
-				if noclip and char then
+				if (noclip or (on("HwDimNoclip", true) and localPlayer:GetAttribute("InHalloweenDimension") == true)) and char then
 					for _, part in ipairs(char:GetDescendants()) do
 						if part:IsA("BasePart") and part.CanCollide then
 							touched[part] = true
@@ -35087,6 +35228,106 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- enter / leave
+			-- runs once we are inside the dimension (settle + tutorial flag)
+			local function entered(alive)
+				sleep(1.5, alive)
+				local data = saveData()
+				local state = data and data.HalloweenDimension
+				if type(state) == "table" and state.TutorialSeen ~= true then
+					task.spawn(invoke, "RF/HalloweenDimension/AskTutorialSeen")
+				end
+				return true
+			end
+
+			-- walk sideways like holding D (sign 1, camera-right) or A (sign -1, camera-left) for a moment, then stop
+			local function sidestep(alive, sign)
+				local hum, root = humanoid(), rootPart()
+				if not hum or not root then
+					return
+				end
+				local cam = Workspace.CurrentCamera
+				local right = flat((cam and cam.CFrame or root.CFrame).RightVector)
+				if right.Magnitude < 0.1 then
+					right = flat(root.CFrame.RightVector)
+				end
+				right = right.Unit * (sign or 1)
+				local untilAt = os.clock() + 0.35
+				while os.clock() < untilAt and alive() do
+					pcall(hum.Move, hum, right, false)
+					step()
+				end
+				pcall(hum.Move, hum, Vector3.zero, false)
+			end
+
+			-- real D / A key presses (VirtualInputManager when the executor has it) plus Humanoid:Move as backup
+			local vim
+			pcall(function()
+				vim = game:GetService("VirtualInputManager")
+			end)
+
+			local function keyDown(code, down)
+				if vim then
+					pcall(function()
+						vim:SendKeyEvent(down, code, false, game)
+					end)
+				end
+			end
+
+			local function insideHitbox(part, pos, margin)
+				local rel, half = part.CFrame:PointToObjectSpace(pos), part.Size / 2
+				return math.abs(rel.X) <= half.X + margin and math.abs(rel.Y) <= half.Y + 4 and math.abs(rel.Z) <= half.Z + margin
+			end
+
+			-- hold D (sign 1) or A (sign -1) until test() is true or maxSec passes
+			local function holdSide(alive, sign, test, maxSec)
+				local hum = humanoid()
+				if not hum then
+					return
+				end
+				local code = sign > 0 and Enum.KeyCode.D or Enum.KeyCode.A
+				keyDown(code, true)
+				local untilAt = os.clock() + maxSec
+				while alive() and os.clock() < untilAt and not test() do
+					local root, cam = rootPart(), Workspace.CurrentCamera
+					if root then
+						local right = flat((cam and cam.CFrame or root.CFrame).RightVector)
+						if right.Magnitude < 0.1 then
+							right = flat(root.CFrame.RightVector)
+						end
+						pcall(hum.Move, hum, right.Unit * sign, false)
+					end
+					step()
+				end
+				keyDown(code, false)
+				pcall(hum.Move, hum, Vector3.zero, false)
+			end
+
+			-- leave the portal hitbox with D, come back in with A so the server sees a fresh touch (out-in-out-in)
+			local function portalWiggle(alive, hit, hard)
+				local function outside()
+					local r = rootPart()
+					return r ~= nil and not insideHitbox(hit, r.Position, 1.5)
+				end
+				local function inside()
+					local r = rootPart()
+					return r ~= nil and insideHitbox(hit, r.Position, -0.5)
+				end
+				if hard then
+					-- every 3rd try: start from outside the hitbox and walk into it
+					tp(CFrame.new(hit.CFrame:PointToWorldSpace(Vector3.new(hit.Size.X / 2 + 6, 0, 0))))
+					sleep(0.15, alive)
+					local hum = humanoid()
+					local untilAt = os.clock() + 1.5
+					while alive() and hum and os.clock() < untilAt and not inside() do
+						pcall(hum.MoveTo, hum, hit.Position)
+						step()
+					end
+					return
+				end
+				holdSide(alive, 1, outside, 1.2) -- D until outside the hitbox
+				holdSide(alive, -1, inside, 1.5) -- A until back inside
+			end
+
 			local function enterDim(alive)
 				if inDim() then
 					return true
@@ -35099,26 +35340,39 @@ local function fn66()
 					return false
 				end
 				hw.Status = "Teleporting to the Halloween portal"
-				for attempt = 1, 3 do
-					if attempt == 3 and not flyTo(hit.Position + Vector3.new(0, 3, 0), alive, 300) then
+				tp(CFrame.new(hit.Position))
+				touch(hit)
+				if waitFor(inDim, 2.5, alive) then
+					return entered(alive)
+				end
+				if not alive() then
+					return false
+				end
+				-- failed once: step sideways (like pressing D), go back to the portal, send the request again, repeat every 0.8s
+				local tries = 0
+				while alive() and not inDim() do
+					tries = tries + 1
+					local world2 = Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
+					local portal2 = world2 and world2:FindFirstChild("HalloweenDimensionPortal")
+					local hit2 = portal2 and portal2:FindFirstChild("Hitbox", true)
+					if not hit2 or not hit2:IsA("BasePart") then
+						hw.Status = "Halloween portal is not here"
 						return false
 					end
-					tp(CFrame.new(hit.Position))
-					touch(hit)
-					if waitFor(inDim, attempt < 3 and 4 or 10, alive) then
-						sleep(1.5, alive)
-						local data = saveData()
-						local state = data and data.HalloweenDimension
-						if type(state) == "table" and state.TutorialSeen ~= true then
-							task.spawn(invoke, "RF/HalloweenDimension/AskTutorialSeen")
-						end
-						return true
+					hw.Status = "Stuck at portal - pressing D then A in/out (" .. tries .. ")"
+					local now0 = rootPart()
+					if now0 and (now0.Position - hit2.Position).Magnitude > 25 then
+						flyTo(hit2.Position + Vector3.new(0, 3, 0), alive, 300) -- drifted far away: get back first
 					end
-					if not alive() then
-						return false
+					portalWiggle(alive, hit2, tries % 3 == 0) -- D out, A back in
+					touch(hit2)
+					if waitFor(inDim, 1.0, alive) then
+						return entered(alive)
 					end
 				end
-				hw.Status = "The Halloween portal did not take you"
+				if inDim() then
+					return entered(alive)
+				end
 				return false
 			end
 
@@ -35149,6 +35403,9 @@ local function fn66()
 				end
 				return not inDim()
 			end
+
+			-- exposed so the Treadmill can use the exit portal before it walks to the treadmill
+			hw.InDim, hw.LeaveDim = inDim, leaveDim
 
 			local function healSafe(alive)
 				local point = safePoint()
@@ -35244,8 +35501,34 @@ local function fn66()
 				return best, bestZone
 			end
 
-			-- drop the egg and grab it again so the server counts it from where we stand
-			local function regrab(uid, alive)
+			-- standing point on the floor at x/z (never hovers); ignores monsters, ghosts, zone volumes and eggs
+			local function floorAt(x, z, refY)
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				local ignore = {localPlayer.Character}
+				local d = dim()
+				for _, name in ipairs({"Monsters", "Ghosts", "Zones", "WorldEggs"}) do
+					local folder = d and d:FindFirstChild(name)
+					if folder then
+						ignore[#ignore + 1] = folder
+					end
+				end
+				params.FilterDescendantsInstances = ignore
+				local hit = Workspace:Raycast(Vector3.new(x, refY + 15, z), Vector3.new(0, -150, 0), params)
+				return Vector3.new(x, hit and hit.Position.Y + 3 or refY, z)
+			end
+
+			-- drop-regrab point (from the jjj build): nearest point of the safe zone grown by 10 studs, on the floor
+			local function edgeFloor(zone, root)
+				local lp = zone.CFrame:PointToObjectSpace(root.Position)
+				local hx, hz = zone.Size.X / 2 + 10, zone.Size.Z / 2 + 10
+				local w = zone.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -hx, hx), 0, math.clamp(lp.Z, -hz, hz)))
+				return floorAt(w.X, w.Z, zone.Position.Y)
+			end
+
+			-- drop the egg and grab it again so the server counts it from where we stand.
+			-- floorY (optional): stand on the floor next to the egg instead of hovering above it
+			local function regrab(uid, alive, floorY)
 				task.spawn(invoke, "RF/HalloweenDimension/AskDropEgg")
 				local startedAt, dropped = os.clock(), false
 				while alive() and os.clock() - startedAt < 3 do
@@ -35263,7 +35546,12 @@ local function fn66()
 					end
 					local prompt = model and model:FindFirstChild("StealPrompt", true)
 					if dropped and prompt and prompt.Enabled then
-						tp(CFrame.new(posOf(model) + Vector3.new(0, 3, 0)))
+						local p = posOf(model)
+						if floorY then
+							tp(CFrame.new(p.X, floorY, p.Z))
+						else
+							tp(CFrame.new(p + Vector3.new(0, 3, 0)))
+						end
 						press(prompt)
 					end
 					step()
@@ -35271,15 +35559,17 @@ local function fn66()
 				return false
 			end
 
-			local function carryStep(point, alive)
-				local deadline = os.clock() + 15
+			-- straight 3D line to the target (hw.Step studs per frame), no noclip, no hover
+			local function carryTo(target, alive, deadlineSeconds)
+				local deadline = os.clock() + (deadlineSeconds or 20)
 				while alive() and carried() and os.clock() < deadline do
 					local root = rootPart()
 					if not root then
 						return false
 					end
-					local delta = Vector3.new(point.X, root.Position.Y, point.Z) - root.Position
+					local delta = target - root.Position
 					if delta.Magnitude < 2 then
+						tp(CFrame.new(target))
 						return true
 					end
 					tp(CFrame.new(root.Position + delta.Unit * math.min(delta.Magnitude, hw.Step)))
@@ -35294,40 +35584,37 @@ local function fn66()
 				local instant = on("HwInstant", true)
 				local uid, zone, root = hw.CarryUid, zonePart("SafeZone"), rootPart()
 				hw.Status = "Carrying the Halloween egg to safety"
-				if instant and uid and zone and root and carried() then
-					hw.Status = "Carrying: instant steal"
-					local lp = zone.CFrame:PointToObjectSpace(root.Position)
-					local hx, hz = zone.Size.X / 2 + 10, zone.Size.Z / 2 + 10
-					carryStep(zone.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -hx, hx), 0, math.clamp(lp.Z, -hz, hz))), alive)
-					sleep(0.8, alive)
-					regrab(uid, alive)
-				end
-				local baseY
-				noclip = true
-				while alive() and carried() and os.clock() < deadline do
-					local now, safe = rootPart(), zonePart("SafeZone")
-					if not now or not safe then
-						break
-					end
-					baseY = baseY or now.Position.Y
-					local lp = safe.CFrame:PointToObjectSpace(now.Position)
-					local margin = instant and 6 or 40
-					local hx, hz = math.max(safe.Size.X / 2 - margin, 0), math.max(safe.Size.Z / 2 - margin, 0)
-					local goal = safe.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -hx, hx), lp.Y, math.clamp(lp.Z, -hz, hz)))
-					local dir = flat(goal - now.Position)
-					local hum = humanoid()
-					local speed = math.max(hum and hum.WalkSpeed or 16, 16) * (instant and 1 or 1.5)
-					now.AssemblyLinearVelocity = (dir.Magnitude > 3 and dir.Unit * math.min(speed, dir.Magnitude / 0.05) or Vector3.zero) + Vector3.new(0, (baseY - now.Position.Y) * 8, 0)
-					step()
-				end
 				noclip = false
-				local after = rootPart()
-				if after then
-					after.AssemblyLinearVelocity = Vector3.zero
+
+				local function holding()
+					return alive() and carried()
 				end
+
+				-- 1) egg in hand: straight to the safe zone edge, then drop + regrab there (standing, not flying)
+				if zone and root and carried() then
+					local edge = edgeFloor(zone, root)
+					hw.Status = "Carrying the Halloween egg to the safe zone"
+					carryTo(edge, alive, 15)
+					if instant and uid and carried() then
+						hw.Status = "Carrying: instant steal"
+						sleep(hw.RegrabSettle, alive)
+						regrab(uid, alive, edge.Y)
+					end
+				end
+
+				-- 2) walk (no fly) to the centre of the safe zone; stop the moment the egg is banked
+				local safe = zonePart("SafeZone")
+				if safe and carried() then
+					local c = safe.CFrame.Position
+					local center = floorAt(c.X, c.Z, c.Y)
+					hw.Status = "Walking the Halloween egg into the safe zone"
+					walkTo(center, holding, 300)
+				end
+
 				if carried() and os.clock() >= deadline then
 					invoke("RF/HalloweenDimension/AskDropEgg")
 				end
+				-- returns the instant the server confirms, no fixed wait
 				waitFor(function()
 					return attr("HalloweenDelivered") ~= before
 				end, 0.6)
@@ -35383,7 +35670,7 @@ local function fn66()
 						if eggPos then
 							tp(CFrame.new(eggPos + Vector3.new(0, 3, 0)))
 						end
-						if os.clock() - lastPress > 0.1 then
+						if os.clock() - lastPress > 0.05 then
 							lastPress = os.clock()
 							press(prompt)
 						end
@@ -35394,7 +35681,9 @@ local function fn66()
 					end
 				end
 				if carried() then
+					-- egg in hand: go straight to the safe zone, no landing step, no delay
 					hw.CarryUid = uid
+					noclip = false
 					deliver(alive)
 				elseif egg.Parent then
 					hw.Bad[egg] = os.clock() + 30
@@ -35530,6 +35819,77 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- pumpkin moon
+			-- fast tween -> free pumpkin -> fast tween back to the altar. pumpkins somebody else is carrying are skipped.
+			local function tweenTo(pos, speed, alive, maxSeg)
+				local root = rootPart()
+				if not root then
+					return false
+				end
+				local dist = (pos - root.Position).Magnitude
+				if dist < 1 then
+					return true
+				end
+				local time = math.clamp(dist / math.max(speed or 300, 50), 0.03, maxSeg or 6)
+				local ok, tween = pcall(function()
+					return game:GetService("TweenService"):Create(root, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
+				end)
+				if not ok or not tween then
+					tp(CFrame.new(pos))
+					return true
+				end
+				tween:Play()
+				local started = os.clock()
+				while tween.PlaybackState == Enum.PlaybackState.Playing and alive() and os.clock() - started < time + 0.5 do
+					root.AssemblyLinearVelocity = Vector3.zero
+					step()
+				end
+				pcall(function()
+					tween:Cancel()
+				end)
+				root.AssemblyLinearVelocity = Vector3.zero
+				return alive()
+			end
+
+			-- true when another player is holding / has caught this pumpkin
+			local function pumpkinTaken(pumpkin)
+				local Players = game:GetService("Players")
+				for _, key in ipairs({"CarriedBy", "HeldBy", "Carrier", "CaughtBy", "Owner", "OwnerUserId", "CarrierUserId", "CarriedByUserId"}) do
+					local v = pumpkin:GetAttribute(key)
+					if v ~= nil and v ~= false and v ~= 0 and v ~= "" and v ~= localPlayer.UserId and v ~= localPlayer.Name then
+						return true
+					end
+				end
+				local prompt = pumpkin:FindFirstChild("CatchPrompt", true)
+				if not prompt or not prompt.Enabled then
+					return true
+				end
+				-- welded / parented to another player's character
+				for _, other in ipairs(Players:GetPlayers()) do
+					local char = other ~= localPlayer and other.Character
+					if char then
+						if pumpkin:IsDescendantOf(char) then
+							return true
+						end
+						for _, joint in ipairs(pumpkin:GetDescendants()) do
+							if (joint:IsA("Weld") or joint:IsA("WeldConstraint") or joint:IsA("Motor6D") or joint:IsA("RigidConstraint")) then
+								local p0, p1 = joint.Part0, joint.Part1
+								if (p0 and p0:IsDescendantOf(char)) or (p1 and p1:IsDescendantOf(char)) then
+									return true
+								end
+							end
+						end
+						-- another player carrying it flagged by their own attribute, or glued right on top of them
+						if other:GetAttribute("HalloweenPumpkinCarrying") == true or char:GetAttribute("HalloweenPumpkinCarrying") == true then
+							local hrp, ppos = char:FindFirstChild("HumanoidRootPart"), posOf(pumpkin)
+							if hrp and ppos and (hrp.Position - ppos).Magnitude < 8 then
+								return true
+							end
+						end
+					end
+				end
+				return false
+			end
+
 			local function pumpkinStep(alive)
 				local d = dim()
 				if not d then
@@ -35538,12 +35898,14 @@ local function fn66()
 				local deposit = d:FindFirstChild("Altar")
 				deposit = deposit and deposit:FindFirstChild("PumpkinDeposit")
 				if attr("HalloweenPumpkinCarrying") == true then
-					hw.Status = "Bringing a pumpkin to the altar"
+					hw.Status = "Pumpkin Moon: returning pumpkin"
 					if deposit and deposit:GetAttribute("Open") ~= false then
 						local function holding()
 							return alive() and attr("HalloweenPumpkinCarrying") == true
 						end
-						walkTo((posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0), holding, hw.PumpkinSpeed)
+						noclip = true
+						local dropPos = (posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0)
+						tweenTo(dropPos, hw.PumpkinSpeed, alive, 6)
 						for _ = 1, 4 do
 							if not holding() then
 								break
@@ -35553,38 +35915,43 @@ local function fn66()
 							press(deposit:FindFirstChildWhichIsA("ProximityPrompt", true))
 							sleep(0.3, holding)
 						end
+						noclip = false
 					else
 						sleep(0.5, alive)
 					end
 					return true
 				end
+				-- nearest FREE pumpkin only (skip ones other players are carrying)
 				local folder, root = d:FindFirstChild("RunawayPumpkins"), rootPart()
 				local pumpkin, bestDist = nil, math.huge
 				for _, child in ipairs(folder and folder:GetChildren() or {}) do
 					local prompt = child:IsA("Model") and child:FindFirstChild("CatchPrompt", true)
 					local pos = prompt and prompt.Enabled and posOf(child)
 					local dist = pos and root and (pos - root.Position).Magnitude
-					if dist and dist < bestDist then
+					if dist and dist < bestDist and not pumpkinTaken(child) then
 						bestDist, pumpkin = dist, child
 					end
 				end
 				if not pumpkin then
-					hw.Status = "Pumpkin Moon: looking for pumpkins"
+					hw.Status = "Pumpkin Moon: waiting for a free pumpkin"
 					return false
 				end
-				hw.Status = "Pumpkin Moon: catching a pumpkin"
-				local untilAt = os.clock() + 10
+				hw.Status = "Pumpkin Moon: tweening to a free pumpkin"
+				local untilAt = os.clock() + 8
 				noclip = true
-				while alive() and pumpkin.Parent and pumpkin:FindFirstChild("CatchPrompt", true) and os.clock() < untilAt and attr("HalloweenPumpkinCarrying") ~= true do
-					local pos, now = posOf(pumpkin), rootPart()
-					if not pos or not now then
-						break
-					end
+				while alive() and pumpkin.Parent and os.clock() < untilAt and attr("HalloweenPumpkinCarrying") ~= true do
 					local prompt = pumpkin:FindFirstChild("CatchPrompt", true)
-					if prompt and prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
-						press(prompt)
+					local pos, now = posOf(pumpkin), rootPart()
+					if not prompt or not pos or not now or pumpkinTaken(pumpkin) then
+						break -- gone, or somebody else grabbed it: pick another one next tick
 					end
-					walkStep(pos, hw.PumpkinSpeed)
+					if prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
+						press(prompt)
+						sleep(0.1, alive)
+					else
+						-- short segments so the tween keeps re-aiming at the runaway pumpkin
+						tweenTo(pos + Vector3.new(0, 2, 0), hw.PumpkinSpeed, alive, 0.25)
+					end
 					step()
 				end
 				noclip = false
@@ -35948,7 +36315,7 @@ local function fn66()
 				if on("HwEggs") and pickEgg() then
 					return "eggs"
 				end
-				if on("HwMonsters") then
+				if on("HwMonsters") and not monsterWaiting() then
 					return "monsters"
 				end
 				if on("HwFishing") then
@@ -35961,14 +36328,19 @@ local function fn66()
 				pumpkin = {key = function() return on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" end, run = pumpkinStep},
 				dog = {key = function() return on("HwDog") end, run = dogStep},
 				eggs = {key = function() return on("HwEggs") end, run = stealOne},
-				monsters = {key = function() return on("HwMonsters") end, run = fightMonster},
+				monsters = {key = function() return on("HwMonsters") and not monsterWaiting() end, run = fightMonster},
 				fishing = {key = function() return on("HwFishing") end, run = fishOnce},
 			}
 
 			task.spawn(function()
-				local idleSince
+				local idleSince, skipWait
 				while fn2() do
-					task.wait(0.35)
+					if skipWait then
+						skipWait = false
+						step()
+					else
+						task.wait(0.35)
+					end
 					local anyOn = on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwFishing") or on("HwPumpkin", true)
 					if not anyOn then
 						hw.Status = "Off"
@@ -35976,20 +36348,25 @@ local function fn66()
 					elseif hw.Owner == nil or hw.Owner == "field" then
 						local job = nextTask()
 						if not job then
-							hw.Status = "Waiting for something to do"
+							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or "Waiting for something to do"
 							idleSince = idleSince or os.clock()
-							if inDim() and not hw.Chase and not carried() and os.clock() - idleSince > 6 and claim("field") then
+							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and os.clock() - idleSince > 6 and claim("field") then
 								local alive = makeAlive(function() return not nextTask() end)
 								pcall(leaveDim, alive)
 								release("field")
 							end
+						elseif higherTask() ~= nil and not carried() then
+							-- a task ranked above Halloween is running: wait for it instead of fighting over the character
+							idleSince = nil
+							hw.Status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[higherTask()] or higherTask())
 						elseif claim("field") then
 							idleSince = nil
 							local runner = runners[job]
 							local alive = makeAlive(function()
-								return runner.key() and hw.Owner == "field"
+								return runner.key() and hw.Owner == "field" and (carried() or higherTask() == nil)
 							end)
 							local ok2, err = pcall(function()
+								leaveTreadmill(alive)
 								if carried() and inDim() and hw.CarryUid then
 									deliver(alive)
 								end
@@ -35997,7 +36374,9 @@ local function fn66()
 									sleep(2, alive)
 									return
 								end
-								if not runner.run(alive) then
+								if runner.run(alive) then
+									skipWait = true -- job done: pick the next priority right away
+								else
 									sleep(0.5, alive)
 								end
 							end)
@@ -36062,6 +36441,7 @@ local function fn66()
 				end)
 				if bossRemote then
 					conns[#conns + 1] = bossRemote.OnClientEvent:Connect(function(info)
+						tr.BossDefeatedAt = os.clock()
 						if type(info) == "table" then
 							pcall(function()
 								flag6:Notify({Title = "Ghouler", Content = "+" .. tostring(info.Souls or 0) .. " Souls", Duration = 3})
@@ -36069,6 +36449,16 @@ local function fn66()
 						end
 					end)
 				end
+				-- remember anything that looks like a soul drop the moment it appears in the world
+				conns[#conns + 1] = Workspace.DescendantAdded:Connect(function(inst)
+					local lname = inst.Name:lower()
+					for _, word in ipairs(tr.DropWords) do
+						if lname:find(word, 1, true) then
+							tr.NewDrops[inst] = os.clock()
+							break
+						end
+					end
+				end)
 				task.spawn(function()
 					while fn2() do
 						task.wait(1)
@@ -36114,7 +36504,9 @@ local function fn66()
 				if not pos then
 					return false
 				end
-				return flyTo(pos + Vector3.new(0, 3, 0), alive, 300)
+				-- use walkTo instead of flyTo so the character stays grounded and avoids boss hits
+				local ground = groundNear(pos)
+				return walkTo(ground, alive, tr.GhostSpeed or 300)
 			end
 
 			local function conductorTicket()
@@ -36156,47 +36548,250 @@ local function fn66()
 				end
 			end
 
+			-- ---------------------------------------------------------------- fly (hover above ghosts/boss)
+			local function flyOn()
+				return on("TrainFly")
+			end
+
+			-- ground level under the player, skipping ghosts, monsters and anything with a Humanoid
+			local function hoverGround(root)
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				local ignore = {localPlayer.Character}
+				local visuals = Workspace:FindFirstChild("TrainGhostVisuals")
+				if visuals then
+					ignore[#ignore + 1] = visuals
+				end
+				local d = dim()
+				for _, name in ipairs({"Monsters", "Ghosts"}) do
+					local folder = d and d:FindFirstChild(name)
+					if folder then
+						ignore[#ignore + 1] = folder
+					end
+				end
+				for _ = 1, 4 do
+					params.FilterDescendantsInstances = ignore
+					local hit = Workspace:Raycast(root.Position + Vector3.new(0, 4, 0), Vector3.new(0, -250, 0), params)
+					if not hit then
+						return nil
+					end
+					local model = hit.Instance:FindFirstAncestorOfClass("Model")
+					local living = model and model:FindFirstChildOfClass("Humanoid") ~= nil
+					if hit.Instance.CanCollide and not living then
+						return hit.Position.Y
+					end
+					ignore[#ignore + 1] = living and model or hit.Instance
+				end
+				return nil
+			end
+
+			-- moves flat toward target at `speed` studs/s and keeps the player FlyHeight studs above the ground
+			local function hoverStep(target, speed)
+				local root = rootPart()
+				if not root then
+					return
+				end
+				local now = os.clock()
+				local dt = math.clamp(now - (tr.HoverAt or now), 1 / 60, 0.1)
+				tr.HoverAt = now
+				local ground = hoverGround(root)
+				if ground then
+					tr.HoverBase = ground
+				end
+				local goalY = (tr.HoverBase or (root.Position.Y - 3)) + (tr.FlyHeight or 9)
+				local flatDelta = flat(target - root.Position)
+				local move = flatDelta.Magnitude > 0.5 and flatDelta.Unit * math.min(flatDelta.Magnitude, speed * dt) or Vector3.zero
+				local y = root.Position.Y + math.clamp(goalY - root.Position.Y, -60 * dt, 60 * dt)
+				tp(CFrame.new(root.Position.X + move.X, y, root.Position.Z + move.Z) * root.CFrame.Rotation)
+			end
+
 			local function bossSuction(state)
 				local ground, root = state:GetAttribute("Ground"), rootPart()
 				if typeof(ground) ~= "Vector3" or not root then
 					return
 				end
+				tr.BossGround = ground
 				local velocity = state:GetAttribute("Velocity")
 				local movedAt = tonumber(state:GetAttribute("MovedAt")) or Workspace:GetServerTimeNow()
 				if typeof(velocity) == "Vector3" then
 					ground = ground + velocity * math.clamp(Workspace:GetServerTimeNow() - movedAt, 0, 0.3)
 				end
 				local away = flat(root.Position - ground)
-				local goal = ground + (away.Magnitude > 0.5 and away.Unit or Vector3.new(1, 0, 0)) * 42 + Vector3.new(0, 3, 0)
+				local goal = ground + (away.Magnitude > 0.5 and away.Unit or Vector3.new(1, 0, 0)) * 42 + Vector3.new(0, flyOn() and (tr.FlyHeight or 9) or 3, 0)
 				local delta = goal - root.Position
 				tp(CFrame.new(root.Position + (delta.Magnitude > 2 and delta.Unit * math.min(delta.Magnitude, 1.3333333333333333) or delta), Vector3.new(ground.X, root.Position.Y, ground.Z)))
 				suck("RE/GhostBoss/Suction", true, (ground + Vector3.new(0, 8, 0) - root.Position).Unit)
 			end
 
+			-- ---------------------------------------------------------------- souls: collect + trade
+			local function readShop()
+				local _, _, opened = trAction("OpenSoulShop")
+				local shop = type(opened) == "table" and opened.SoulShop or nil
+				if type(shop) ~= "table" then
+					trPoll()
+					shop = tr.State and tr.State.SoulShop
+				end
+				return type(shop) == "table" and shop or nil
+			end
+
+			local function soulishInst(inst)
+				local lname = inst.Name:lower()
+				for _, word in ipairs(tr.DropWords) do
+					if lname:find(word, 1, true) then
+						return true
+					end
+				end
+				for key, value in pairs(inst:GetAttributes()) do
+					local k = tostring(key):lower()
+					for _, word in ipairs(tr.DropWords) do
+						if k:find(word, 1, true) then
+							return true
+						end
+					end
+				end
+				return false
+			end
+
+			-- anything belonging to the shop, ghosts, monsters or the player is never a drop
+			local function excludedDrop(inst)
+				if inst:IsDescendantOf(localPlayer.Character or game) and localPlayer.Character then
+					return true
+				end
+				local node = inst
+				while node and node ~= Workspace do
+					if node:GetAttribute("TrainEventAction") ~= nil or node.Name == "TrainGhostVisuals" or node.Name == "Monsters" or node.Name == "Ghosts" then
+						return true
+					end
+					if node:IsA("Model") and node:FindFirstChildOfClass("Humanoid") then
+						return true
+					end
+					node = node.Parent
+				end
+				return false
+			end
+
+			local function dropTarget(inst)
+				if not inst or not inst.Parent or excludedDrop(inst) then
+					return nil
+				end
+				local root = inst
+				while root.Parent and root.Parent ~= Workspace and root.Parent:IsA("Model") and soulishInst(root.Parent) do
+					root = root.Parent
+				end
+				local prompt = inst:IsA("ProximityPrompt") and inst or root:FindFirstChildWhichIsA("ProximityPrompt", true)
+				local part = inst:IsA("BasePart") and inst or (root:IsA("BasePart") and root) or (root:IsA("Model") and (root.PrimaryPart or root:FindFirstChildWhichIsA("BasePart", true))) or nil
+				local pos = posOf(part or prompt or root)
+				if not pos then
+					return nil
+				end
+				return {Root = root, Part = part, Prompt = prompt, Pos = pos}
+			end
+
+			local function findDrops(origin, tried)
+				local out, seen = {}, {}
+				local function consider(inst)
+					local target = dropTarget(inst)
+					if target and not seen[target.Root] and (tried[target.Root] or 0) < 3 then
+						seen[target.Root] = true
+						out[#out + 1] = target
+					end
+				end
+				for inst, at in pairs(tr.NewDrops) do
+					if inst.Parent and os.clock() - at < 60 then
+						consider(inst)
+					end
+				end
+				if origin and not tr.ScannedDrops then
+					tr.ScannedDrops = true
+					for _, inst in ipairs(Workspace:GetDescendants()) do
+						if (inst:IsA("BasePart") or inst:IsA("ProximityPrompt") or inst:IsA("Model")) and soulishInst(inst) then
+							local pos = posOf(inst)
+							if pos and (pos - origin).Magnitude < 150 then
+								consider(inst)
+							end
+						end
+					end
+				end
+				return out
+			end
+
+			-- Venyx-style souls: the server credits the Ghouler souls the moment the boss dies (RE/GhostBoss/Defeated carries the amount)
+			-- and they land straight in the soul shop balance, so nothing is picked up in the world. Never teleport to objects with "soul"
+			-- in the name: those are Soul Phantom mobs / NPCs. This only waits a moment for the credit, refreshes the state and returns.
+			local function collectSouls(alive, origin)
+				tr.Status = "Ghouler down, souls are credited by the server"
+				local started = os.clock()
+				while alive() and not (tr.BossDefeatedAt ~= nil and os.clock() - tr.BossDefeatedAt < 25) and os.clock() - started < 3 do
+					sleep(0.2, alive)
+				end
+				if alive() then
+					trPoll()
+				end
+				return 0
+			end
+
+			-- trades until the souls are used up (not just a handful), then returns
 			local function tradeSouls(alive)
+				local shop = readShop()
+				local cost = tonumber(shop and shop.Cost)
+				-- nothing to trade: skip the walk to the shop and leave straight away
+				if shop and cost and (tonumber(shop.Souls) or 0) < cost then
+					return 0
+				end
 				local prompt = trPrompt("TrainEventAction", "OpenSoulShop")
 				if prompt and flyToPoint(posOf(prompt.Parent), alive) then
 					press(prompt)
 					sleep(0.5, alive)
 				end
-				local _, _, opened = trAction("OpenSoulShop")
-				local shop = type(opened) == "table" and opened.SoulShop or tr.State and tr.State.SoulShop
-				for _ = 1, 20 do
-					if type(shop) ~= "table" or not shop.CanTrade or (tonumber(shop.Souls) or 0) < (tonumber(shop.Cost) or math.huge) then
+				local trades, misses, bulkTried = 0, 0, false
+				local deadline = os.clock() + 90
+				while alive() and os.clock() < deadline do
+					shop = readShop()
+					cost = tonumber(shop and shop.Cost)
+					local souls = tonumber(shop and shop.Souls) or 0
+					if not shop or not cost or cost <= 0 then
+						misses = misses + 1
+						if misses >= 4 then
+							break
+						end
+						sleep(0.4, alive)
+					elseif souls < cost then
 						break
+					elseif shop.CanTrade == false then
+						misses = misses + 1
+						if misses >= 8 then
+							break
+						end
+						sleep(0.4, alive)
+					else
+						local amount = cost
+						-- one probe for bulk trading; falls back to one-by-one when the shop ignores it
+						if not bulkTried and souls >= cost * 3 then
+							bulkTried = true
+							amount = cost * math.min(math.floor(souls / cost), 10)
+						end
+						local _, success = trAction("TradeSouls", amount)
+						if not success and amount ~= cost then
+							_, success = trAction("TradeSouls", cost)
+						end
+						if success then
+							trades = trades + 1
+							misses = 0
+							tr.Status = ("Trading souls (%d trades)"):format(trades)
+						else
+							misses = misses + 1
+							if misses >= 4 then
+								break
+							end
+						end
+						sleep(0.1, alive)
 					end
-					local _, success = trAction("TradeSouls", shop.Cost)
-					if not success then
-						break
-					end
-					local _, _, again = trAction("OpenSoulShop")
-					shop = type(again) == "table" and again.SoulShop or nil
 				end
+				return trades
 			end
 
 			local function trLeave(alive)
-				tr.Left = true
-				if os.clock() - (tr.ReturnAt or -99) < 25 then
+				if os.clock() - (tr.ReturnAt or -99) < 4 then
 					return
 				end
 				tr.ReturnAt = os.clock()
@@ -36204,7 +36799,9 @@ local function fn66()
 				if prompt then
 					flyToPoint(railPoint(prompt, "ReturnRailStart", "ReturnRailEnd"), alive)
 				end
-				trAction("Return")
+				local ok2, success = trAction("Return")
+				-- only counts as left when the server accepted it, otherwise try again in a few seconds
+				tr.Left = ok2 and success ~= false
 			end
 
 			local function ringSpot(ghost, ghostPos, radius, folder, root)
@@ -36260,32 +36857,32 @@ local function fn66()
 				tr.Status = ("Vacuuming ghosts %s/%s"):format(tostring(inv.Captured or 0), tostring(inv.Goal or 50))
 				local progress = math.clamp(tonumber(ghost:GetAttribute("ServerCaptureProgress")) or 0, 0, 1)
 				local radius = progress >= 0.75 and 7 or progress >= 0.5 and 10 or 15
+				if flyOn() then
+					radius = math.min(radius, 6)
+				end
 				local spot = ringSpot(ghost, ghostPos, radius, folder, root)
 				if not spot then
 					return false
 				end
-				local dt = math.min(os.clock() - (tr.MoveAt or 0), 0.1)
 				tr.MoveAt = os.clock()
-				local delta = spot - root.Position
-				if delta.Magnitude > 20 then
-					tr.FlyY = tr.FlyY or root.Position.Y + 40
-					local nextPos = root.Position + delta.Unit * math.min(delta.Magnitude, tr.GhostSpeed * math.max(dt, 1 / 60))
-					noclip = true
-					tp(CFrame.new(Vector3.new(nextPos.X, tr.FlyY, nextPos.Z), Vector3.new(ghostPos.X, tr.FlyY, ghostPos.Z)))
-				elseif tr.FlyY then
-					local params = RaycastParams.new()
-					params.FilterType = Enum.RaycastFilterType.Exclude
-					params.FilterDescendantsInstances = {localPlayer.Character, folder}
-					local hit = Workspace:Raycast(Vector3.new(spot.X, tr.FlyY, spot.Z), Vector3.new(0, -200, 0), params)
-					local landing = hit and Vector3.new(spot.X, hit.Position.Y + 3, spot.Z) or spot
-					tr.FlyY = nil
-					noclip = false
-					tp(CFrame.new(landing, Vector3.new(ghostPos.X, landing.Y, ghostPos.Z)))
-				else
-					noclip = false
-					walkStep(spot, tr.GhostSpeed * (1 - 0.9 * progress))
+				tr.FlyY = nil
+				noclip = false
+				if flyOn() then
+					-- fly: hover above the ground next to the ghost, out of reach of melee hits
+					hoverStep(spot, tr.GhostSpeed * (1 - 0.9 * progress))
 					face(ghostPos)
+					return true
 				end
+				-- keep a safe distance from the ghost/boss so hits don't kill the character
+				local safeSpot = spot
+				local distToGhost = flat(root.Position - ghostPos).Magnitude
+				if distToGhost < 8 then
+					local away = flat(root.Position - ghostPos)
+					safeSpot = ghostPos + (away.Magnitude > 0.1 and away.Unit or Vector3.new(1, 0, 0)) * 8
+					safeSpot = Vector3.new(safeSpot.X, root.Position.Y, safeSpot.Z)
+				end
+				walkStep(safeSpot, tr.GhostSpeed * (1 - 0.9 * progress))
+				face(ghostPos)
 				return true
 			end
 
@@ -36297,18 +36894,53 @@ local function fn66()
 				while inTown() do
 					local inv = tr.State and type(tr.State.Invasion) == "table" and tr.State.Invasion or {}
 					local bossVac, anyVac = vacuumTool(true), vacuumTool(false)
-					local boss = on("TrainBoss", true) and bossState("Town")
-					if not anyVac and not inv.VacuumOwned then
+					local bossNow = bossState("Town")
+					local boss = on("TrainBoss", true) and bossNow
+					local departure = tr.State and tr.State.DepartureAt
+					if bossNow then
+						tr.BossSeenFor = departure
+						tr.BossGround = bossNow:GetAttribute("Ground") or tr.BossGround
+					end
+					-- ghouler is dead (seen alive this ride, or the Defeated remote just fired): souls come before ANYTHING else
+					local soulsPending = on("TrainBoss", true) and not bossNow and tr.SoulsFor ~= departure and ((tr.BossSeenFor ~= nil and tr.BossSeenFor == departure) or (tr.BossDefeatedAt ~= nil and os.clock() - tr.BossDefeatedAt < 25))
+					if soulsPending then
+						tr.SoulsFor = departure
+						local hum = humanoid()
+						if hum then
+							hum:UnequipTools()
+						end
+						collectSouls(inTown, typeof(tr.BossGround) == "Vector3" and tr.BossGround or nil)
+					elseif not anyVac and not inv.VacuumOwned then
 						tr.Status = "Picking up the Ghost Vacuum"
 						local prompt = trPrompt("TrainEventAction", "PickupVacuum")
 						if prompt and flyToPoint(posOf(prompt.Parent), inTown) then
-							press(prompt)
-							waitFor(function()
-								return vacuumTool(false) ~= nil
-							end, 3, inTown)
-							sleep(1, inTown)
+							-- keep jumping and pressing the prompt until the vacuum is really in the backpack
+							local giveUp = os.clock() + 30
+							while inTown() and vacuumTool(false) == nil and os.clock() < giveUp do
+								tr.Status = "Jumping for the Ghost Vacuum"
+								local hum, root = humanoid(), rootPart()
+								local target = posOf(prompt.Parent)
+								if root and target and flat(root.Position - target).Magnitude > 6 then
+									flyToPoint(target, inTown)
+								end
+								if hum then
+									pcall(function()
+										hum.Jump = true
+										hum:ChangeState(Enum.HumanoidStateType.Jumping)
+									end)
+								end
+								press(prompt)
+								waitFor(function()
+									return vacuumTool(false) ~= nil
+								end, 0.6, inTown)
+								if vacuumTool(false) == nil then
+									press(prompt)
+									sleep(0.3, inTown)
+								end
+							end
+							sleep(0.5, inTown)
 						end
-						sleep(1, inTown)
+						sleep(0.5, inTown)
 					elseif boss and bossVac then
 						tr.Status = "Sucking in Ghouler"
 						equip(bossVac)
@@ -36332,6 +36964,11 @@ local function fn66()
 							if hum then
 								hum:UnequipTools()
 							end
+							-- boss died but its souls were not picked up yet (e.g. killed by someone else)
+							if tr.BossSeenFor == tr.TradedFor and tr.SoulsFor ~= tr.TradedFor and not bossState("Town") and on("TrainBoss", true) then
+								tr.SoulsFor = tr.TradedFor
+								collectSouls(inTown, typeof(tr.BossGround) == "Vector3" and tr.BossGround or nil)
+							end
 							if on("TrainSouls") then
 								tr.Status = "Trading souls"
 								tradeSouls(inTown)
@@ -36342,7 +36979,7 @@ local function fn66()
 							tr.DoneDeparture = tr.State and tr.State.DepartureAt
 							trLeave(inTown)
 						end
-						sleep(1, inTown)
+						sleep(0.3, inTown)
 					end
 					step()
 				end
@@ -36411,7 +37048,7 @@ local function fn66()
 						tr.Status = "Off"
 					elseif trainRiding[phase] then
 						tr.Status = "On the Phantom Express (" .. tostring(phase) .. ")"
-					elseif rideOn and (phase == "Town" or (boardingOpen() and os.clock() >= (tr.FailAt or 0) and hasTrainAccess() and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt))) then
+					elseif rideOn and (phase == "Town" or (boardingOpen() and os.clock() >= (tr.FailAt or 0) and hasTrainAccess() and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) and higherTask() == nil)) then
 						local mode = phase == "Town" and "town" or "board"
 						local eggsFirst = mode == "board" and (carried() or (on("HwEggs") and pickEgg() ~= nil))
 						if eggsFirst then
@@ -36425,6 +37062,7 @@ local function fn66()
 									return on("TrainRide") and hw.Owner == "train"
 								end)
 								local ok2, err = pcall(function()
+									leaveTreadmill(alive)
 									if mode == "town" then
 										townLoop(alive)
 									else
@@ -36445,11 +37083,12 @@ local function fn66()
 					-- ghouler boss in the main world (needs the vacuum from the Phantom Express)
 					if bossOn and phase ~= "Town" and not trainRiding[phase] and not inDim() then
 						local boss = bossState("World")
-						if boss and vacuumTool(true) and not carried() and claim("ghouler") then
+						if boss and vacuumTool(true) and not carried() and higherTask() == nil and claim("ghouler") then
 							local alive = makeAlive(function()
 								return on("TrainBoss", true) and hw.Owner == "ghouler" and bossState("World") ~= nil
 							end)
 							pcall(function()
+								leaveTreadmill(alive)
 								local ground = boss:GetAttribute("Ground")
 								if typeof(ground) == "Vector3" and not flyToPoint(ground + Vector3.new(42, 0, 0), alive) then
 									return
@@ -36462,12 +37101,65 @@ local function fn66()
 								end
 							end)
 							fire("RE/GhostBoss/Suction", false)
+							if on("TrainBoss", true) and hw.Owner == "ghouler" and bossState("World") == nil and humanoid() and humanoid().Health > 0 then
+								-- boss is gone: keep the "ghouler" claim so the monster farmer can't start until the souls are picked up
+								pcall(function()
+									local hum = humanoid()
+									if hum then
+										hum:UnequipTools()
+									end
+									collectSouls(makeAlive(function()
+										return on("TrainBoss", true) and hw.Owner == "ghouler"
+									end), tr.BossGround)
+								end)
+							end
 							noclip = false
 							release("ghouler")
 						end
 					end
 				end
 			end)
+
+			-- ---------------------------------------------------------------- task ladder entry
+			-- registers Halloween / Phantom Express as a real task so the Treadmill (and Task Order) can see it
+			do
+				local ladder = genv.__PilatV4TaskLadder
+				local wantAt, wantValue = 0, false
+				if ladder and type(ladder.register) == "function" then
+					ladder.register("halloween", {wants = function()
+						if os.clock() - wantAt < 0.3 then
+							return wantValue
+						end
+						wantAt = os.clock()
+						local value = false
+						if fn2() then
+							local phase = trPhase()
+							if hw.Owner ~= nil then
+								value = true
+							elseif on("TrainRide") and (phase == "Town" or trainRiding[phase] == true) then
+								value = true
+							elseif on("TrainRide") and boardingOpen() and hasTrainAccess() and os.clock() >= (tr.FailAt or 0) and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) then
+								value = true
+							elseif on("TrainBoss", true) and phase ~= "Town" and not trainRiding[phase] and not inDim() and bossState("World") ~= nil and vacuumTool(true) ~= nil then
+								value = true
+							else
+								value = nextTask() ~= nil
+							end
+						end
+						wantValue = value
+						return value
+					end, active = function()
+						return hw.Owner ~= nil
+					end, enabled = function()
+						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwFishing") or on("HwPumpkin", true) or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
+					end, status = function()
+						if hw.Owner == "train" or hw.Owner == "ghouler" then
+							return tr.Status
+						end
+						return hw.Status
+					end})
+				end
+			end
 
 			-- ---------------------------------------------------------------- UI
 			local eggOptions, eggLabels = {}, {}
@@ -36511,6 +37203,9 @@ local function fn66()
 				end
 			end)
 
+			toggle("Force Exit", "on = always exit Halloween event if there is no priority there\noff = will not exit even though there is no priority", "HwForceExit", true)
+
+			toggle("Noclip In Halloween Dimension", "Turns noclip on by itself while you are inside the Halloween Dimension (not in the main world), and off again when you leave.", "HwDimNoclip", true)
 			hwSection:AddSubSection("Auto Steal Halloween Eggs")
 			toggle("Auto Steal Halloween Eggs", "Steals the Halloween eggs in the dimension and carries them to the safe zone. Needs 2.5M speed and the guard tutorial done.", "HwEggs", false)
 			toggle("Instant Steal Halloween Eggs", "Dashes straight to the egg and drops it at the safe zone edge. Turn off for a slower, safer route.", "HwInstant", true)
@@ -36541,6 +37236,7 @@ local function fn66()
 
 			hwSection:AddSubSection("Auto Farm Monsters")
 			toggle("Auto Farm Monsters", "Fights Halloween monsters for Candy Corn. Needs a bat or a weapon.", "HwMonsters", false)
+			toggle("Wait On Night / Wall", "Pauses monster farming while it is night or the reset wall is closed, and resumes by itself when it opens.", "HwMonsterWait", true)
 			hwSection:AddDropdown({Flag = "Halloween_MonsterKinds", Title = "Monsters To Kill", Content = "Leave empty to fight every kind.", Options = {"Candy Corn (+12 Candy)", "Hollow Bat (+12 Candy)", "Scarecrow (+28 Candy)", "Chest Mimic (+28 Candy)", "Pumpkin Golem (+65 Candy)", "Soul Phantom (+65 Candy)"}, Multi = true, Default = {}, Callback = fn144(function(arg)
 				local kinds = {}
 				for _, label in ipairs(selected(arg)) do
@@ -36578,7 +37274,7 @@ local function fn66()
 
 			hwSection:AddSubSection("Auto Pumpkin Moon")
 			toggle("Auto Pumpkin Moon", "During the Pumpkin Moon, catches the runaway pumpkins and brings them to the altar.", "HwPumpkin", true)
-			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Walk Speed", Content = "How fast you chase pumpkins.", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
+			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Tween Speed", Content = "How fast you tween to pumpkins and back to the altar (studs/sec).", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				hw.PumpkinSpeed = tonumber(arg) or 300
 			end)})
 
@@ -36600,6 +37296,10 @@ local function fn66()
 			end)})
 			hwSection:AddSlider({Flag = "Halloween_GhostSpeed", Title = "Ghost Walk Speed", Content = "How fast you move between ghosts.", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				tr.GhostSpeed = tonumber(arg) or 300
+			end)})
+			toggle("Fly", "Hovers above the ground while vacuuming ghosts and the Ghouler boss so they can't hit you. Not too high, just out of melee reach.", "TrainFly", false)
+			hwSection:AddSlider({Flag = "Halloween_FlyHeight", Title = "Fly Height", Content = "How many studs above the ground you hover. Lower = vacuum reaches better, higher = safer.", Min = 4, Max = 25, Default = 9, Increment = 1, Callback = fn144(function(arg)
+				tr.FlyHeight = tonumber(arg) or 9
 			end)})
 			toggle("Auto Trade Souls", "Trades your Souls at the soul shop before the train leaves town.", "TrainSouls", false)
 		end, function(err)
@@ -37373,6 +38073,18 @@ local function fn66()
 
 	fn157(tbl24.autoSteal, fn78)
 	fn157(tbl24.stealPlayers, fn145)
+	fn157(tbl24.boostFps, fn132)
+	fn157(tbl24.adminBoost, fn137)
+
+	-- Halloween tab: replay the loaded config values through every control (same job as the fn157 calls above)
+	for _, entry in ipairs(tbl24.hwControls or {}) do
+		v27()
+
+		if type(entry.control) == "table" and entry.control.Value ~= nil then
+			pcall(entry.callback, entry.control.Value)
+		end
+	end
+
 	tbl13.hopWindow = v28
 
 	do

@@ -21,35 +21,37 @@ local sv = {
 }
 
 local theme = {
-	Accent = Color3.fromRGB(232, 232, 238),
-	AccentText = Color3.fromRGB(14, 14, 17),
-	Backdrop = Color3.fromRGB(0, 0, 0),
-	Sidebar = Color3.fromRGB(13, 13, 16),
-	Card = Color3.fromRGB(19, 19, 23),
-	Element = Color3.fromRGB(27, 27, 32),
-	ElementHover = Color3.fromRGB(36, 36, 43),
-	Track = Color3.fromRGB(46, 46, 54),
-	Stroke = Color3.fromRGB(42, 42, 50),
-	StrokeSoft = Color3.fromRGB(31, 31, 37),
-	Text = Color3.fromRGB(238, 238, 243),
-	SubText = Color3.fromRGB(162, 162, 174),
-	Dim = Color3.fromRGB(116, 116, 128),
+	Accent = Color3.fromRGB(139, 108, 255),
+	Accent2 = Color3.fromRGB(86, 196, 255),
+	AccentSoft = Color3.fromRGB(186, 168, 255),
+	AccentText = Color3.fromRGB(255, 255, 255),
+	Backdrop = Color3.fromRGB(10, 10, 16),
+	Sidebar = Color3.fromRGB(14, 14, 22),
+	Card = Color3.fromRGB(18, 18, 27),
+	Element = Color3.fromRGB(27, 27, 40),
+	ElementHover = Color3.fromRGB(38, 36, 58),
+	Track = Color3.fromRGB(46, 46, 66),
+	Stroke = Color3.fromRGB(46, 44, 68),
+	StrokeSoft = Color3.fromRGB(32, 31, 48),
+	Text = Color3.fromRGB(240, 240, 249),
+	SubText = Color3.fromRGB(165, 164, 188),
+	Dim = Color3.fromRGB(114, 113, 140),
 	Good = Color3.fromRGB(74, 222, 128),
 	Bad = Color3.fromRGB(248, 113, 113),
 	Gold = Color3.fromRGB(245, 196, 81),
 	Blue = Color3.fromRGB(96, 165, 250),
-	Row = Color3.fromRGB(25, 25, 27),
-	Inner = Color3.fromRGB(40, 40, 43),
-	InnerHover = Color3.fromRGB(52, 52, 56),
-	Field = Color3.fromRGB(43, 43, 46),
-	Bar = Color3.fromRGB(66, 66, 70),
-	Pill = Color3.fromRGB(20, 20, 23),
-	TabActive = Color3.fromRGB(29, 29, 32),
-	Option = Color3.fromRGB(34, 34, 37),
-	ChatBg = Color3.fromRGB(15, 15, 17),
-	Mine = Color3.fromRGB(29, 29, 32),
-	Mention = Color3.fromRGB(38, 33, 22),
-	Box = Color3.fromRGB(16, 16, 18),
+	Row = Color3.fromRGB(21, 21, 32),
+	Inner = Color3.fromRGB(35, 35, 50),
+	InnerHover = Color3.fromRGB(48, 46, 68),
+	Field = Color3.fromRGB(38, 37, 55),
+	Bar = Color3.fromRGB(60, 59, 84),
+	Pill = Color3.fromRGB(18, 18, 27),
+	TabActive = Color3.fromRGB(34, 29, 62),
+	Option = Color3.fromRGB(32, 31, 47),
+	ChatBg = Color3.fromRGB(14, 14, 22),
+	Mine = Color3.fromRGB(34, 29, 62),
+	Mention = Color3.fromRGB(40, 34, 24),
+	Box = Color3.fromRGB(15, 15, 23),
 }
 
 local function elevate()
@@ -629,6 +631,15 @@ for _, class in ipairs(classes) do
 	end
 end
 
+do
+	local rawcorner = instance.uicorner
+	instance.uicorner = function(parent)
+		local c = rawcorner(parent)
+		c.CornerRadius = UDim.new(0, 10)
+		return c
+	end
+end
+
 local sliceimage = "rbxassetid://3570695787"
 local rowalpha = 0
 
@@ -640,6 +651,16 @@ local rowalpha = 0
 -- UICorner instead; the returned proxy keeps .ImageColor3 / .ImageTransparency
 -- working for hoverbg and friends.
 local function roundbg(parent, radius, color, native)
+	radius = (radius or 4) + ((radius or 4) <= 6 and 4 or 2)
+	if color == theme.Row and parent.Name ~= "Bg" then
+		local edge = parent:FindFirstChildOfClass("UIStroke") or instance.uistroke(parent)
+		edge.Color = theme.Stroke
+		edge.Thickness = 1
+		edge.Transparency = 0.55
+		edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		local pc = parent:FindFirstChildOfClass("UICorner") or instance.uicorner(parent)
+		pc.CornerRadius = UDim.new(0, radius)
+	end
 	if native or parent:IsA("TextButton") then
 		parent.BackgroundColor3 = color
 		parent.BackgroundTransparency = rowalpha
@@ -680,18 +701,26 @@ local function roundbg(parent, radius, color, native)
 	return bg
 end
 
+local function smoothcolor(bg, color)
+	if typeof(bg) == "Instance" then
+		sv.ts:Create(bg, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ImageColor3 = color }):Play()
+	else
+		bg.ImageColor3 = color
+	end
+end
+
 local function hoverbg(button, bg, normal, hover)
 	button.MouseEnter:Connect(function()
-		bg.ImageColor3 = hover
+		smoothcolor(bg, hover)
 	end)
 	button.MouseLeave:Connect(function()
-		bg.ImageColor3 = normal
+		smoothcolor(bg, normal)
 	end)
 	button.MouseButton1Down:Connect(function()
-		bg.ImageColor3 = normal
+		smoothcolor(bg, normal)
 	end)
 	button.MouseButton1Up:Connect(function()
-		bg.ImageColor3 = hover
+		smoothcolor(bg, hover)
 	end)
 end
 
@@ -703,10 +732,10 @@ local function pesseffect(button)
 		scale.Name = "PressScale"
 		scale.Parent = button
 	end
-	sv.ts:Create(scale, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.96 }):Play()
+	sv.ts:Create(scale, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.97 }):Play()
 	task.delay(0.08, function()
 		if scale.Parent then
-			sv.ts:Create(scale, TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			sv.ts:Create(scale, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 		end
 	end)
 end
@@ -1197,11 +1226,12 @@ local function buildnotify(cfg, top)
 	notifyframereal.BorderSizePixel = 0
 	notifyframereal.Position = UDim2.new(0, 400, 0, 0)
 	notifyframereal.Size = UDim2.new(1, 0, 1, 0)
-	instance.uicorner(notifyframereal).CornerRadius = UDim.new(0, 8)
+	instance.uicorner(notifyframereal).CornerRadius = UDim.new(0, 12)
 
 	local notifystroke = instance.uistroke(notifyframereal)
-	notifystroke.Color = theme.Stroke
-	notifystroke.Thickness = 1
+	notifystroke.Color = cfg.Color or theme.Stroke
+	notifystroke.Thickness = 1.5
+	notifystroke.Transparency = 0.5
 
 	local topbar = instance.frame(notifyframereal)
 	topbar.Name = "Top"
@@ -1535,7 +1565,7 @@ function Chloex:Prompt(promptconfig)
 		notifyframereal.BorderSizePixel = 0
 		notifyframereal.Position = UDim2.new(0, 400, 0, 0)
 		notifyframereal.Size = UDim2.new(1, 0, 1, 0)
-		instance.uicorner(notifyframereal).CornerRadius = UDim.new(0, 8)
+		instance.uicorner(notifyframereal).CornerRadius = UDim.new(0, 12)
 
 		local stroke = instance.uistroke(notifyframereal)
 		stroke.Color = theme.Stroke
@@ -2425,8 +2455,8 @@ function Chloex:Window(guiconfig)
 	local dropshadow = instance.imagelabel(dropshadowholder)
 	dropshadow.Name = "DropShadow"
 	dropshadow.Image = "rbxassetid://6015897843"
-	dropshadow.ImageColor3 = Color3.fromRGB(15, 15, 15)
-	dropshadow.ImageTransparency = 1
+	dropshadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+	dropshadow.ImageTransparency = 0.55
 	dropshadow.ScaleType = Enum.ScaleType.Slice
 	dropshadow.SliceCenter = Rect.new(49, 49, 450, 450)
 	dropshadow.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -2498,6 +2528,37 @@ function Chloex:Window(guiconfig)
 	main.Size = UDim2.new(1, -47, 1, -47)
 
 	local uicorner = instance.uicorner(main)
+	uicorner.CornerRadius = UDim.new(0, 14)
+	mainstroke.Thickness = 1.5
+	mainstroke.Color = Color3.fromRGB(255, 255, 255)
+	mainstroke.Transparency = 0.35
+
+	-- animated accent border: the gradient slowly rotates around the window
+	local strokegrad = Instance.new("UIGradient")
+	strokegrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, theme.Accent),
+		ColorSequenceKeypoint.new(0.35, theme.Stroke),
+		ColorSequenceKeypoint.new(0.65, theme.Accent2),
+		ColorSequenceKeypoint.new(1, theme.Accent),
+	})
+	strokegrad.Parent = mainstroke
+
+	-- soft accent glow behind the header (very faint so pages never look tinted)
+	local headglow = instance.frame(main)
+	headglow.Name = "HeaderGlow"
+	headglow.ZIndex = 0
+	headglow.BorderSizePixel = 0
+	headglow.BackgroundColor3 = theme.Accent
+	headglow.BackgroundTransparency = 0
+	headglow.Size = UDim2.new(1, 0, 0, 90)
+	instance.uicorner(headglow).CornerRadius = UDim.new(0, 14)
+	local glowgrad = Instance.new("UIGradient")
+	glowgrad.Rotation = 90
+	glowgrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.9),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	glowgrad.Parent = headglow
 
 	local top = instance.frame(main)
 	top.Name = "Top"
@@ -2519,7 +2580,12 @@ function Chloex:Window(guiconfig)
 	textlabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	textlabel.BorderSizePixel = 0
 	textlabel.Size = UDim2.new(1, -100, 1, 0)
-	textlabel.Position = UDim2.new(0, 10, 0, 0)
+	textlabel.Position = UDim2.new(0, 14, 0, 0)
+	do
+		local titlegrad = Instance.new("UIGradient")
+		titlegrad.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), theme.AccentSoft)
+		titlegrad.Parent = textlabel
+	end
 
 	local uicorner1 = instance.uicorner(top)
 
@@ -2558,13 +2624,13 @@ function Chloex:Window(guiconfig)
 	headerchiplayout.Padding = UDim.new(0, 4)
 	local function layoutheader()
 		local reserve = headerreserve + math.floor(headerchips.holder.AbsoluteSize.X) + (headerchips.holder.AbsoluteSize.X > 0 and 6 or 0)
-		local avail = math.max(60, top.AbsoluteSize.X - 10 - reserve)
+		local avail = math.max(60, top.AbsoluteSize.X - 14 - reserve)
 		if top.AbsoluteSize.X <= 1 then
 			avail = draggable.defx - 10 - reserve
 		end
 		local titlew = math.min(textwidth(textlabel.Text, 14, FONT_BOLD) + 2, math.floor(avail * 0.65))
 		textlabel.Size = UDim2.new(0, titlew, 1, 0)
-		local footerx = 10 + titlew + 6
+		local footerx = 14 + titlew + 8
 		textlabel1.Position = UDim2.new(0, footerx, 0, 0)
 		textlabel1.Size = UDim2.new(0, math.max(0, avail - titlew - 6), 1, 0)
 	end
@@ -2650,11 +2716,15 @@ function Chloex:Window(guiconfig)
 			bar.BackgroundColor3 = color
 		end
 	end
+	instance.uicorner(close).CornerRadius = UDim.new(0, 8)
 	close.MouseEnter:Connect(function()
 		paintclose(theme.Bad)
+		close.BackgroundColor3 = theme.Bad
+		sv.ts:Create(close, TweenInfo.new(0.15), { BackgroundTransparency = 0.82 }):Play()
 	end)
 	close.MouseLeave:Connect(function()
 		paintclose(theme.SubText)
+		sv.ts:Create(close, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
 	end)
 
 	local min = instance.textbutton(top)
@@ -2681,11 +2751,15 @@ function Chloex:Window(guiconfig)
 	imagelabel2.Position = UDim2.new(0.5, 0, 0.5, 0)
 	imagelabel2.Size = UDim2.new(0, 15, 0, 15)
 	applyicon(imagelabel2, "minus", 48)
+	instance.uicorner(min).CornerRadius = UDim.new(0, 8)
 	min.MouseEnter:Connect(function()
 		imagelabel2.ImageColor3 = theme.Text
+		min.BackgroundColor3 = theme.Accent
+		sv.ts:Create(min, TweenInfo.new(0.15), { BackgroundTransparency = 0.82 }):Play()
 	end)
 	min.MouseLeave:Connect(function()
 		imagelabel2.ImageColor3 = theme.SubText
+		sv.ts:Create(min, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
 	end)
 
 	local searchbox = instance.textbox(top)
@@ -2712,6 +2786,13 @@ function Chloex:Window(guiconfig)
 	searchstroke.Color = theme.Stroke
 	searchstroke.Thickness = 1
 	searchstroke.Transparency = 0.35
+
+	searchbox.Focused:Connect(function()
+		sv.ts:Create(searchstroke, TweenInfo.new(0.18), { Color = theme.Accent, Transparency = 0.1 }):Play()
+	end)
+	searchbox.FocusLost:Connect(function()
+		sv.ts:Create(searchstroke, TweenInfo.new(0.18), { Color = theme.Stroke, Transparency = 0.35 }):Play()
+	end)
 
 	local searchpad = instance.uipadding(searchbox)
 	searchpad.PaddingLeft = UDim.new(0, 26)
@@ -2741,11 +2822,62 @@ function Chloex:Window(guiconfig)
 	decideframe.Name = "DecideFrame"
 	decideframe.AnchorPoint = Vector2.new(0.5, 0)
 	decideframe.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	decideframe.BackgroundTransparency = 0.85
+	decideframe.BackgroundTransparency = 0
 	decideframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	decideframe.BorderSizePixel = 0
 	decideframe.Position = UDim2.new(0.5, 0, 0, 38)
 	decideframe.Size = UDim2.new(1, 0, 0, 1)
+	local shimmer = Instance.new("UIGradient")
+	shimmer.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, theme.Stroke),
+		ColorSequenceKeypoint.new(0.5, theme.Accent),
+		ColorSequenceKeypoint.new(1, theme.Accent2),
+	})
+	shimmer.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.85),
+		NumberSequenceKeypoint.new(0.5, 0.2),
+		NumberSequenceKeypoint.new(1, 0.85),
+	})
+	shimmer.Parent = decideframe
+
+	-- sidebar panel: a tinted column so navigation reads as its own zone
+	local sidebarbg = instance.frame(main)
+	sidebarbg.Name = "SidebarBg"
+	sidebarbg.ZIndex = 0
+	sidebarbg.BorderSizePixel = 0
+	sidebarbg.BackgroundColor3 = theme.Sidebar
+	sidebarbg.BackgroundTransparency = 0.25
+	sidebarbg.Position = UDim2.new(0, 0, 0, 39)
+	sidebarbg.Size = UDim2.new(0, tabwidth + 6, 1, -76)
+
+	-- liveliness: border gradient rotates, header line drifts (only while visible)
+	trackConnection(
+		game:GetService("RunService").RenderStepped:Connect(function()
+			if not dropshadowholder.Visible then
+				return
+			end
+			local t = os.clock()
+			strokegrad.Rotation = (t * 35) % 360
+			shimmer.Offset = Vector2.new(math.sin(t * 0.8) * 0.45, 0)
+		end),
+		"window.liveaccents"
+	)
+
+	-- pop-in whenever the window is shown (F3, floating button, first open)
+	do
+		local popscale = Instance.new("UIScale")
+		popscale.Parent = dropshadowholder
+		local function pop()
+			popscale.Scale = 0.93
+			sv.ts:Create(popscale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		end
+		dropshadowholder:GetPropertyChangedSignal("Visible"):Connect(function()
+			if dropshadowholder.Visible then
+				pop()
+			end
+		end)
+		task.defer(pop)
+	end
 
 	local decidesaparator = instance.frame(layerstab)
 	decidesaparator.Name = "DecideSaparator"
@@ -2796,6 +2928,20 @@ function Chloex:Window(guiconfig)
 
 	local layersfolder = instance.folder(layersreal)
 	layersfolder.Name = "LayersFolder"
+
+	-- brief fade whenever the page changes, so tab switches are not a hard cut
+	local pagefade = instance.frame(layersreal)
+	pagefade.Name = "PageFade"
+	pagefade.Size = UDim2.new(1, 0, 1, 0)
+	pagefade.BackgroundColor3 = theme.Backdrop
+	pagefade.BackgroundTransparency = 1
+	pagefade.BorderSizePixel = 0
+	pagefade.Active = false
+	pagefade.ZIndex = 60
+	local function fadepage()
+		pagefade.BackgroundTransparency = 0.5
+		sv.ts:Create(pagefade, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+	end
 
 	local layerspagelayout = instance.uipagelayout(layersfolder)
 	layerspagelayout.Name = "LayersPageLayout"
@@ -3119,10 +3265,19 @@ function Chloex:Window(guiconfig)
 		dialog.BorderSizePixel = 0
 		dialog.ZIndex = 51
 		local uicorner3 = instance.uicorner(dialog)
-		uicorner3.CornerRadius = UDim.new(0, 8)
+		uicorner3.CornerRadius = UDim.new(0, 14)
 		local dialogstroke = instance.uistroke(dialog)
-		dialogstroke.Color = theme.Stroke
-		dialogstroke.Thickness = 1
+		dialogstroke.Color = theme.Accent
+		dialogstroke.Thickness = 1.5
+		dialogstroke.Transparency = 0.45
+		do
+			local dscale = Instance.new("UIScale")
+			dscale.Scale = 0.85
+			dscale.Parent = dialog
+			sv.ts:Create(dscale, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			overlay.BackgroundTransparency = 1
+			sv.ts:Create(overlay, TweenInfo.new(0.2), { BackgroundTransparency = 0.45 }):Play()
+		end
 
 		local title = instance.textlabel(dialog)
 		title.Name = "Title"
@@ -3151,17 +3306,17 @@ function Chloex:Window(guiconfig)
 		yes.Name = "Yes"
 		yes.Size = UDim2.new(0.45, -10, 0, 35)
 		yes.Position = UDim2.new(0.05, 0, 1, -55)
-		yes.BackgroundColor3 = theme.Element
+		yes.BackgroundColor3 = Color3.fromRGB(190, 62, 78)
 		yes.BackgroundTransparency = 0
 		yes.AutoButtonColor = true
 		yes.Text = "Yes"
 		yes.Font = FONT_BOLD
 		yes.TextSize = 15
 		yes.TextColor3 = Color3.fromRGB(255, 255, 255)
-		yes.TextTransparency = 0.3
+		yes.TextTransparency = 0
 		yes.ZIndex = 52
 		local yescorner = instance.uicorner(yes)
-		yescorner.CornerRadius = UDim.new(0, 6)
+		yescorner.CornerRadius = UDim.new(0, 10)
 
 		local cancel = instance.textbutton(dialog)
 		cancel.Name = "Cancel"
@@ -3174,10 +3329,10 @@ function Chloex:Window(guiconfig)
 		cancel.Font = FONT_BOLD
 		cancel.TextSize = 15
 		cancel.TextColor3 = Color3.fromRGB(255, 255, 255)
-		cancel.TextTransparency = 0.3
+		cancel.TextTransparency = 0
 		cancel.ZIndex = 52
 		local cancelcorner = instance.uicorner(cancel)
-		cancelcorner.CornerRadius = UDim.new(0, 6)
+		cancelcorner.CornerRadius = UDim.new(0, 10)
 
 		yes.MouseButton1Click:Connect(function()
 			guifunc:DestroyGui()
@@ -3238,13 +3393,38 @@ function Chloex:Window(guiconfig)
 		mainbutton.ScaleType = Enum.ScaleType.Crop
 
 		local uicorner = instance.uicorner(mainbutton)
-		uicorner.CornerRadius = UDim.new(0, 6)
+		uicorner.CornerRadius = UDim.new(1, 0)
+		local ringstroke = instance.uistroke(mainbutton)
+		ringstroke.Thickness = 2
+		ringstroke.Color = Color3.fromRGB(255, 255, 255)
+		ringstroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		local ringgrad = Instance.new("UIGradient")
+		ringgrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, theme.Accent),
+			ColorSequenceKeypoint.new(0.5, theme.Accent2),
+			ColorSequenceKeypoint.new(1, theme.Accent),
+		})
+		ringgrad.Parent = ringstroke
+		local ringscale = Instance.new("UIScale")
+		ringscale.Parent = mainbutton
+		task.spawn(function()
+			while mainbutton.Parent do
+				ringgrad.Rotation = (os.clock() * 60) % 360
+				task.wait(1 / 30)
+			end
+		end)
 
 		local button = instance.textbutton(mainbutton)
 		button.Size = UDim2.new(1, 0, 1, 0)
 		button.BackgroundTransparency = 1
 		button.Text = ""
 
+		button.MouseEnter:Connect(function()
+			sv.ts:Create(ringscale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1.1 }):Play()
+		end)
+		button.MouseLeave:Connect(function()
+			sv.ts:Create(ringscale, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		end)
 		button.MouseButton1Click:Connect(function()
 			if dropshadowholder then
 				dropshadowholder.Visible = not dropshadowholder.Visible
@@ -3423,7 +3603,7 @@ function Chloex:Window(guiconfig)
 		sbar.BackgroundColor3 = theme.Bar
 		sbar.BackgroundTransparency = 0
 		sbar.Position = UDim2.new(0, 10, 0, 39)
-		sbar.Size = UDim2.new(1, -20, 0, 5)
+		sbar.Size = UDim2.new(1, -20, 0, 6)
 		sbar.Active = true
 		instance.uicorner(sbar).CornerRadius = UDim.new(1, 0)
 
@@ -3433,6 +3613,11 @@ function Chloex:Window(guiconfig)
 		sfill.BorderSizePixel = 0
 		sfill.Size = UDim2.new(0, 0, 1, 0)
 		instance.uicorner(sfill).CornerRadius = UDim.new(1, 0)
+		do
+			local fillgrad = Instance.new("UIGradient")
+			fillgrad.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(196, 222, 255))
+			fillgrad.Parent = sfill
+		end
 
 		local scircle = instance.frame(sbar)
 		scircle.Name = "SliderCircle"
@@ -3446,8 +3631,8 @@ function Chloex:Window(guiconfig)
 
 		local scirclestroke = instance.uistroke(scircle)
 		scirclestroke.Color = Color3.fromRGB(255, 255, 255)
-		scirclestroke.Transparency = 0.45
-		scirclestroke.Thickness = 1
+		scirclestroke.Transparency = 0.2
+		scirclestroke.Thickness = 2
 
 		local sbubble = instance.frame(sbar)
 		sbubble.Name = "ValueBubble"
@@ -3619,7 +3804,7 @@ function Chloex:Window(guiconfig)
 		moreblur.Visible = true
 		droppagelayout:JumpToIndex(index)
 		sv.ts:Create(moreblur, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
-		sv.ts:Create(dropdownselect, TweenInfo.new(0.3), { Position = UDim2.new(1, -11, 0.5, 0) }):Play()
+		sv.ts:Create(dropdownselect, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.new(1, -11, 0.5, 0) }):Play()
 	end
 
 	local function closedropdownpopup()
@@ -3629,7 +3814,7 @@ function Chloex:Window(guiconfig)
 		popuptoken = popuptoken + 1
 		local token = popuptoken
 		sv.ts:Create(moreblur, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
-		sv.ts:Create(dropdownselect, TweenInfo.new(0.3), { Position = UDim2.new(1, 212, 0.5, 0) }):Play()
+		sv.ts:Create(dropdownselect, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), { Position = UDim2.new(1, 212, 0.5, 0) }):Play()
 		task.delay(0.3, function()
 			if popuptoken == token then
 				moreblur.Visible = false
@@ -4147,7 +4332,7 @@ function Chloex:Window(guiconfig)
 		tab.Name = "Tab"
 		tab.BorderSizePixel = 0
 		tab.LayoutOrder = layoutOrder
-		tab.Size = UDim2.new(1, -6, 0, 28)
+		tab.Size = UDim2.new(1, -6, 0, 32)
 		local tabbg = roundbg(tab, 4, theme.TabActive)
 		tabbg.ImageTransparency = isFirstTab and 0 or 1
 
@@ -4201,7 +4386,7 @@ function Chloex:Window(guiconfig)
 			tabicon.Position = UDim2.new(0, 10, 0.5, 0)
 			tabicon.Size = UDim2.new(0, 14, 0, 14)
 			tabicon.BackgroundTransparency = 1
-			tabicon.ImageColor3 = isFirstTab and theme.Text or theme.SubText
+			tabicon.ImageColor3 = isFirstTab and theme.AccentSoft or theme.SubText
 			applyicon(tabicon, tabconfig.Icon, 48)
 		end
 
@@ -4257,12 +4442,14 @@ function Chloex:Window(guiconfig)
 		-- Hover: a faint fill on inactive tabs only.
 		tabbutton.MouseEnter:Connect(function()
 			if not isactive() then
-				tabbg.ImageTransparency = 0.6
+				tabbg.ImageTransparency = 0.55
+				tabname.TextColor3 = theme.Text
 			end
 		end)
 		tabbutton.MouseLeave:Connect(function()
 			if not isactive() then
 				tabbg.ImageTransparency = 1
+				tabname.TextColor3 = theme.SubText
 			end
 		end)
 
@@ -4274,7 +4461,7 @@ function Chloex:Window(guiconfig)
 			chooseframe.BackgroundColor3 = guiconfig.Color
 			chooseframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			chooseframe.BorderSizePixel = 0
-			chooseframe.Position = UDim2.new(0, 1, 0, 7)
+			chooseframe.Position = UDim2.new(0, 1, 0, 9)
 			chooseframe.Size = UDim2.new(0, 3, 0, 14)
 
 			instance.uicorner(chooseframe).CornerRadius = UDim.new(1, 0)
@@ -4315,14 +4502,16 @@ function Chloex:Window(guiconfig)
 			tabbg.ImageTransparency = 0
 			tabname.TextColor3 = theme.Text
 			if tabicon then
-				tabicon.ImageColor3 = theme.Text
+				tabicon.ImageColor3 = theme.AccentSoft
 			end
 
 			framechoose.Parent = tab
-			framechoose.Position = UDim2.new(0, 1, 0, 7)
-			framechoose.Size = UDim2.new(0, 3, 0, 14)
+			framechoose.Position = UDim2.new(0, 1, 0, 9)
+			framechoose.Size = UDim2.new(0, 3, 0, 0)
+			sv.ts:Create(framechoose, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.new(0, 3, 0, 14) }):Play()
 
 			layerspagelayout:JumpTo(scrollayers)
+			fadepage()
 			runOnOpen()
 
 			if searchbox.Text ~= "" then
@@ -4393,13 +4582,25 @@ function Chloex:Window(guiconfig)
 			sectionreal.Visible = not noheader
 
 			local uicorner = instance.uicorner(sectionreal)
-			uicorner.CornerRadius = UDim.new(0, 4)
+			uicorner.CornerRadius = UDim.new(0, 9)
+			sectionreal.BackgroundColor3 = theme.Element
+			sectionreal.BackgroundTransparency = 0.6
+			local sectionedge = instance.uistroke(sectionreal)
+			sectionedge.Color = theme.Stroke
+			sectionedge.Transparency = 0.6
+			sectionedge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 			local sectionbutton = instance.textbutton(sectionreal)
 			sectionbutton.Font = Enum.Font.SourceSans
 			sectionbutton.Text = ""
 			sectionbutton.BackgroundTransparency = 1
 			sectionbutton.Size = UDim2.new(1, 0, 1, 0)
+			sectionbutton.MouseEnter:Connect(function()
+				sv.ts:Create(sectionreal, TweenInfo.new(0.16), { BackgroundTransparency = 0.35 }):Play()
+			end)
+			sectionbutton.MouseLeave:Connect(function()
+				sv.ts:Create(sectionreal, TweenInfo.new(0.16), { BackgroundTransparency = 0.6 }):Play()
+			end)
 
 			local featureframe = instance.frame(sectionreal)
 			featureframe.AnchorPoint = Vector2.new(1, 0.5)
@@ -4473,9 +4674,9 @@ function Chloex:Window(guiconfig)
 				sectiontitle.TextColor3 = color_open
 
 				if animate and featureframe.Parent then
-					sv.ts:Create(featureframe, TweenInfo.new(0.3), { Rotation = 90 }):Play()
-					sv.ts:Create(section, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, sectionsizey) }):Play()
-					sv.ts:Create(sectionadd, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, contentHeight) }):Play()
+					sv.ts:Create(featureframe, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Rotation = 90 }):Play()
+					sv.ts:Create(section, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, sectionsizey) }):Play()
+					sv.ts:Create(sectionadd, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, contentHeight) }):Play()
 				else
 					if featureframe.Parent then
 						featureframe.Rotation = 90
@@ -4506,9 +4707,9 @@ function Chloex:Window(guiconfig)
 				opensection = false
 				sectiontitle.TextColor3 = color_normal
 				if animate then
-					sv.ts:Create(featureframe, TweenInfo.new(0.3), { Rotation = 0 }):Play()
-					sv.ts:Create(section, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, headerheight) }):Play()
-					sv.ts:Create(sectionadd, TweenInfo.new(0.3), { Size = UDim2.new(1, 0, 0, 0) }):Play()
+					sv.ts:Create(featureframe, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Rotation = 0 }):Play()
+					sv.ts:Create(section, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, headerheight) }):Play()
+					sv.ts:Create(sectionadd, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.new(1, 0, 0, 0) }):Play()
 				else
 					featureframe.Rotation = 0
 					section.Size = UDim2.new(1, 0, 0, headerheight)
@@ -6150,21 +6351,21 @@ function Chloex:Window(guiconfig)
 						featureframe2.BackgroundColor3 = backgroundColor
 						featureframe2.BackgroundTransparency = backgroundTransparency
 					else
-						sv.ts:Create(toggletitle, TweenInfo.new(0.2), { TextColor3 = titleColor }):Play()
+						sv.ts:Create(toggletitle, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextColor3 = titleColor }):Play()
 						sv.ts
-							:Create(togglecircle, TweenInfo.new(0.2), {
+							:Create(togglecircle, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 								Position = circlePosition,
 								BackgroundColor3 = circleColor,
 							})
 							:Play()
 						sv.ts
-							:Create(uistroke8, TweenInfo.new(0.2), {
+							:Create(uistroke8, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 								Color = strokeColor,
 								Transparency = strokeTransparency,
 							})
 							:Play()
 						sv.ts
-							:Create(featureframe2, TweenInfo.new(0.2), {
+							:Create(featureframe2, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 								BackgroundColor3 = backgroundColor,
 								BackgroundTransparency = backgroundTransparency,
 							})
