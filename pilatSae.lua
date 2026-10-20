@@ -35338,7 +35338,31 @@ local function fn66()
 				end
 			end
 
-			-- walk to the portal (no teleport); while the walk runs a second thread keeps poking the portal
+			-- script_yanz logic: glide next to the portal, stand on the hitbox for a few frames, then walk THROUGH it with
+			-- Humanoid:MoveTo (front side / back side, offset left / right) until InHalloweenDimension flips.
+			-- A failed attempt resets the character, at most once every 20 seconds.
+			local function sweepThroughPortal(hit, going)
+				local look, right = hit.CFrame.LookVector, hit.CFrame.RightVector
+				local dist = hit.Size.Z / 2 + 4
+				local base = hit.Position - Vector3.new(0, hit.Size.Y / 2 - 3, 0)
+				local offsets = {0, 3, -3}
+				tp(CFrame.lookAt(base + look * dist, base - look * dist))
+				local deadline, n = os.clock() + 10, 0
+				while going() and os.clock() < deadline do
+					local hum, root = humanoid(), rootPart()
+					if not hum or not root then
+						return
+					end
+					n += 1
+					local target = base + look * dist * (n % 2 == 1 and -1 or 1) + right * offsets[n // 2 % 3 + 1]
+					local legEnd = os.clock() + 1.2
+					repeat
+						hum:MoveTo(target)
+						step()
+					until not going() or os.clock() > legEnd or os.clock() > deadline or (root.Position - target).Magnitude < 1.5
+				end
+			end
+
 			local function enterDim(alive)
 				if inDim() then
 					return true
@@ -35348,89 +35372,63 @@ local function fn66()
 					hw.EggRetryAt = os.clock() + 30
 					return false
 				end
-				local speed = tonumber(hw.PortalSpeed) or 150
+				local portal, hit = portalModel(), portalHit()
+				if not hit and hw.PortalPos then
+					pcall(function()
+						localPlayer:RequestStreamAroundAsync(hw.PortalPos, 2)
+					end)
+					portal, hit = portalModel(), portalHit()
+				end
+				if not hit then
+					hw.Status = "Halloween portal is not loaded (walk near it once)"
+					hw.EggRetryAt = os.clock() + 15
+					return false
+				end
+				hw.PortalPos = hit.Position
+				probePortal(portal, hit)
 				local function going()
 					return alive() and not inDim()
 				end
-				local tries = 0
-				while going() do
-					tries = tries + 1
-					local portal, hit = portalModel(), portalHit()
-					if not hit and hw.PortalPos then
-						pcall(function()
-							localPlayer:RequestStreamAroundAsync(hw.PortalPos, 2)
-						end)
-						portal, hit = portalModel(), portalHit()
+				pcall(function()
+					hit.CanTouch = true
+				end)
+				hw.Status = "Going into the Halloween Dimension"
+				-- 1) get next to the portal (glide, no walking)
+				local rootNow = rootPart()
+				local far = rootNow and (rootNow.Position - hit.Position).Magnitude > 400
+				flyTo(hit.Position + Vector3.new(0, 3, 0), going, far and 300 or (tonumber(hw.PortalSpeed) or 150))
+				-- 2) stand on the hitbox for a few frames
+				for _ = 1, 8 do
+					if not going() then
+						break
 					end
-					if not hit then
-						hw.Status = "Halloween portal is not loaded (walk near it once)"
-						hw.EggRetryAt = os.clock() + 15
-						return false
-					end
-					hw.PortalPos = hit.Position
-					probePortal(portal, hit)
-					local finished = false
-					task.spawn(function()
-						while not finished and going() do
-							pokePortal(portal, hit)
-							sleep(0.1, going)
-						end
-					end)
-					noclip = true
-					if tries > 1 then
-						-- retry: step out beside the hitbox first, then walk back in
-						hw.Status = "Stuck at portal - walking out and back in (" .. tries .. ")"
-						walkTo(hit.CFrame:PointToWorldSpace(Vector3.new(hit.Size.X / 2 + 6, 0, 0)), going, speed)
-					end
-					hw.Status = "Walking to the Halloween portal"
-					local rootNow = rootPart()
-					if rootNow and (rootNow.Position - hit.Position).Magnitude > 400 then
-						flyTo(hit.Position + Vector3.new(0, 3, 0), going, 300)
-						noclip = true
-					else
-						walkTo(hit.Position, going, speed)
-					end
-					if going() then
-						hw.Status = "At the portal, waiting to enter"
-						waitFor(inDim, 2.5, alive)
-					end
-					if going() then
-						-- walking in did not trigger it: stand inside the hitbox and keep touching / pressing it
-						hw.Status = "Portal not triggering, forcing the touch (" .. tries .. ")"
-						for _ = 1, 8 do
-							if not going() then
-								break
-							end
-							tp(CFrame.new(hit.Position))
-							pokePortal(portal, hit)
-							sleep(0.25, going)
-						end
-						if going() then
-							waitFor(inDim, 2.5, alive)
-						end
-					end
-					if going() and tries >= 3 and os.clock() - (hw.PortalResetAt or -99) > 20 then
-						hw.PortalResetAt = os.clock()
-						hw.Status = "The Halloween portal did not take you, resetting the character"
-						local hum = humanoid()
-						if hum then
-							pcall(function()
-								hum.Health = 0
-							end)
-						end
-					end
-					if going() and tries >= 8 then
-						hw.Status = "Could not enter the Halloween portal, retrying later"
-						hw.EggRetryAt = os.clock() + 30
-						noclip = false
-						finished = true
-						return false
-					end
-					noclip = false
-					finished = true
+					tp(CFrame.new(hit.Position))
+					step()
 				end
-				if inDim() then
+				-- 3) walk through it from both sides until the server flips the attribute
+				if going() then
+					noclip = false
+					sweepThroughPortal(hit, going)
+				end
+				if alive() and waitFor(inDim, 2, alive) then
+					-- wait until we are actually away from the portal, then run the tutorial flag
+					waitFor(function()
+						local root = rootPart()
+						return root ~= nil and (root.Position - hit.Position).Magnitude > 12
+					end, 6, alive)
+					noclip = false
 					return entered(alive)
+				end
+				noclip = false
+				if alive() and os.clock() - (hw.PortalResetAt or -99) > 20 then
+					hw.PortalResetAt = os.clock()
+					hw.Status = "The Halloween portal did not take you, resetting the character"
+					local hum = humanoid()
+					if hum then
+						pcall(function()
+							hum.Health = 0
+						end)
+					end
 				end
 				return false
 			end
