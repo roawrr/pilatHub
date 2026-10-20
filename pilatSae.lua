@@ -36518,6 +36518,7 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- field scheduler
+			local HW_SCOUT_OUTSIDE = false
 			local function nextTask()
 				if on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" then
 					return "pumpkin"
@@ -36530,16 +36531,16 @@ local function fn66()
 						return "eggs"
 					end
 					if dimOk() then
-						if os.clock() >= (hw.EggRetryAt or 0) then
+						-- FIX: jangan masuk portal cuma buat nyari egg. scouting hanya kalau sudah di dalam dimension
+						-- (ubah HW_SCOUT_OUTSIDE jadi true kalau mau scouting dari luar seperti dulu)
+						if (inDim() or HW_SCOUT_OUTSIDE) and os.clock() >= (hw.EggRetryAt or 0) then
 							return "eggs"
 						end
 					else
 						hw.EggDiag = "Halloween Dimension needs 2.5M speed power and the guard tutorial"
 					end
 				end
-				-- FIX: jangan farm monsters lewat portal kalau phantom express sedang aktif
-				-- (monster farming saat phantom express ada harus dilakukan lewat townLoop, bukan hw field loop)
-				if on("HwMonsters") and not monsterWaiting() and not phantomExpressActive() then
+				if on("HwMonsters") and not monsterWaiting() then
 					return "monsters"
 				end
 				if on("HwFishing") then
@@ -36747,22 +36748,7 @@ local function fn66()
 
 			local function boardingOpen()
 				local state = tr.State
-				-- FIX: pastikan phantom express beneran ada di Workspace sekarang (bukan state stale)
-				local trainPresent = Workspace:FindFirstChild("TrainEventRuntime") ~= nil or Workspace:FindFirstChild("TrainEventAssets") ~= nil
-				return trainPresent and state ~= nil and state.ArrivalOpen == true and Workspace:GetServerTimeNow() < (tonumber(state.DepartureAt) or 0) and (state.Phase == "Home" or state.Phase == nil)
-			end
-
-			-- FIX: helper untuk cek apakah phantom express sedang aktif/ada di server
-			-- (berdasarkan state dari server + asset yang sudah di-stream ke client)
-			local function phantomExpressActive()
-				local state = tr.State
-				if not state then return false end
-				local phase = state.Phase
-				-- express dianggap "aktif" kalau: lagi boarding, di town, atau sedang riding
-				local activePhase = phase == "Town" or phase == "Home" or trainRiding[phase] == true
-				local assetLoaded = Workspace:FindFirstChild("TrainEventRuntime") ~= nil or Workspace:FindFirstChild("TrainEventAssets") ~= nil
-				local stateRecent = os.clock() - (tr.At or 0) < 30
-				return (activePhase or (state.ArrivalOpen == true)) and (assetLoaded or stateRecent)
+				return state ~= nil and state.ArrivalOpen == true and Workspace:GetServerTimeNow() < (tonumber(state.DepartureAt) or 0) and (state.Phase == "Home" or state.Phase == nil)
 			end
 
 			local function bossState(realm)
@@ -37226,10 +37212,8 @@ local function fn66()
 					return false
 				end
 				local died = tr.Respawned == true
-				local bossUp = on("TrainBoss", true) and bossState("Town") ~= nil
-				if not died and not bossUp then
-					return false
-				end
+				-- FIX: tidak lagi butuh "mati / boss up". kalau phase Town dan karakter ada di luar wilayah phantom express
+				-- (jauh dari town), masuk lagi lewat portal -> station -> board sebelum kill ghost / ghouler
 				local anchor = townAnchor()
 				if anchor then
 					local far = (anchor - root.Position).Magnitude > TOWN_FAR
@@ -37555,12 +37539,7 @@ local function fn66()
 					-- ghouler boss in the main world (needs the vacuum from the Phantom Express)
 					if bossOn and phase ~= "Town" and not trainRiding[phase] and not inDim() then
 						local boss = bossState("World")
-						-- FIX: hanya engage ghouler world boss kalau karakter sudah BERADA DI DEKAT wilayah phantom express
-						-- (dalam radius 800 studs dari boss ground). Mencegah engage dari seluruh map.
-						local _bossGroundFix = boss and boss:GetAttribute("Ground")
-						local _rootFix = rootPart()
-						local _nearBoss = typeof(_bossGroundFix) == "Vector3" and _rootFix ~= nil and (_rootFix.Position - _bossGroundFix).Magnitude <= 800
-						if boss and _nearBoss and vacuumTool(true) and not carried() and higherTask() == nil and claim("ghouler") then
+						if boss and vacuumTool(true) and not carried() and higherTask() == nil and claim("ghouler") then
 							local alive = makeAlive(function()
 								return on("TrainBoss", true) and hw.Owner == "ghouler" and bossState("World") ~= nil
 							end)
@@ -37618,13 +37597,8 @@ local function fn66()
 							elseif on("TrainRide") and boardingOpen() and hasTrainAccess() and os.clock() >= (tr.FailAt or 0) and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) then
 								value = true
 							elseif on("TrainBoss", true) and phase ~= "Town" and not trainRiding[phase] and not inDim() and bossState("World") ~= nil and vacuumTool(true) ~= nil then
-								-- FIX: hanya wants=true kalau karakter sudah dekat boss (radius 800 studs)
-								local _bW2 = bossState("World")
-								local _bgW2 = _bW2 and _bW2:GetAttribute("Ground")
-								local _rtW2 = rootPart()
-								value = typeof(_bgW2) == "Vector3" and _rtW2 ~= nil and (_rtW2.Position - _bgW2).Magnitude <= 800
+								value = true
 							else
-								-- FIX: nextTask() return true hanya untuk aktivitas hw field, bukan phantom express
 								value = nextTask() ~= nil
 							end
 						end
