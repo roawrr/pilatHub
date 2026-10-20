@@ -36833,16 +36833,37 @@ local function fn66()
 					return
 				end
 				tr.BossGround = ground
+				local now = os.clock()
+				local dt = math.clamp(now - (tr.BossStepAt or now), 1 / 120, 0.1)
+				tr.BossStepAt = now
 				local velocity = state:GetAttribute("Velocity")
 				local movedAt = tonumber(state:GetAttribute("MovedAt")) or Workspace:GetServerTimeNow()
 				if typeof(velocity) == "Vector3" then
 					ground = ground + velocity * math.clamp(Workspace:GetServerTimeNow() - movedAt, 0, 0.3)
 				end
-				local away = flat(root.Position - ground)
-				local goal = ground + (away.Magnitude > 0.5 and away.Unit or Vector3.new(1, 0, 0)) * 42 + Vector3.new(0, flyOn() and (tr.FlyHeight or 9) or 3, 0)
+				-- smooth the boss anchor: the server only updates Ground a few times per second, following it raw makes the character snap
+				local smooth = tr.BossSmooth
+				if not smooth or (smooth - ground).Magnitude > 60 then
+					smooth = ground
+				else
+					smooth = smooth:Lerp(ground, 1 - math.exp(-dt * 12))
+				end
+				tr.BossSmooth = smooth
+				local away = flat(root.Position - smooth)
+				local goal = smooth + (away.Magnitude > 0.5 and away.Unit or Vector3.new(1, 0, 0)) * 42 + Vector3.new(0, flyOn() and (tr.FlyHeight or 9) or 3, 0)
 				local delta = goal - root.Position
-				tp(CFrame.new(root.Position + (delta.Magnitude > 2 and delta.Unit * math.min(delta.Magnitude, 1.3333333333333333) or delta), Vector3.new(ground.X, root.Position.Y, ground.Z)))
-				suck("RE/GhostBoss/Suction", true, (ground + Vector3.new(0, 8, 0) - root.Position).Unit)
+				local dist = delta.Magnitude
+				-- far away: constant fast speed (frame-time based, so it is the same on every FPS); close: ease in so it never jitters
+				local travel = math.max(tonumber(tr.GhostSpeed) or 300, 300)
+				local stepLen
+				if dist > 30 then
+					stepLen = math.min(dist, travel * dt)
+				else
+					stepLen = dist * (1 - math.exp(-dt * 16))
+				end
+				local newPos = dist > 0.05 and root.Position + delta.Unit * stepLen or root.Position
+				tp(CFrame.new(newPos, Vector3.new(smooth.X, newPos.Y, smooth.Z)))
+				suck("RE/GhostBoss/Suction", true, (smooth + Vector3.new(0, 8, 0) - root.Position).Unit)
 			end
 
 			-- ---------------------------------------------------------------- souls: collect + trade
@@ -37087,6 +37108,124 @@ local function fn66()
 				tr.LeftAt = os.clock()
 			end
 
+			-- ---------------------------------------------------------------- portal -> station -> board (shared by every entry path)
+			-- first half: Halloween portal, then the Station teleport
+			local function goToStation(alive, force)
+				if not inDim() then
+					tr.Status = "Entering the Halloween portal"
+					if not enterDim(alive) then
+						return false
+					end
+				end
+				if not alive() then
+					return false
+				end
+				if force or (tr.State and not tr.State.AtStation) then
+					tr.Status = "Teleporting to the station"
+					trAction("Station")
+					sleep(3, alive)
+					trPoll()
+				end
+				return alive()
+			end
+
+			-- second half: walk to the boarding rail and board. returns "noprompt", "nomove", "boarded" or "refused"
+			local function boardAtStation(alive)
+				local prompt = trPrompt("Name", "TrainBoard")
+				if not prompt then
+					tr.Status = "Boarding prompt not found, retrying"
+					return "noprompt"
+				end
+				if not flyToPoint(railPoint(prompt, "BoardRailStart", "BoardRailEnd"), alive) then
+					return "nomove"
+				end
+				local data = saveData()
+				local state = data and data.TrainEvent
+				if not (type(state) == "table" and state.AccessUnlocked) then
+					equip(conductorTicket())
+					sleep(0.4, alive)
+				end
+				local _, success, reason = trAction("Board")
+				if success then
+					tr.Rides = tr.Rides + 1
+					tr.Respawned = false
+					tr.Status = "Boarded the Phantom Express"
+					return "boarded"
+				end
+				tr.Status = "Could not board: " .. tostring(reason or "no answer")
+				return "refused"
+			end
+
+			-- ---------------------------------------------------------------- outside the Phantom Express (after dying / boss while we are outside)
+			-- the server still says "Town" but the character is back in the main world: do NOT walk all the way to the town,
+			-- go portal -> station -> board again instead
+			local TOWN_FAR = 900
+			local respawnConn = localPlayer.CharacterAdded:Connect(function()
+				tr.Respawned = true
+				tr.RejoinTries = 0
+			end)
+			task.spawn(function()
+				while fn2() do
+					task.wait(1)
+				end
+				respawnConn:Disconnect()
+			end)
+
+			local function townAnchor()
+				for _, key in ipairs({{"TrainEventAction", "OpenSoulShop"}, {"TrainEventAction", "PickupVacuum"}, {"Name", "TrainReturn"}}) do
+					local prompt = trPrompt(key[1], key[2])
+					local pos = prompt and posOf(prompt.Parent)
+					if pos then
+						return pos
+					end
+				end
+				return nil
+			end
+
+			local function needsRejoin()
+				local departure = tr.State and tr.State.DepartureAt
+				if tr.RejoinFor ~= departure then
+					tr.RejoinFor, tr.RejoinTries = departure, 0
+				end
+				if (tr.RejoinTries or 0) >= 3 then
+					return false
+				end
+				local root = rootPart()
+				if not root then
+					return false
+				end
+				local anchor = townAnchor()
+				if anchor then
+					local far = (anchor - root.Position).Magnitude > TOWN_FAR
+					if not far then
+						tr.Respawned = false
+					end
+					return far
+				end
+				-- the town is not even streamed in around us: we are not there yet
+				return tr.Respawned == true
+			end
+
+			local function rejoinTrain(alive)
+				tr.RejoinTries = (tr.RejoinTries or 0) + 1
+				tr.Status = ("Outside the Phantom Express, portal -> station -> board (try %d/3)"):format(tr.RejoinTries)
+				if not goToStation(alive, true) then
+					sleep(1, alive)
+					return false
+				end
+				local result = boardAtStation(alive)
+				if result == "boarded" then
+					-- wait until we really are in the town again
+					waitFor(function()
+						local anchor, root = townAnchor(), rootPart()
+						return anchor ~= nil and root ~= nil and (anchor - root.Position).Magnitude <= TOWN_FAR
+					end, 8, alive)
+					return true
+				end
+				sleep(1.5, alive)
+				return false
+			end
+
 			local function ringSpot(ghost, ghostPos, radius, folder, root)
 				local params = RaycastParams.new()
 				params.FilterType = Enum.RaycastFilterType.Exclude
@@ -37175,7 +37314,14 @@ local function fn66()
 				end
 				tr.Left, tr.Ghost = nil, nil
 				tr.SoulsTries = 0
+				tr.BossSmooth, tr.BossStepAt = nil, nil
 				while inTown() do
+					-- died / boss showed up while the character is outside the Phantom Express: portal -> station -> board again
+					if needsRejoin() then
+						rejoinTrain(inTown)
+						step()
+						continue
+					end
 					local inv = tr.State and type(tr.State.Invasion) == "table" and tr.State.Invasion or {}
 					local bossVac, anyVac = vacuumTool(true), vacuumTool(false)
 					local bossNow = bossState("Town")
@@ -37300,38 +37446,19 @@ local function fn66()
 
 			local function boardTrain(alive)
 				tr.Status = "Boarding the Phantom Express"
-				if not inDim() and not enterDim(alive) then
+				-- portal -> station -> board
+				if not goToStation(alive) then
 					tr.FailAt = os.clock() + 10
 					return
 				end
-				if tr.State and not tr.State.AtStation then
-					trAction("Station")
-					sleep(3, alive)
-					trPoll()
-				end
-				local prompt = trPrompt("Name", "TrainBoard")
-				if not prompt then
-					tr.Status = "Boarding prompt not found, retrying"
-					tr.FailAt = os.clock() + 20
+				local result = boardAtStation(alive)
+				if result == "nomove" then
 					return
-				end
-				if not flyToPoint(railPoint(prompt, "BoardRailStart", "BoardRailEnd"), alive) then
-					return
-				end
-				local data = saveData()
-				local state = data and data.TrainEvent
-				if not (type(state) == "table" and state.AccessUnlocked) then
-					equip(conductorTicket())
-					sleep(0.4, alive)
-				end
-				local _, success, reason = trAction("Board")
-				if success then
-					tr.Rides = tr.Rides + 1
-					tr.Status = "Boarded the Phantom Express"
-				else
-					tr.Status = "Could not board: " .. tostring(reason or "no answer")
 				end
 				tr.FailAt = os.clock() + 20
+				if result == "noprompt" then
+					return
+				end
 				waitFor(function()
 					local phase = trPhase()
 					return phase ~= "Home" and phase ~= nil
@@ -37353,6 +37480,9 @@ local function fn66()
 					if not rideOn and not bossOn then
 						tr.Status = "Off"
 					elseif trainRiding[phase] then
+						if phase == "Boarded" or phase == "Departing" then
+							tr.Respawned = false
+						end
 						tr.Status = "On the Phantom Express (" .. tostring(phase) .. ")"
 					elseif rideOn and (phase == "Town" or (boardingOpen() and os.clock() >= (tr.FailAt or 0) and hasTrainAccess() and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) and higherTask() == nil)) then
 						local mode = phase == "Town" and "town" or "board"
