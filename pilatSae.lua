@@ -34716,6 +34716,7 @@ local function fn66()
 			if cfg.HwForceExit == nil then cfg.HwForceExit = true end
 			if cfg.HwMonsterWait == nil then cfg.HwMonsterWait = true end
 			if cfg.HwDimNoclip == nil then cfg.HwDimNoclip = true end
+			if cfg.HwPumpRush == nil then cfg.HwPumpRush = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
 
 			-- ---------------------------------------------------------------- basics
@@ -35005,11 +35006,20 @@ local function fn66()
 				return higherValue
 			end
 
+			-- on the Phantom Express (town stay and the ride itself) the Halloween noclip toggle applies too
+			local function onTrainNoclip()
+				local phase = attr("TrainEventPhase")
+				if phase == nil and tr.State and os.clock() - tr.At < 10 then
+					phase = tr.State.Phase
+				end
+				return phase == "Town" or phase == "Boarded" or phase == "Departing" or phase == "Returning" or phase == "Respawning"
+			end
+
 			-- noclip while we move by CFrame
 			local noclip, touched = false, {}
 			local noclipConn = RunService.Stepped:Connect(function()
 				local char = localPlayer.Character
-				if (noclip or (on("HwDimNoclip", true) and localPlayer:GetAttribute("InHalloweenDimension") == true)) and char then
+				if (noclip or (on("HwDimNoclip", true) and (localPlayer:GetAttribute("InHalloweenDimension") == true or onTrainNoclip()))) and char then
 					for _, part in ipairs(char:GetDescendants()) do
 						if part:IsA("BasePart") and part.CanCollide then
 							touched[part] = true
@@ -35081,6 +35091,20 @@ local function fn66()
 				return attr("InHalloweenDimension") == true
 			end
 
+			-- the dimension only opens with enough speed power and the guard tutorial done (same gate script_yanz uses)
+			local function dimRequirementsMet()
+				local data = saveData()
+				if not data then
+					return true -- cannot read the save: do not block, the portal itself will refuse if needed
+				end
+				local need = tonumber(flagValue("HalloweenDimensionFlags", "SpeedPowerRequirement")) or 2500000
+				local progress = data.GuardTutorialProgress
+				return (tonumber(data.SpeedPower) or 0) >= need and type(progress) == "table" and progress.Completed == true
+			end
+
+			local function dimOk()
+				return inDim() or dimRequirementsMet()
+			end
 			local function carried()
 				return attr("HalloweenCarrying") == true
 			end
@@ -35230,6 +35254,7 @@ local function fn66()
 			-- ---------------------------------------------------------------- enter / leave
 			-- runs once we are inside the dimension (settle + tutorial flag)
 			local function entered(alive)
+				hw.EggDiag = nil
 				sleep(1.5, alive)
 				local data = saveData()
 				local state = data and data.HalloweenDimension
@@ -35259,116 +35284,150 @@ local function fn66()
 				pcall(hum.Move, hum, Vector3.zero, false)
 			end
 
-			-- real D / A key presses (VirtualInputManager when the executor has it) plus Humanoid:Move as backup
-			local vim
-			pcall(function()
-				vim = game:GetService("VirtualInputManager")
-			end)
-
-			local function keyDown(code, down)
-				if vim then
-					pcall(function()
-						vim:SendKeyEvent(down, code, false, game)
-					end)
-				end
+			local function portalModel()
+				local world = Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
+				return world and world:FindFirstChild("HalloweenDimensionPortal")
 			end
 
-			local function insideHitbox(part, pos, margin)
-				local rel, half = part.CFrame:PointToObjectSpace(pos), part.Size / 2
-				return math.abs(rel.X) <= half.X + margin and math.abs(rel.Y) <= half.Y + 4 and math.abs(rel.Z) <= half.Z + margin
+			local function portalHit()
+				local portal = portalModel()
+				local hit = portal and portal:FindFirstChild("Hitbox", true)
+				return hit and hit:IsA("BasePart") and hit or nil
 			end
 
-			-- hold D (sign 1) or A (sign -1) until test() is true or maxSec passes
-			local function holdSide(alive, sign, test, maxSec)
-				local hum = humanoid()
-				if not hum then
+			-- one-time console dump of what the portal really contains (prompts, touch parts, attributes),
+			-- so the entry mechanism can be read from the game itself instead of guessed
+			local portalProbed = false
+			local function probePortal(portal, hit)
+				if portalProbed or not portal then
 					return
 				end
-				local code = sign > 0 and Enum.KeyCode.D or Enum.KeyCode.A
-				keyDown(code, true)
-				local untilAt = os.clock() + maxSec
-				while alive() and os.clock() < untilAt and not test() do
-					local root, cam = rootPart(), Workspace.CurrentCamera
-					if root then
-						local right = flat((cam and cam.CFrame or root.CFrame).RightVector)
-						if right.Magnitude < 0.1 then
-							right = flat(root.CFrame.RightVector)
-						end
-						pcall(hum.Move, hum, right.Unit * sign, false)
-					end
-					step()
+				portalProbed = true
+				local lines = {"[Halloween portal] " .. portal:GetFullName()}
+				for k, v in pairs(portal:GetAttributes()) do
+					lines[#lines + 1] = "  attr " .. tostring(k) .. " = " .. tostring(v)
 				end
-				keyDown(code, false)
-				pcall(hum.Move, hum, Vector3.zero, false)
+				for _, d in ipairs(portal:GetDescendants()) do
+					if #lines > 60 then
+						break
+					end
+					local extra = ""
+					if d:IsA("ProximityPrompt") then
+						extra = ' prompt "' .. d.ActionText .. '" enabled=' .. tostring(d.Enabled)
+					elseif d:IsA("BasePart") then
+						extra = " canTouch=" .. tostring(d.CanTouch) .. " canCollide=" .. tostring(d.CanCollide) .. " size=" .. tostring(d.Size)
+					end
+					lines[#lines + 1] = "  " .. d.ClassName .. " " .. d.Name .. extra
+					for k, v in pairs(d:GetAttributes()) do
+						lines[#lines + 1] = "    attr " .. tostring(k) .. " = " .. tostring(v)
+					end
+				end
+				warn(table.concat(lines, "\n"))
 			end
 
-			-- leave the portal hitbox with D, come back in with A so the server sees a fresh touch (out-in-out-in)
-			local function portalWiggle(alive, hit, hard)
-				local function outside()
-					local r = rootPart()
-					return r ~= nil and not insideHitbox(hit, r.Position, 1.5)
-				end
-				local function inside()
-					local r = rootPart()
-					return r ~= nil and insideHitbox(hit, r.Position, -0.5)
-				end
-				if hard then
-					-- every 3rd try: start from outside the hitbox and walk into it
-					tp(CFrame.new(hit.CFrame:PointToWorldSpace(Vector3.new(hit.Size.X / 2 + 6, 0, 0))))
-					sleep(0.15, alive)
-					local hum = humanoid()
-					local untilAt = os.clock() + 1.5
-					while alive() and hum and os.clock() < untilAt and not inside() do
-						pcall(hum.MoveTo, hum, hit.Position)
-						step()
+			-- everything the portal itself offers: touch on the hitbox (same repeated touch the FuseBiome crossing uses),
+			-- plus any prompt / click detector that lives inside the portal model. No remotes are called from here.
+			local function pokePortal(portal, hit)
+				touch(hit)
+				for _, d in ipairs(portal and portal:GetDescendants() or {}) do
+					if d:IsA("ProximityPrompt") and d.Enabled then
+						press(d)
+					elseif d:IsA("ClickDetector") and type(fireclickdetector) == "function" then
+						pcall(fireclickdetector, d)
 					end
-					return
 				end
-				holdSide(alive, 1, outside, 1.2) -- D until outside the hitbox
-				holdSide(alive, -1, inside, 1.5) -- A until back inside
 			end
 
+			-- walk to the portal (no teleport); while the walk runs a second thread keeps poking the portal
 			local function enterDim(alive)
 				if inDim() then
 					return true
 				end
-				local world = Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
-				local portal = world and world:FindFirstChild("HalloweenDimensionPortal")
-				local hit = portal and portal:FindFirstChild("Hitbox", true)
-				if not hit or not hit:IsA("BasePart") then
-					hw.Status = "Halloween portal is not here"
+				if not dimRequirementsMet() then
+					hw.Status = "Halloween Dimension needs 2.5M speed power and the guard tutorial"
+					hw.EggRetryAt = os.clock() + 30
 					return false
 				end
-				hw.Status = "Teleporting to the Halloween portal"
-				tp(CFrame.new(hit.Position))
-				touch(hit)
-				if waitFor(inDim, 2.5, alive) then
-					return entered(alive)
+				local speed = tonumber(hw.PortalSpeed) or 150
+				local function going()
+					return alive() and not inDim()
 				end
-				if not alive() then
-					return false
-				end
-				-- failed once: step sideways (like pressing D), go back to the portal, send the request again, repeat every 0.8s
 				local tries = 0
-				while alive() and not inDim() do
+				while going() do
 					tries = tries + 1
-					local world2 = Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
-					local portal2 = world2 and world2:FindFirstChild("HalloweenDimensionPortal")
-					local hit2 = portal2 and portal2:FindFirstChild("Hitbox", true)
-					if not hit2 or not hit2:IsA("BasePart") then
-						hw.Status = "Halloween portal is not here"
+					local portal, hit = portalModel(), portalHit()
+					if not hit and hw.PortalPos then
+						pcall(function()
+							localPlayer:RequestStreamAroundAsync(hw.PortalPos, 2)
+						end)
+						portal, hit = portalModel(), portalHit()
+					end
+					if not hit then
+						hw.Status = "Halloween portal is not loaded (walk near it once)"
+						hw.EggRetryAt = os.clock() + 15
 						return false
 					end
-					hw.Status = "Stuck at portal - pressing D then A in/out (" .. tries .. ")"
-					local now0 = rootPart()
-					if now0 and (now0.Position - hit2.Position).Magnitude > 25 then
-						flyTo(hit2.Position + Vector3.new(0, 3, 0), alive, 300) -- drifted far away: get back first
+					hw.PortalPos = hit.Position
+					probePortal(portal, hit)
+					local finished = false
+					task.spawn(function()
+						while not finished and going() do
+							pokePortal(portal, hit)
+							sleep(0.1, going)
+						end
+					end)
+					noclip = true
+					if tries > 1 then
+						-- retry: step out beside the hitbox first, then walk back in
+						hw.Status = "Stuck at portal - walking out and back in (" .. tries .. ")"
+						walkTo(hit.CFrame:PointToWorldSpace(Vector3.new(hit.Size.X / 2 + 6, 0, 0)), going, speed)
 					end
-					portalWiggle(alive, hit2, tries % 3 == 0) -- D out, A back in
-					touch(hit2)
-					if waitFor(inDim, 1.0, alive) then
-						return entered(alive)
+					hw.Status = "Walking to the Halloween portal"
+					local rootNow = rootPart()
+					if rootNow and (rootNow.Position - hit.Position).Magnitude > 400 then
+						flyTo(hit.Position + Vector3.new(0, 3, 0), going, 300)
+						noclip = true
+					else
+						walkTo(hit.Position, going, speed)
 					end
+					if going() then
+						hw.Status = "At the portal, waiting to enter"
+						waitFor(inDim, 2.5, alive)
+					end
+					if going() then
+						-- walking in did not trigger it: stand inside the hitbox and keep touching / pressing it
+						hw.Status = "Portal not triggering, forcing the touch (" .. tries .. ")"
+						for _ = 1, 8 do
+							if not going() then
+								break
+							end
+							tp(CFrame.new(hit.Position))
+							pokePortal(portal, hit)
+							sleep(0.25, going)
+						end
+						if going() then
+							waitFor(inDim, 2.5, alive)
+						end
+					end
+					if going() and tries >= 3 and os.clock() - (hw.PortalResetAt or -99) > 20 then
+						hw.PortalResetAt = os.clock()
+						hw.Status = "The Halloween portal did not take you, resetting the character"
+						local hum = humanoid()
+						if hum then
+							pcall(function()
+								hum.Health = 0
+							end)
+						end
+					end
+					if going() and tries >= 8 then
+						hw.Status = "Could not enter the Halloween portal, retrying later"
+						hw.EggRetryAt = os.clock() + 30
+						noclip = false
+						finished = true
+						return false
+					end
+					noclip = false
+					finished = true
 				end
 				if inDim() then
 					return entered(alive)
@@ -35479,6 +35538,27 @@ local function fn66()
 				return d and d:FindFirstChild("WorldEggs")
 			end
 
+			-- script_yanz logic: an egg is free when HalloweenEggCanPickUp is true and it is picked up through the AskCarryEgg remote.
+			-- The old StealPrompt route is only a fallback for eggs that do not carry the attribute.
+			local function canTake(egg)
+				local flag = egg:GetAttribute("HalloweenEggCanPickUp")
+				if flag ~= nil then
+					return flag == true
+				end
+				local prompt = egg:FindFirstChild("StealPrompt", true)
+				return prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.Enabled
+			end
+
+			local function takeEgg(egg)
+				local uid = egg:GetAttribute("HalloweenEggUid")
+				if uid then
+					task.spawn(invoke, "RF/HalloweenDimension/AskCarryEgg", uid)
+				end
+				local prompt = egg:FindFirstChild("StealPrompt", true)
+				if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
+					press(prompt)
+				end
+			end
 			local function pickEgg()
 				local folder, root = eggFolder(), rootPart()
 				if not folder or not root then
@@ -35486,10 +35566,16 @@ local function fn66()
 				end
 				local best, bestValue, bestDist, bestZone
 				for _, egg in ipairs(folder:GetChildren()) do
-					local prompt = egg:FindFirstChild("StealPrompt", true)
-					if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled and (hw.Bad[egg] or 0) < os.clock() and eggPasses(egg) then
+					if canTake(egg) and (hw.Bad[egg] or 0) < os.clock() and eggPasses(egg) then
 						local pos = posOf(egg)
 						local zone = pos and zoneOf(pos)
+						if pos and zone == 0 then
+							-- zone parts may be missing / not streamed in: anything outside the safe zone is still a normal egg
+							local safeZone = zonePart("SafeZone")
+							if not (safeZone and inside(safeZone, pos)) then
+								zone = 1
+							end
+						end
 						if zone and zone >= 1 then
 							local dist, value = (pos - root.Position).Magnitude, eggValue(egg)
 							if not best or value > bestValue or (value == bestValue and dist < bestDist) then
@@ -35544,15 +35630,17 @@ local function fn66()
 							model = egg
 						end
 					end
-					local prompt = model and model:FindFirstChild("StealPrompt", true)
-					if dropped and prompt and prompt.Enabled then
+					if dropped and model and canTake(model) then
 						local p = posOf(model)
 						if floorY then
 							tp(CFrame.new(p.X, floorY, p.Z))
 						else
 							tp(CFrame.new(p + Vector3.new(0, 3, 0)))
 						end
-						press(prompt)
+						if os.clock() - (hw.TakeAt or 0) > 0.3 then
+							hw.TakeAt = os.clock()
+							takeEgg(model)
+						end
 					end
 					step()
 				end
@@ -35624,16 +35712,81 @@ local function fn66()
 				end
 			end
 
+			-- why no egg qualifies (shown while waiting, so a filter / streaming problem is visible)
+			local function eggDiag()
+				local folder = eggFolder()
+				if not folder then
+					return "dimension eggs not loaded"
+				end
+				local total, prompts, enabled, passing = 0, 0, 0, 0
+				for _, egg in ipairs(folder:GetChildren()) do
+					total = total + 1
+					if egg:FindFirstChild("StealPrompt", true) then
+						prompts = prompts + 1
+					end
+					if canTake(egg) then
+						enabled = enabled + 1
+						if eggPasses(egg) then
+							passing = passing + 1
+						end
+					end
+				end
+				return string.format("eggs %d / prompts %d / can pick up %d / pass filter %d", total, prompts, enabled, passing)
+			end
+
+			-- far eggs are not streamed in until the client is told to load around them
+			local function scoutEggs(alive)
+				if os.clock() - (hw.ScoutAt or 0) < 3 then
+					return pickEgg() ~= nil
+				end
+				hw.ScoutAt = os.clock()
+				hw.Status = "Looking for Halloween eggs"
+				if pickEgg() then
+					return true
+				end
+				local spots = {}
+				for _, name in ipairs({"Zone1", "Zone2", "Zone3", "SafeZone"}) do
+					local part = zonePart(name)
+					if part then
+						spots[#spots + 1] = part.Position
+					end
+				end
+				if #spots == 0 and dim() then
+					local center = posOf(dim())
+					if center then
+						spots[1] = center
+					end
+				end
+				for _, spot in ipairs(spots) do
+					if not alive() then
+						return false
+					end
+					pcall(function()
+						localPlayer:RequestStreamAroundAsync(spot, 1.5)
+					end)
+					if pickEgg() then
+						return true
+					end
+				end
+				return pickEgg() ~= nil
+			end
+
 			local function stealOne(alive)
 				local egg, zone = pickEgg()
+				if not egg and inDim() and scoutEggs(alive) then
+					egg, zone = pickEgg()
+				end
 				if not egg then
+					if inDim() then
+						hw.EggDiag = eggDiag()
+						hw.EggRetryAt = os.clock() + 30
+					end
 					return false
 				end
-				local prompt = egg:FindFirstChild("StealPrompt", true)
 				local uid = egg:GetAttribute("HalloweenEggUid")
 				hw.Status = "Going to a zone " .. tostring(zone) .. " Halloween egg"
 				local function live()
-					return alive() and egg.Parent ~= nil and prompt.Enabled and not carried()
+					return alive() and egg.Parent ~= nil and canTake(egg) and not carried()
 				end
 				hw.Stealing = true
 				for _ = 1, 3 do
@@ -35670,9 +35823,9 @@ local function fn66()
 						if eggPos then
 							tp(CFrame.new(eggPos + Vector3.new(0, 3, 0)))
 						end
-						if os.clock() - lastPress > 0.05 then
+						if os.clock() - lastPress > 0.5 then
 							lastPress = os.clock()
-							press(prompt)
+							takeEgg(egg)
 						end
 						step()
 					end
@@ -35851,7 +36004,7 @@ local function fn66()
 			end
 
 			-- true when another player is holding / has caught this pumpkin
-			local function pumpkinTaken(pumpkin)
+			local function pumpkinTaken(pumpkin, quick)
 				local Players = game:GetService("Players")
 				for _, key in ipairs({"CarriedBy", "HeldBy", "Carrier", "CaughtBy", "Owner", "OwnerUserId", "CarrierUserId", "CarriedByUserId"}) do
 					local v = pumpkin:GetAttribute(key)
@@ -35862,6 +36015,9 @@ local function fn66()
 				local prompt = pumpkin:FindFirstChild("CatchPrompt", true)
 				if not prompt or not prompt.Enabled then
 					return true
+				end
+				if quick then
+					return false -- per-frame check: skip the heavy scan over every player and weld
 				end
 				-- welded / parented to another player's character
 				for _, other in ipairs(Players:GetPlayers()) do
@@ -35890,7 +36046,50 @@ local function fn66()
 				return false
 			end
 
-			local function pumpkinStep(alive)
+			-- move helper: instant teleport when "Teleport To Pumpkins" is on AND we are inside the Halloween Dimension
+			-- (script_yanz gate: player attribute InHalloweenDimension == true), fast tween otherwise
+			local function pumpkinMove(pos, alive, maxSeg)
+				if (on("HwPumpTp") or on("HwPumpRush", true)) and inDim() then
+					tp(CFrame.new(pos))
+					step()
+					return alive()
+				end
+				return tweenTo(pos, hw.PumpkinSpeed, alive, maxSeg)
+			end
+
+			-- bring the carried pumpkin to the altar (same flow as script_yanz):
+			-- wait for the altar to open, go to its Target, then sweep through it front-to-back and press the prompt, 4 rounds
+			local function pumpkinDeliver(alive, deposit)
+				local function holding()
+					return alive() and attr("HalloweenPumpkinCarrying") == true
+				end
+				hw.Status = "Pumpkin Moon: returning pumpkin"
+				local rush = on("HwPumpRush", true)
+				if deposit:GetAttribute("Open") == false then
+					hw.Status = "Pumpkin Moon: waiting for the altar to open"
+					waitFor(function()
+						return deposit:GetAttribute("Open") ~= false
+					end, 10, holding)
+				end
+				noclip = true
+				pumpkinMove((posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0), holding, 6)
+				for _ = 1, 4 do
+					if not holding() then
+						break
+					end
+					local look, reach = deposit.CFrame.LookVector, deposit.Size.Z / 2 + 3
+					for i = 0, 8, (rush and 4 or 1) do
+						tp(CFrame.new(deposit.Position + Vector3.new(0, 3, 0) + look * reach * (1 - i / 4)))
+						step()
+					end
+					touch(deposit)
+					press(deposit:FindFirstChildWhichIsA("ProximityPrompt", true))
+					sleep(rush and 0.06 or 0.3, holding)
+				end
+				noclip = false
+			end
+
+			local function pumpkinOnce(alive)
 				local d = dim()
 				if not d then
 					return false
@@ -35898,24 +36097,8 @@ local function fn66()
 				local deposit = d:FindFirstChild("Altar")
 				deposit = deposit and deposit:FindFirstChild("PumpkinDeposit")
 				if attr("HalloweenPumpkinCarrying") == true then
-					hw.Status = "Pumpkin Moon: returning pumpkin"
-					if deposit and deposit:GetAttribute("Open") ~= false then
-						local function holding()
-							return alive() and attr("HalloweenPumpkinCarrying") == true
-						end
-						noclip = true
-						local dropPos = (posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0)
-						tweenTo(dropPos, hw.PumpkinSpeed, alive, 6)
-						for _ = 1, 4 do
-							if not holding() then
-								break
-							end
-							tp(CFrame.new(deposit.Position + Vector3.new(0, 3, 0)))
-							touch(deposit)
-							press(deposit:FindFirstChildWhichIsA("ProximityPrompt", true))
-							sleep(0.3, holding)
-						end
-						noclip = false
+					if deposit then
+						pumpkinDeliver(alive, deposit)
 					else
 						sleep(0.5, alive)
 					end
@@ -35936,27 +36119,57 @@ local function fn66()
 					hw.Status = "Pumpkin Moon: waiting for a free pumpkin"
 					return false
 				end
-				hw.Status = "Pumpkin Moon: tweening to a free pumpkin"
-				local untilAt = os.clock() + 8
+				hw.Status = "Pumpkin Moon: catching a pumpkin"
+				local rush = on("HwPumpRush", true)
+				local untilAt = os.clock() + 10
 				noclip = true
+				local prompt
 				while alive() and pumpkin.Parent and os.clock() < untilAt and attr("HalloweenPumpkinCarrying") ~= true do
-					local prompt = pumpkin:FindFirstChild("CatchPrompt", true)
+					prompt = (prompt and prompt.Parent) and prompt or pumpkin:FindFirstChild("CatchPrompt", true)
 					local pos, now = posOf(pumpkin), rootPart()
-					if not prompt or not pos or not now or pumpkinTaken(pumpkin) then
+					if not prompt or not pos or not now or pumpkinTaken(pumpkin, rush) then
 						break -- gone, or somebody else grabbed it: pick another one next tick
 					end
-					if prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
-						press(prompt)
-						sleep(0.1, alive)
+					if rush then
+						-- land on the pumpkin and grab it in the same frame, no extra wait
+						pumpkinMove(pos + Vector3.new(0, 3, 0), alive, 0.25)
+						if prompt:IsA("ProximityPrompt") then
+							press(prompt)
+						end
 					else
-						-- short segments so the tween keeps re-aiming at the runaway pumpkin
-						tweenTo(pos + Vector3.new(0, 2, 0), hw.PumpkinSpeed, alive, 0.25)
+						if prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
+							press(prompt)
+						end
+						pumpkinMove(pos + Vector3.new(0, 3, 0), alive, 0.25)
+						step()
 					end
-					step()
 				end
 				noclip = false
 				walkStop()
+				if alive() and attr("HalloweenPumpkinCarrying") == true and deposit then
+					pumpkinDeliver(alive, deposit)
+				end
 				return true
+			end
+
+			-- rush mode: catch -> altar -> catch ... in one loop, polling every frame for the next free pumpkin
+			local function pumpkinStep(alive)
+				if not on("HwPumpRush", true) then
+					return pumpkinOnce(alive)
+				end
+				local didAny, idleSince = false, nil
+				while alive() and on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" do
+					if pumpkinOnce(alive) then
+						didAny, idleSince = true, nil
+					else
+						idleSince = idleSince or os.clock()
+						if os.clock() - idleSince > 3 then
+							break
+						end
+					end
+					step()
+				end
+				return didAny
 			end
 
 			-- ---------------------------------------------------------------- ghost dog quest + fishing
@@ -36312,8 +36525,17 @@ local function fn66()
 				if on("HwDog") and questStage() < 4 and os.clock() >= hw.DogAt then
 					return "dog"
 				end
-				if on("HwEggs") and pickEgg() then
-					return "eggs"
+				if on("HwEggs") then
+					if pickEgg() then
+						return "eggs"
+					end
+					if dimOk() then
+						if os.clock() >= (hw.EggRetryAt or 0) then
+							return "eggs"
+						end
+					else
+						hw.EggDiag = "Halloween Dimension needs 2.5M speed power and the guard tutorial"
+					end
 				end
 				if on("HwMonsters") and not monsterWaiting() then
 					return "monsters"
@@ -36348,7 +36570,7 @@ local function fn66()
 					elseif hw.Owner == nil or hw.Owner == "field" then
 						local job = nextTask()
 						if not job then
-							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or "Waiting for something to do"
+							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or ("Waiting for something to do" .. ((on("HwEggs") and hw.EggDiag) and (" | " .. hw.EggDiag) or ""))
 							idleSince = idleSince or os.clock()
 							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and os.clock() - idleSince > 6 and claim("field") then
 								local alive = makeAlive(function() return not nextTask() end)
@@ -36730,64 +36952,77 @@ local function fn66()
 				return 0
 			end
 
-			-- trades until the souls are used up (not just a handful), then returns
+			-- trades until the souls are used up (not just once); returns trades, emptied
 			local function tradeSouls(alive)
 				local shop = readShop()
 				local cost = tonumber(shop and shop.Cost)
 				-- nothing to trade: skip the walk to the shop and leave straight away
 				if shop and cost and (tonumber(shop.Souls) or 0) < cost then
-					return 0
+					return 0, true
 				end
 				local prompt = trPrompt("TrainEventAction", "OpenSoulShop")
 				if prompt and flyToPoint(posOf(prompt.Parent), alive) then
 					press(prompt)
 					sleep(0.5, alive)
 				end
-				local trades, misses, bulkTried = 0, 0, false
-				local deadline = os.clock() + 90
+				local trades, misses, stalls, lastSouls = 0, 0, 0, math.huge
+				local bulkBad, emptied = false, false
+				local deadline = os.clock() + 240
 				while alive() and os.clock() < deadline do
 					shop = readShop()
 					cost = tonumber(shop and shop.Cost)
 					local souls = tonumber(shop and shop.Souls) or 0
 					if not shop or not cost or cost <= 0 then
 						misses = misses + 1
-						if misses >= 4 then
+						if misses >= 6 then
 							break
 						end
-						sleep(0.4, alive)
+						sleep(0.5, alive)
 					elseif souls < cost then
+						emptied = true
 						break
 					elseif shop.CanTrade == false then
 						misses = misses + 1
-						if misses >= 8 then
+						if misses >= 10 then
 							break
 						end
-						sleep(0.4, alive)
+						sleep(0.5, alive)
 					else
+						-- souls did not drop since the last "successful" trade: the server ignored that amount
+						if souls >= lastSouls then
+							stalls = stalls + 1
+							bulkBad = true
+							if stalls >= 4 then
+								break
+							end
+						else
+							stalls = 0
+						end
+						lastSouls = souls
+						local affordable = math.floor(souls / cost)
 						local amount = cost
-						-- one probe for bulk trading; falls back to one-by-one when the shop ignores it
-						if not bulkTried and souls >= cost * 3 then
-							bulkTried = true
-							amount = cost * math.min(math.floor(souls / cost), 10)
+						if not bulkBad and affordable >= 2 then
+							amount = cost * math.min(affordable, 10)
 						end
 						local _, success = trAction("TradeSouls", amount)
 						if not success and amount ~= cost then
+							bulkBad = true
 							_, success = trAction("TradeSouls", cost)
 						end
 						if success then
 							trades = trades + 1
 							misses = 0
-							tr.Status = ("Trading souls (%d trades)"):format(trades)
+							tr.Status = ("Trading souls (%d trades, %d souls left)"):format(trades, souls)
 						else
 							misses = misses + 1
-							if misses >= 4 then
+							if misses >= 6 then
 								break
 							end
 						end
-						sleep(0.1, alive)
+						sleep(0.15, alive)
 					end
 				end
-				return trades
+				return trades, emptied
 			end
 
 			local function trLeave(alive)
@@ -36797,11 +37032,24 @@ local function fn66()
 				tr.ReturnAt = os.clock()
 				local prompt = trPrompt("Name", "TrainReturn")
 				if prompt then
-					flyToPoint(railPoint(prompt, "ReturnRailStart", "ReturnRailEnd"), alive)
+					local point = railPoint(prompt, "ReturnRailStart", "ReturnRailEnd")
+					if point then
+						flyToPoint(point, alive)
+						-- walking can get blocked by ghosts or the boss: still far from the prompt -> jump straight onto the rail
+						local root = rootPart()
+						if alive() and root and (root.Position - point).Magnitude > 12 then
+							tp(CFrame.new(point + Vector3.new(0, 3, 0)))
+							sleep(0.15, alive)
+						end
+					end
+					if alive() then
+						press(prompt)
+					end
 				end
 				local ok2, success = trAction("Return")
-				-- only counts as left when the server accepted it, otherwise try again in a few seconds
+				-- only counts as left when the server accepted it; townLoop asks again if we are still in town a few seconds later
 				tr.Left = ok2 and success ~= false
+				tr.LeftAt = os.clock()
 			end
 
 			local function ringSpot(ghost, ghostPos, radius, folder, root)
@@ -36891,6 +37139,7 @@ local function fn66()
 					return alive() and trPhase() == "Town"
 				end
 				tr.Left, tr.Ghost = nil, nil
+				tr.SoulsTries = 0
 				while inTown() do
 					local inv = tr.State and type(tr.State.Invasion) == "table" and tr.State.Invasion or {}
 					local bossVac, anyVac = vacuumTool(true), vacuumTool(false)
@@ -36969,15 +37218,30 @@ local function fn66()
 								tr.SoulsFor = tr.TradedFor
 								collectSouls(inTown, typeof(tr.BossGround) == "Vector3" and tr.BossGround or nil)
 							end
-							if on("TrainSouls") then
-								tr.Status = "Trading souls"
-								tradeSouls(inTown)
-							end
 						end
-						if not tr.Left then
+						local soulsKey = tostring(tr.State and tr.State.DepartureAt)
+						-- trade EVERY soul before leaving: repeat until the shop is empty (or it clearly stopped answering)
+						if on("TrainSouls") and tr.SoulsDoneFor ~= soulsKey then
+							tr.Status = "Trading souls"
+							local hum = humanoid()
+							if hum then
+								hum:UnequipTools()
+							end
+							local _, emptied = tradeSouls(inTown)
+							tr.SoulsTries = (tr.SoulsTries or 0) + 1
+							if emptied or tr.SoulsTries >= 4 then
+								tr.SoulsDoneFor, tr.SoulsTries = soulsKey, 0
+							else
+								sleep(1, inTown)
+							end
+						elseif not tr.Left then
 							tr.Status = "Riding back home"
 							tr.DoneDeparture = tr.State and tr.State.DepartureAt
 							trLeave(inTown)
+						elseif os.clock() - (tr.LeftAt or 0) > 8 then
+							-- the server accepted the return but we are still in town (stuck): ask again
+							tr.Status = "Still in town, returning again"
+							tr.Left = nil
 						end
 						sleep(0.3, inTown)
 					end
@@ -37205,7 +37469,7 @@ local function fn66()
 
 			toggle("Force Exit", "on = always exit Halloween event if there is no priority there\noff = will not exit even though there is no priority", "HwForceExit", true)
 
-			toggle("Noclip In Halloween Dimension", "Turns noclip on by itself while you are inside the Halloween Dimension (not in the main world), and off again when you leave.", "HwDimNoclip", true)
+			toggle("Noclip In Halloween Dimension & Phantom Express", "Turns noclip on by itself while you are inside the Halloween Dimension or on the Phantom Express (not in the main world), and off again when you leave.", "HwDimNoclip", true)
 			hwSection:AddSubSection("Auto Steal Halloween Eggs")
 			toggle("Auto Steal Halloween Eggs", "Steals the Halloween eggs in the dimension and carries them to the safe zone. Needs 2.5M speed and the guard tutorial done.", "HwEggs", false)
 			toggle("Instant Steal Halloween Eggs", "Dashes straight to the egg and drops it at the safe zone edge. Turn off for a slower, safer route.", "HwInstant", true)
@@ -37274,6 +37538,8 @@ local function fn66()
 
 			hwSection:AddSubSection("Auto Pumpkin Moon")
 			toggle("Auto Pumpkin Moon", "During the Pumpkin Moon, catches the runaway pumpkins and brings them to the altar.", "HwPumpkin", true)
+			toggle("Fast Pumpkin (no delay)", "Instant teleport to every pumpkin and the altar, grabs the moment you land, and goes straight to the next pumpkin with no waiting in between.", "HwPumpRush", true)
+			toggle("Teleport To Pumpkins", "Teleports straight to pumpkins and the altar instead of tweening. Faster, but riskier.", "HwPumpTp", false)
 			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Tween Speed", Content = "How fast you tween to pumpkins and back to the altar (studs/sec).", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				hw.PumpkinSpeed = tonumber(arg) or 300
 			end)})
@@ -38106,7 +38372,7 @@ local function fn66()
 			pcall(pilatV4PlayerSteal.setEnabled, pilatV4PlayerSteal, false)
 		end
 
-		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwDog", "HwFishing", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
+		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwPumpTp", "HwDog", "HwFishing", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
 			pilatV4Config[v70] = false
 		end
 
