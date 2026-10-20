@@ -36952,77 +36952,112 @@ local function fn66()
 				return 0
 			end
 
-			-- trades until the souls are used up (not just once); returns trades, emptied
+			-- souls trade, same flow as script_yanz:
+			--   open the shop -> trade exactly ONE `Cost` per call (no bulk amounts) -> take the new balance from the server reply
+			--   -> when the loop stops, ask the server (Status) for a FRESH shop and only then decide if it is really empty.
+			-- "empty" is never assumed: it needs the server to say Souls < Cost on two fresh reads in a row.
+			local function shopTradable(shop)
+				return type(shop) == "table" and shop.CanTrade == true and (tonumber(shop.Souls) or 0) >= (tonumber(shop.Cost) or math.huge)
+			end
+
+			local function shopBelowCost(shop)
+				return type(shop) == "table" and tonumber(shop.Cost) ~= nil and (tonumber(shop.Souls) or 0) < tonumber(shop.Cost)
+			end
+
+			-- fresh shop straight from the server (not the cached tr.State); nil when the server did not answer
+			local function freshShop()
+				local ok2, success, state = trAction("Status")
+				if ok2 and success and type(state) == "table" then
+					tr.State, tr.At = state, os.clock()
+					return type(state.SoulShop) == "table" and state.SoulShop or nil
+				end
+				return nil
+			end
+
+			-- trades until the souls are used up; returns trades, emptied (verified), blocked (souls left but the shop refuses)
 			local function tradeSouls(alive)
-				local shop = readShop()
-				local cost = tonumber(shop and shop.Cost)
-				-- nothing to trade: skip the walk to the shop and leave straight away
-				if shop and cost and (tonumber(shop.Souls) or 0) < cost then
-					return 0, true
-				end
-				local prompt = trPrompt("TrainEventAction", "OpenSoulShop")
-				if prompt and flyToPoint(posOf(prompt.Parent), alive) then
-					press(prompt)
-					sleep(0.5, alive)
-				end
-				local trades, misses, stalls, lastSouls = 0, 0, 0, math.huge
-				local bulkBad, emptied = false, false
-				local deadline = os.clock() + 240
+				local trades, emptied, blocked = 0, false, false
+				local deadline = os.clock() + 600
+				local emptyReads, blockedReads, noAnswer = 0, 0, 0
+
 				while alive() and os.clock() < deadline do
-					shop = readShop()
-					cost = tonumber(shop and shop.Cost)
-					local souls = tonumber(shop and shop.Souls) or 0
-					if not shop or not cost or cost <= 0 then
-						misses = misses + 1
-						if misses >= 6 then
+					-- 1) go to the soul shop and open it (retry a few times like script_yanz)
+					local shop = readShop()
+					if not shopBelowCost(shop) then
+						for _ = 1, 4 do
+							local prompt = trPrompt("TrainEventAction", "OpenSoulShop")
+							if prompt and flyToPoint(posOf(prompt.Parent), alive) then
+								press(prompt)
+								sleep(0.5, alive)
+							end
+							shop = readShop()
+							if shop or not alive() then
+								break
+							end
+							sleep(0.5, alive)
+						end
+					end
+
+					-- 2) one Cost per trade, balance taken from the reply
+					for _ = 1, 200 do
+						if not alive() or not shopTradable(shop) then
 							break
 						end
-						sleep(0.5, alive)
-					elseif souls < cost then
-						emptied = true
+						local souls = tonumber(shop.Souls) or 0
+						local _, success, reply = trAction("TradeSouls", shop.Cost)
+						if not success then
+							break
+						end
+						trades = trades + 1
+						local updated = type(reply) == "table" and (reply.SoulShop or (reply.Souls ~= nil and reply)) or nil
+						if type(updated) == "table" and updated.Souls ~= nil then
+							shop = updated
+						else
+							shop.Souls = souls - (tonumber(shop.Cost) or 0)
+						end
+						tr.Status = ("Trading souls (%d trades, %d souls left)"):format(trades, tonumber(shop.Souls) or 0)
+						sleep(0.3, alive)
+					end
+
+					-- 3) verify with a fresh server read; the loop above may have stopped because of a refused trade
+					if not alive() then
 						break
-					elseif shop.CanTrade == false then
-						misses = misses + 1
-						if misses >= 10 then
+					end
+					local fresh = freshShop()
+					if fresh == nil then
+						noAnswer = noAnswer + 1
+						if noAnswer >= 20 then
 							break
 						end
 						sleep(0.5, alive)
 					else
-						-- souls did not drop since the last "successful" trade: the server ignored that amount
-						if souls >= lastSouls then
-							stalls = stalls + 1
-							bulkBad = true
-							if stalls >= 4 then
+						noAnswer = 0
+						if shopBelowCost(fresh) then
+							emptyReads, blockedReads = emptyReads + 1, 0
+							if emptyReads >= 2 then
+								emptied = true
 								break
 							end
+							sleep(0.4, alive)
+						elseif shopTradable(fresh) then
+							-- souls are still there: go around again, do NOT leave
+							emptyReads, blockedReads = 0, 0
+							tr.Status = ("Souls left (%d), trading again"):format(tonumber(fresh.Souls) or 0)
+							sleep(0.3, alive)
 						else
-							stalls = 0
-						end
-						lastSouls = souls
-						local affordable = math.floor(souls / cost)
-						local amount = cost
-						if not bulkBad and affordable >= 2 then
-							amount = cost * math.min(affordable, 10)
-						end
-						local _, success = trAction("TradeSouls", amount)
-						if not success and amount ~= cost then
-							bulkBad = true
-							_, success = trAction("TradeSouls", cost)
-						end
-						if success then
-							trades = trades + 1
-							misses = 0
-							tr.Status = ("Trading souls (%d trades, %d souls left)"):format(trades, souls)
-						else
-							misses = misses + 1
-							if misses >= 6 then
+							-- souls >= cost but the shop says it cannot trade (cooldown/cap): wait and re-check before giving up
+							emptyReads = 0
+							blockedReads = blockedReads + 1
+							tr.Status = ("Shop refuses trades (%d souls left), waiting"):format(tonumber(fresh.Souls) or 0)
+							if blockedReads >= 10 then
+								blocked = true
 								break
 							end
+							sleep(1.5, alive)
 						end
-						sleep(0.15, alive)
 					end
 				end
-				return trades, emptied
+				return trades, emptied, blocked
 			end
 
 			local function trLeave(alive)
@@ -37227,11 +37262,18 @@ local function fn66()
 							if hum then
 								hum:UnequipTools()
 							end
-							local _, emptied = tradeSouls(inTown)
+							local trades, emptied, blocked = tradeSouls(inTown)
 							tr.SoulsTries = (tr.SoulsTries or 0) + 1
-							if emptied or tr.SoulsTries >= 4 then
+							if emptied then
+								-- the server confirmed the shop is empty: only now may we ride back
+								tr.Status = ("Souls all traded (%d trades), riding back"):format(trades)
+								tr.SoulsDoneFor, tr.SoulsTries = soulsKey, 0
+							elseif blocked and tr.SoulsTries >= 3 then
+								-- the shop kept refusing with souls left (CanTrade=false) over many fresh reads: nothing more can be done
+								warn("[Pilat Souls] shop refuses trades with souls left, leaving anyway")
 								tr.SoulsDoneFor, tr.SoulsTries = soulsKey, 0
 							else
+								-- not verified empty: stay at the station and trade again
 								sleep(1, inTown)
 							end
 						elseif not tr.Left then
