@@ -37160,10 +37160,24 @@ local function fn66()
 			-- the server still says "Town" but the character is back in the main world: do NOT walk all the way to the town,
 			-- go portal -> station -> board again instead
 			local TOWN_FAR = 900
-			local respawnConn = localPlayer.CharacterAdded:Connect(function()
-				tr.Respawned = true
-				tr.RejoinTries = 0
-			end)
+			local function watchDeath(char)
+				local hum = char:WaitForChild("Humanoid", 10)
+				if not hum then
+					return
+				end
+				hum.Died:Connect(function()
+					-- only a death while on the Phantom Express / in its town counts, a normal death elsewhere never triggers the portal
+					local phase = trPhase()
+					if phase == "Town" or trainRiding[phase] == true then
+						tr.Respawned = true
+						tr.RejoinTries = 0
+					end
+				end)
+			end
+			local respawnConn = localPlayer.CharacterAdded:Connect(watchDeath)
+			if localPlayer.Character then
+				task.spawn(watchDeath, localPlayer.Character)
+			end
 			task.spawn(function()
 				while fn2() do
 					task.wait(1)
@@ -37174,7 +37188,7 @@ local function fn66()
 			local function townAnchor()
 				for _, key in ipairs({{"TrainEventAction", "OpenSoulShop"}, {"TrainEventAction", "PickupVacuum"}, {"Name", "TrainReturn"}}) do
 					local prompt = trPrompt(key[1], key[2])
-					local pos = prompt and posOf(prompt.Parent)
+					local pos = prompt and not prompt:FindFirstAncestor("TrainEventAssets") and posOf(prompt.Parent)
 					if pos then
 						return pos
 					end
@@ -37194,6 +37208,11 @@ local function fn66()
 				if not root then
 					return false
 				end
+				local died = tr.Respawned == true
+				local bossUp = on("TrainBoss", true) and bossState("Town") ~= nil
+				if not died and not bossUp then
+					return false
+				end
 				local anchor = townAnchor()
 				if anchor then
 					local far = (anchor - root.Position).Magnitude > TOWN_FAR
@@ -37202,8 +37221,8 @@ local function fn66()
 					end
 					return far
 				end
-				-- the town is not even streamed in around us: we are not there yet
-				return tr.Respawned == true
+				-- the town is not even streamed in around us after a death: we are not there yet
+				return died
 			end
 
 			local function rejoinTrain(alive)
