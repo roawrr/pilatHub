@@ -11325,7 +11325,14 @@ local v8 = (function()
 
 			while fn95() and not fn94() do
 				if os.clock() >= n70 then
-					arg.skippedEggs[uid] = os.clock() + 10
+					local adminAuto = genv.__PilatV4AdminAutoState
+					if adminAuto and pilatV4Config.AdminAutoDetect == true then
+						adminAuto.fails[uid] = (adminAuto.fails[uid] or 0) + 1
+						if adminAuto.fails[uid] >= 2 then
+							-- this egg failed 2x with the admin method: only THIS egg goes to the picked Steal Mode
+							adminAuto.fallbackEggs[uid] = true
+						end
+					end
 					return arg:_finish("Carry refused \226\128\148 next egg")
 				end
 				local v8 = EggState2.ReadFieldEgg(uid)
@@ -11360,6 +11367,9 @@ local v8 = (function()
 
 			if not fn95() then
 				return
+			end
+			if genv.__PilatV4AdminAutoState then
+				genv.__PilatV4AdminAutoState.fails[uid] = nil
 			end
 			arg.carry.active = true
 			arg.carry.uid = uid
@@ -11474,7 +11484,7 @@ local v8 = (function()
 			return
 		end
 
-		if genv.__PilatV4AdminBoost == true then
+		if genv.__PilatV4AdminBoost == true and not (genv.__PilatV4AdminEggFallback and genv.__PilatV4AdminEggFallback(arg.carry.uid or arg.activeTarget and arg.activeTarget.Uid)) then
 			uid = arg.carry.uid or arg.activeTarget and arg.activeTarget.Uid
 
 			if uid and arg._adminBusyUid ~= uid then
@@ -12257,7 +12267,7 @@ local v8 = (function()
 			return
 		end
 
-		if genv.__PilatV4AdminBoost == true and not (arg.captureObjectiveEnabled and arg:_isCaptureEgg(v10.Uid)) then
+		if genv.__PilatV4AdminBoost == true and not (genv.__PilatV4AdminEggFallback and genv.__PilatV4AdminEggFallback(v10.Uid)) and not (arg.captureObjectiveEnabled and arg:_isCaptureEgg(v10.Uid)) then
 			arg.safeStarting = false
 			task.spawn(arg._adminSteal, arg, v10)
 			return
@@ -33467,7 +33477,7 @@ local function fn66()
 		end
 	end
 
-	local function fn137(arg)
+	local function pilatApplyAdminBoost(arg)
 		genv.__PilatV4AdminBoost = arg == true
 
 		if v13 then
@@ -33515,6 +33525,118 @@ local function fn66()
 						humanoid.WalkSpeed = walkSpeed
 					end)
 				end
+			end)
+		end
+	end
+
+
+	local fn137
+
+	do
+		-- Admin Abuse detector (checks ported from recovered.lua: E.Boost / E.BoostList / AdminTreadmill)
+		-- Admin Abuse = any admin-given boost (4x speed, earnings, egg size, egg luck, mutation luck),
+		-- or the Admin Treadmill exists in workspace.
+		local pilatAdminBoostKeys = {
+			Speed = "SpeedBoost",
+			Treadmill = "AdminTreadmill",
+			Earnings = "EarningsBoost",
+			EggSize = "EggSizeBoost",
+			EggSpawnLuck = "EggLuckBoost",
+			MutationLuck = "MutationBoost",
+		}
+
+		local function pilatAdminBoostOn(key, guiName)
+			local attr = workspace:GetAttribute("AdminBoost_" .. key)
+
+			if type(attr) == "number" and attr == attr and attr > 1 then
+				return true
+			end
+
+			local ok, visible = pcall(function()
+				local list = localPlayer.PlayerGui.BottomUI.BottomFrame.Holder.List
+				local icon = list:FindFirstChild(guiName)
+
+				return icon ~= nil and icon:IsA("GuiObject") and icon.Visible == true
+			end)
+
+			return ok and visible == true
+		end
+
+		local function pilatIsAdminAbuseActive()
+			if workspace:FindFirstChild("AdminTreadmill") ~= nil then
+				return true
+			end
+
+			for key, guiName in pairs(pilatAdminBoostKeys) do
+				if pilatAdminBoostOn(key, guiName) then
+					return true
+				end
+			end
+
+			return false
+		end
+
+		genv.__PilatV4IsAdminAbuseActive = pilatIsAdminAbuseActive
+
+		local adminAutoState = {fails = {}, fallbackEggs = {}}
+		genv.__PilatV4AdminAutoState = adminAutoState
+		genv.__PilatV4AdminEggFallback = function(uid)
+			return uid ~= nil and adminAutoState.fallbackEggs[uid] == true
+		end
+
+		-- "Admin Abuse Boost" toggle = auto mode:
+		--   admin abuse active  -> admin Instant method (genv.__PilatV4AdminBoost = true)
+		--   admin abuse gone    -> back to the steal method picked in the Steal tab
+		fn137 = function(arg)
+			genv.__PilatV4AutoAdminGen = (genv.__PilatV4AutoAdminGen or 0) + 1
+			local myGen = genv.__PilatV4AutoAdminGen
+
+			pilatV4Config.AdminAutoDetect = arg == true
+
+			if arg ~= true then
+				pilatApplyAdminBoost(false)
+				return
+			end
+
+			task.spawn(function()
+				local active = false
+				local offSince = nil
+				adminAutoState.fails = {}
+				adminAutoState.fallbackEggs = {}
+				pilatApplyAdminBoost(false)
+
+				while genv.__PilatV4AutoAdminGen == myGen and fn2() do
+					local ok, now = pcall(pilatIsAdminAbuseActive)
+					now = ok and now == true
+
+					if now then
+						offSince = nil
+
+						if not active then
+							active = true
+							pilatApplyAdminBoost(true)
+						end
+					elseif active then
+						-- boost icons can flicker, wait 3s of "no admin abuse" before going back to normal
+						offSince = offSince or os.clock()
+
+						if os.clock() - offSince >= 3 then
+							active = false
+							offSince = nil
+							adminAutoState.fails = {}
+							adminAutoState.fallbackEggs = {}
+							pilatApplyAdminBoost(false)
+						end
+					end
+
+					task.wait(0.5)
+				end
+
+				if genv.__PilatV4AutoAdminGen ~= myGen then
+					return
+				end
+
+				pilatApplyAdminBoost(false)
 			end)
 		end
 	end
@@ -33876,7 +33998,7 @@ local function fn66()
 	local v38 = v28:AddTab({Name = "Settings", Icon = "settings", LayoutOrder = 9})
 	tbl24.autoStealCapture = tbl24.section(v35, "Capture The Egg", tbl24.gameIcon("CaptureTheEgg", "BroadcastIconImage")):AddToggle({Title = "Auto Steal Capture", Content = "For the Capture The Egg event. Steals the event egg the Low Speed User way, then holds it high up so your time keeps going. Re-steals it if you lose it.", Default = false, Callback = fn144(fn138)})
 	local v39 = tbl24.section(v35, "Movement", tbl24.gameIcon("Gears", "Directory", "GravityDisruptor", "Icon"))
-	tbl24.adminBoost = v39:AddToggle({Title = "Admin Abuse Boost", Content = "Only works during Admin Abuse: Auto Steal goes straight to each egg and straight home, at full speed. Do not use it when there is no Admin Abuse.", Default = false, Callback = fn144(fn137)})
+	tbl24.adminBoost = v39:AddToggle({Title = "Admin Abuse Boost", Content = "Auto-detects Admin Abuse (admin 4x speed or any other admin boost, or the Admin Treadmill). While it is active, Auto Steal uses the instant admin method. When it is gone, Auto Steal goes back to the Steal Mode you picked in the Steal tab.", Default = false, Callback = fn144(fn137)})
 	tbl24.flyForCapture = v39:AddToggle({Title = "Fly For Capture", Content = "For the Capture The Egg event. After you pick up an egg, you fly up and stay still in the air so nobody can take it.", Default = false, Callback = fn144(fn135)})
 	tbl24.instantGrab = v39:AddToggle({Title = "Instant Grab", Content = "Picking up an egg only needs a quick tap instead of a long hold.", Default = false, Callback = fn144(fn136)})
 	tbl24.infiniteJump = v39:AddToggle({Title = "Infinite Jump", Content = "Jump again in mid-air, as often as you like.", Default = false, Callback = fn144(fn139)})
