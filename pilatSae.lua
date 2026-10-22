@@ -8684,7 +8684,11 @@ local v8 = (function()
 				end
 			end)
 
-			task.wait(0.06)
+			if arg:_beta() then
+				RunService2.Heartbeat:Wait() -- Instant Steal V2: no regrab delay, retry every frame
+			else
+				task.wait(0.06)
+			end
 		end
 
 		return (fn91())
@@ -11058,7 +11062,10 @@ local v8 = (function()
 						end
 
 						if fn97() then
-							task.wait(math.max(n70, arg:_relaySettle()))
+							-- Instant Steal V2: no settle wait before the drop
+							if not arg:_beta() then
+								task.wait(math.max(n70, arg:_relaySettle()))
+							end
 							if not fn94() then
 								return
 							end
