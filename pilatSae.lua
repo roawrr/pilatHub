@@ -27444,6 +27444,7 @@ local function fn65()
 	end
 
 	local fn80, fn81, fn82, fn83
+	local tblPred = {sort = "value", filter = "all", cards = {}}
 	local tbl20 = {list = nil, headLbl = nil, countLbl = nil, statusBtn = nil, sel = nil, rows = {}, picked = {}, chips = {}, sortBtns = {}, modeBtns = {}}
 	local tbl21 = {history = {}, reportedUids = {}, knownFieldUids = {}, lastAlert = nil, lastReportTime = 0, lastSync = 0, onlineCount = 1, category = "targets", filter = "All"}
 
@@ -27473,6 +27474,10 @@ local function fn65()
 		elseif arg == "stats" then
 			if fn83 then
 				fn83()
+			end
+		elseif arg == "predictor" then
+			if tblPred.refresh then
+				tblPred.refresh()
 			end
 		end
 	end
@@ -29446,7 +29451,274 @@ local function fn65()
 		tbl21.paint()
 	end
 
-	local tbl34 = {"logs", "eggs", "inventory", "checker", "eggdata", "stats"}
+	-- ---------------------------------------------------------------- Egg Predictor (ported from Chilli Hub)
+	-- Egg cards for every egg you own (placed + in your bag): the egg, name, rarity, mutations, then the weight in kg (yellow)
+	-- above the money per second it earns once hatched (green). Opened from Eggs & Plot > Egg Predictor.
+	do
+		local WEIGHT_COLOR, MONEY_COLOR = Color3.fromRGB(250, 204, 21), Color3.fromRGB(74, 222, 128)
+		local MUTATION_COLORS = {
+			Golden = Color3.fromRGB(255, 196, 0), Silver = Color3.fromRGB(190, 204, 224), Sakura = Color3.fromRGB(255, 110, 190),
+			GreatBloom = Color3.fromRGB(60, 225, 150), Boss = Color3.fromRGB(255, 70, 70), Monstrous = Color3.fromRGB(150, 90, 255),
+			Scrambled = Color3.fromRGB(40, 215, 170), Rainbow = Color3.fromRGB(255, 190, 90), Prismatic = Color3.fromRGB(200, 120, 255),
+		}
+		local MutationsMod, EggRecordsMod
+		pcall(function()
+			MutationsMod = require(ReplicatedStorage.Shared.Modules.Mutations)
+		end)
+		pcall(function()
+			EggRecordsMod = require(ReplicatedStorage.Shared.Util.EggRecords)
+		end)
+
+		local function fmtMoney(n)
+			n = tonumber(n) or 0
+			for _, step in ipairs({{1e15, "Qa"}, {1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"}}) do
+				if n >= step[1] then
+					return string.format("%.2f%s", n / step[1], step[2])
+				end
+			end
+			return string.format("%.0f", n)
+		end
+
+		local function fmtKg(n)
+			n = tonumber(n) or 0
+			local text = n >= 100 and string.format("%.1f", n) or string.format("%.2f", n)
+			local whole, frac = text:match("^(%d+)(%.%d+)$")
+			return ((whole or text):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")) .. (frac or "") .. " kg"
+		end
+
+		local function fmtTime(seconds)
+			seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+			if seconds >= 3600 then
+				return string.format("%dh %02dm", seconds // 3600, seconds % 3600 // 60)
+			end
+			return string.format("%dm %02ds", seconds // 60, seconds % 60)
+		end
+
+		local function mutationLabel(key)
+			local label = tostring(key)
+			if MutationsMod and type(MutationsMod.LabelOf) == "function" then
+				local ok, result = pcall(MutationsMod.LabelOf, key)
+				if ok and type(result) == "string" and result ~= "" then
+					label = result
+				end
+			end
+			return (string.upper((label:gsub("%s*[Mm]utation$", ""))))
+		end
+
+		-- everything you own, with weight / money per second / growth state (same data the Chilli predictor reads)
+		tblPred.collect = function()
+			local ok, owned = pcall(EggState2.ReadOwnerEggs, localPlayer.UserId)
+			if not ok or type(owned) ~= "table" then
+				return {}
+			end
+			local now, items = workspace:GetServerTimeNow(), {}
+			for id, record in pairs(owned) do
+				if type(record) == "table" and tostring(id):sub(1, 8) ~= "PILATVIS_" then
+					local category = record.AssetCategory or record.Category
+					local rank, rarity, color = fn71(category)
+					local directory = Assets.Directory and Assets.Directory[category]
+					local scale = tonumber(record.AssetScale or record.Scale) or 0
+					local keys, labels = {}, {}
+					if type(record.Mutations) == "table" then
+						for key, value in pairs(record.Mutations) do
+							local name = type(value) == "string" and value or (value == true and type(key) == "string" and key) or nil
+							if name then
+								keys[#keys + 1] = name
+								labels[#labels + 1] = mutationLabel(name)
+							end
+						end
+					end
+					local icon
+					if EggRecordsMod and type(EggRecordsMod.EggIcon) == "function" then
+						local okIcon, result = pcall(EggRecordsMod.EggIcon, record)
+						if okIcon and type(result) == "string" and result ~= "" then
+							icon = result
+						end
+					end
+					local item = {
+						id = id,
+						name = directory and directory.DisplayName or tostring(category or "Egg"),
+						rarity = rarity,
+						rnum = rank,
+						color = typeof(color) == "Color3" and color or v21.accent,
+						icon = icon or fn72(category),
+						kg = fn76(record),
+						rate = fn75({AssetCategory = category, Category = category, AssetScale = scale, Scale = scale, Mutations = record.Mutations or {}}),
+						scale = scale,
+						muts = labels,
+						mutColor = MUTATION_COLORS[keys[1] or ""],
+						status = "bag",
+						remaining = math.huge,
+						percent = 0,
+					}
+					if record.Placement ~= nil then
+						item.status = "growing"
+						local okReady, ready = pcall(EggState2.IsReadyToHatch, id)
+						if okReady and ready then
+							item.status, item.remaining, item.percent = "ready", 0, 100
+						elseif EggRecordsMod and type(EggRecordsMod.GrowthSecondsRemaining) == "function" then
+							local speed = 1
+							if type(EggRecordsMod.GrowthSpeedMultiplier) == "function" then
+								local okSpeed, value = pcall(EggRecordsMod.GrowthSpeedMultiplier, record)
+								speed = okSpeed and type(value) == "number" and value or 1
+							end
+							local okLeft, left = pcall(EggRecordsMod.GrowthSecondsRemaining, record, now, speed)
+							item.remaining = okLeft and type(left) == "number" and left or math.huge
+							local duration = 0
+							if type(EggRecordsMod.GrowthDuration) == "function" then
+								local okDur, value = pcall(EggRecordsMod.GrowthDuration, record)
+								duration = okDur and type(value) == "number" and value or 0
+							end
+							if duration > 0 and item.remaining ~= math.huge then
+								item.percent = math.clamp(math.floor((1 - item.remaining / duration) * 100), 0, 100)
+							end
+						end
+					end
+					items[#items + 1] = item
+				end
+			end
+			return items
+		end
+
+		local function makeCard(parent)
+			local frame = Instance.new("Frame")
+			frame.BackgroundColor3 = v21.surface
+			frame.BackgroundTransparency = 0.08
+			frame.BorderSizePixel = 0
+			Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+			local stroke = Instance.new("UIStroke", frame)
+			stroke.Thickness = 1.2
+			stroke.Transparency = 0.3
+			local card = {frame = frame, stroke = stroke}
+			card.status = tbl17.text(frame, {style = "label", textsize = 9, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 6), size = UDim2.new(1, -8, 0, 12)})
+			card.icon = Instance.new("ImageLabel")
+			card.icon.BackgroundTransparency = 1
+			card.icon.AnchorPoint = Vector2.new(0.5, 0)
+			card.icon.Position = UDim2.new(0.5, 0, 0, 22)
+			card.icon.ScaleType = Enum.ScaleType.Fit
+			card.icon.Size = UDim2.fromOffset(56, 56)
+			card.icon.Parent = frame
+			card.name = tbl17.text(frame, {style = "body", textsize = 12, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 82), size = UDim2.new(1, -8, 0, 16)})
+			card.rarity = tbl17.text(frame, {style = "meta", textsize = 10, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 98), size = UDim2.new(1, -8, 0, 13)})
+			card.mut = tbl17.text(frame, {style = "meta", textsize = 10, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 111), size = UDim2.new(1, -8, 0, 13)})
+			card.kg = tbl17.text(frame, {style = "body", textsize = 13, color = WEIGHT_COLOR, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 128), size = UDim2.new(1, -8, 0, 16)})
+			card.money = tbl17.text(frame, {style = "value", textsize = 15, color = MONEY_COLOR, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(4, 146), size = UDim2.new(1, -8, 0, 20)})
+			frame.Parent = parent
+			return card
+		end
+
+		local function bindCard(card, item)
+			card.stroke.Color = item.color
+			card.icon.Image = item.icon or ""
+			card.name.Text = item.name
+			card.rarity.Text = string.upper(tostring(item.rarity)) .. "  \194\183  x" .. string.format("%.2f", item.scale)
+			card.rarity.TextColor3 = item.color
+			if #item.muts > 0 then
+				card.mut.Text = table.concat(item.muts, " + ")
+				card.mut.TextColor3 = item.mutColor or Color3.fromRGB(80, 190, 255)
+			else
+				card.mut.Text = "NO MUTATION"
+				card.mut.TextColor3 = v21.muted
+			end
+			card.kg.Text = fmtKg(item.kg)
+			card.money.Text = "$" .. fmtMoney(item.rate) .. "/s"
+			if item.status == "ready" then
+				card.status.Text = "READY"
+				card.status.TextColor3 = v21.good
+			elseif item.status == "growing" then
+				card.status.Text = item.remaining == math.huge and "GROWING" or (fmtTime(item.remaining) .. "  " .. item.percent .. "%")
+				card.status.TextColor3 = Color3.fromRGB(245, 196, 81)
+			else
+				card.status.Text = "IN BAG"
+				card.status.TextColor3 = v21.muted
+			end
+		end
+
+		tblPred.refresh = function()
+			fn67()
+			if not tblPred.grid or not tblPred.grid.Parent then
+				return
+			end
+			local items, shown, total, heaviest = tblPred.collect(), {}, 0, 0
+			for _, item in ipairs(items) do
+				total, heaviest = total + item.rate, math.max(heaviest, item.kg)
+				if tblPred.filter == "all" or item.status == tblPred.filter then
+					shown[#shown + 1] = item
+				end
+			end
+			table.sort(shown, function(a, b)
+				if tblPred.sort == "rarity" and a.rnum ~= b.rnum then
+					return a.rnum > b.rnum
+				elseif tblPred.sort == "weight" and a.kg ~= b.kg then
+					return a.kg > b.kg
+				elseif tblPred.sort == "time" and a.remaining ~= b.remaining then
+					return a.remaining < b.remaining
+				end
+				if a.rate ~= b.rate then
+					return a.rate > b.rate
+				end
+				return tostring(a.id) < tostring(b.id)
+			end)
+			for i, item in ipairs(shown) do
+				local card = tblPred.cards[i]
+				if not card then
+					card = makeCard(tblPred.grid)
+					tblPred.cards[i] = card
+				end
+				card.frame.LayoutOrder = i
+				card.frame.Visible = true
+				bindCard(card, item)
+			end
+			for i = #shown + 1, #tblPred.cards do
+				tblPred.cards[i].frame.Visible = false
+			end
+			tblPred.empty.Visible = #shown == 0
+			tblPred.empty.Text = #items == 0 and "No eggs yet. Eggs you own show up here." or "No eggs match this filter."
+			tblPred.summary.Text = string.format("%d egg%s  \194\183  <font color=\"#4ADE80\">$%s/s</font> total  \194\183  <font color=\"#FACC15\">%s</font> heaviest", #items, #items == 1 and "" or "s", fmtMoney(total), fmtKg(heaviest))
+		end
+
+		tblPred.build = function(page)
+			tblPred.cards = {}
+			tbl17.segmented(page, {options = {{"value", "Value"}, {"rarity", "Rarity"}, {"weight", "Weight"}, {"time", "Time Left"}}, value = tblPred.sort, pos = UDim2.fromOffset(14, 2), size = UDim2.new(1, -28, 0, 28), onChange = function(sort)
+				tblPred.sort = sort
+				tblPred.refresh()
+			end})
+			tbl17.segmented(page, {options = {{"all", "All"}, {"ready", "Ready"}, {"growing", "Growing"}, {"bag", "In Bag"}}, value = tblPred.filter, pos = UDim2.fromOffset(14, 32), size = UDim2.new(1, -28, 0, 28), onChange = function(filter)
+				tblPred.filter = filter
+				tblPred.refresh()
+			end})
+			tblPred.summary = tbl17.text(page, {style = "meta", color = v21.muted, rich = true, pos = UDim2.fromOffset(16, 64), size = UDim2.new(1, -32, 0, 16)})
+			local scroll = Instance.new("ScrollingFrame")
+			scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			scroll.BackgroundTransparency = 1
+			scroll.BorderSizePixel = 0
+			scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+			scroll.Position = UDim2.fromOffset(14, 84)
+			scroll.ScrollBarImageColor3 = v21.accent
+			scroll.ScrollBarThickness = 3
+			scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+			scroll.Size = UDim2.new(1, -28, 1, -92)
+			scroll.Parent = page
+			local grid = Instance.new("UIGridLayout", scroll)
+			grid.CellPadding = UDim2.fromOffset(8, 8)
+			grid.CellSize = UDim2.new(1 / 3, -8, 0, 172)
+			grid.SortOrder = Enum.SortOrder.LayoutOrder
+			tblPred.grid = scroll
+			tblPred.empty = tbl17.text(page, {style = "meta", color = v21.muted, align = Enum.TextXAlignment.Center, pos = UDim2.fromOffset(14, 120), size = UDim2.new(1, -28, 0, 40)})
+			tblPred.empty.Visible = false
+			tblPred.refresh()
+			task.spawn(function()
+				while fn2() and scroll.Parent do
+					task.wait(1)
+					if fn79("predictor") then
+						tbl17.later("predictor", tblPred.refresh)
+					end
+				end
+			end)
+		end
+	end
+
+	local tbl34 = {"logs", "eggs", "inventory", "checker", "eggdata", "stats", "predictor"}
 
 	local tbl35 = {logs = {name = "Egg Logs", w = 420, h = 500, build = function(arg)
 		return fn85(arg)
@@ -29460,6 +29732,8 @@ local function fn65()
 		return fn91(arg)
 	end}, eggdata = {name = "Egg Data & History", w = 380, h = 570, build = function(arg)
 		return tbl21.build(arg)
+	end}, predictor = {name = "Egg Predictor", w = 440, h = 560, build = function(arg)
+		return tblPred.build(arg)
 	end}}
 
 	local function fn103(arg)
@@ -30694,6 +30968,10 @@ local function fn65()
 
 	function pilatPanels.openStats()
 		fn104("stats")
+	end
+
+	function pilatPanels.openPredictor()
+		fn104("predictor")
 	end
 
 	function pilatPanels.openAll()
@@ -34293,6 +34571,16 @@ local function fn66()
 	end)})
 
 	do
+		local predictorSection = tbl24.section(v33, "Egg Predictor", tbl24.gameIcon("Assets", "Directory", "Unicorn", "Egg", "Icon"))
+		predictorSection:AddParagraph({Title = "Egg Predictor", Content = "Egg cards for every egg you own (placed and in your bag): the egg, its name, rarity and mutations, then the weight in kg (yellow) above the money per second (green) it gives once hatched."})
+		predictorSection:AddButton({Title = "Open Egg Predictor", Content = "Opens the egg card window. Sort by value, rarity, weight or time left, and filter ready / growing / in bag.", Callback = fn144(function()
+			if pilatPanels.openPredictor then
+				pilatPanels.openPredictor()
+			end
+		end)})
+	end
+
+	do
 		fn68 = v33:AddSection({Title = "Placed Eggs", AlwaysOpen = true, Icon = tbl24.gameIcon("Assets", "Directory", "Dragon", "Egg", "Icon")})
 		local addActionList = fn68.AddActionList and fn68:AddActionList({Title = "Your placed eggs", EmptyText = "No eggs placed on your plot.", VisibleRows = 6, ButtonWidth = 64})
 
@@ -34938,7 +35226,9 @@ local function fn66()
 			if cfg.HwForceExit == nil then cfg.HwForceExit = true end
 			if cfg.HwMonsterWait == nil then cfg.HwMonsterWait = true end
 			if cfg.HwDimNoclip == nil then cfg.HwDimNoclip = true end
-			if cfg.HwPumpRush == nil then cfg.HwPumpRush = true end
+			if cfg.HwPumpTp == nil then cfg.HwPumpTp = true end
+			if cfg.HwMonTp == nil then cfg.HwMonTp = true end
+			if cfg.HwEggTp == nil then cfg.HwEggTp = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
 
 			-- ---------------------------------------------------------------- basics
@@ -34981,9 +35271,23 @@ local function fn66()
 				return false
 			end
 
-			-- true while monster farming should hold off (night / wall closed)
+			-- true while EVERY Halloween Dimension job (eggs, monsters, pumpkin moon, dog quest, fishing in the dimension) must hold off:
+			-- night, the 10s reset wall (day change / egg reset) or the wall being sealed. The character waits in the main world
+			-- (exit portal) and re-enters by itself once it is day and the wall is gone. Cached 0.25s, 1.5s grace after the wall opens.
+			local holdAt, holdValue, holdClosedAt = 0, false, 0
 			local function monsterWaiting()
-				return on("HwMonsterWait", true) and wallClosed()
+				if not on("HwMonsterWait", true) then
+					return false
+				end
+				if os.clock() - holdAt < 0.25 then
+					return holdValue
+				end
+				holdAt = os.clock()
+				if wallClosed() then
+					holdClosedAt = holdAt
+				end
+				holdValue = holdAt - holdClosedAt < 1.5
+				return holdValue
 			end
 
 			local function rootPart()
@@ -35900,7 +36204,7 @@ local function fn66()
 						else
 							tp(CFrame.new(p + Vector3.new(0, 3, 0)))
 						end
-						if os.clock() - (hw.TakeAt or 0) > 0.3 then
+						if os.clock() - (hw.TakeAt or 0) > (on("HwEggTp", true) and 0.1 or 0.3) then
 							hw.TakeAt = os.clock()
 							takeEgg(model)
 						end
@@ -35945,7 +36249,32 @@ local function fn66()
 				if zone and root and carried() then
 					local edge = edgeFloor(zone, root)
 					hw.Status = "Carrying the Halloween egg to the safe zone"
-					carryTo(edge, alive, 15)
+					if on("HwEggTp", true) and inDim() then
+						-- instant teleport to the safe zone edge; if the server pulls us back (100+ studs away) teleport again, up to 4 times
+						noclip = true
+						tp(CFrame.new(edge))
+						step()
+						for _ = 1, 4 do
+							local untilAt, pulled = os.clock() + 0.4, false
+							while holding() and os.clock() < untilAt do
+								local now = rootPart()
+								if now and (now.Position - edge).Magnitude >= 100 then
+									pulled = true
+									break
+								end
+								step()
+							end
+							if not pulled then
+								break
+							end
+							hw.Status = "Pulled back, teleporting to the safe zone edge again"
+							tp(CFrame.new(edge))
+							step()
+						end
+						noclip = false
+					else
+						carryTo(edge, alive, 15)
+					end
 					if instant and uid and carried() then
 						hw.Status = "Carrying: instant steal"
 						sleep(hw.RegrabSettle, alive)
@@ -36057,7 +36386,13 @@ local function fn66()
 					if not pos or not live() then
 						break
 					end
-					if on("HwInstant", true) then
+					if on("HwEggTp", true) and inDim() then
+						-- Steal An Egg / Chilli: one instant teleport onto the egg, then keep snapping to it while grabbing
+						noclip = true
+						tp(CFrame.new(pos + Vector3.new(0, 3, 0)))
+						step()
+						noclip = false
+					elseif on("HwInstant", true) then
 						local untilAt = os.clock() + 3
 						noclip = true
 						while live() and os.clock() < untilAt do
@@ -36086,7 +36421,7 @@ local function fn66()
 						if eggPos then
 							tp(CFrame.new(eggPos + Vector3.new(0, 3, 0)))
 						end
-						if os.clock() - lastPress > 0.5 then
+						if os.clock() - lastPress > (on("HwEggTp", true) and 0.1 or 0.5) then
 							lastPress = os.clock()
 							takeEgg(egg)
 						end
@@ -36124,36 +36459,60 @@ local function fn66()
 				table.sort(gearOptions)
 			end)
 
+			-- SAE weapon rotation: list of usable tools (rebuilt every 1s), keep the held one while it is the only one,
+			-- otherwise rotate to the next tool whose cooldown is over (or the one that frees up first), re-checked every 0.5s
 			local function pickWeapon()
-				local allow = next(hw.Weapons) ~= nil and hw.Weapons or toolIds
-				local list = {}
-				for _, holder in ipairs({localPlayer.Character, localPlayer:FindFirstChildOfClass("Backpack")}) do
-					for _, tool in ipairs(holder and holder:GetChildren() or {}) do
-						if tool:IsA("Tool") then
-							local id = tool:GetAttribute("GearName") or tool.Name
-							if allow[id] and toolIds[id] then
-								list[#list + 1] = tool
+				local now = os.clock()
+				if now - (hw.WeaponListAt or 0) > 1 or (hw.WeaponList and hw.WeaponList[1] and not hw.WeaponList[1].Parent) then
+					local allow = next(hw.Weapons) ~= nil and hw.Weapons or toolIds
+					local list = {}
+					for _, holder in ipairs({localPlayer.Character, localPlayer:FindFirstChildOfClass("Backpack")}) do
+						for _, tool in ipairs(holder and holder:GetChildren() or {}) do
+							if tool:IsA("Tool") then
+								local id = tool:GetAttribute("GearName") or tool.Name
+								if allow[id] and toolIds[id] then
+									list[#list + 1] = tool
+								end
 							end
 						end
 					end
+					table.sort(list, function(a, b)
+						return a.Name < b.Name
+					end)
+					hw.WeaponList, hw.WeaponListAt = list, now
 				end
+				local list = hw.WeaponList
 				if #list == 0 then
 					return nil
 				end
-				table.sort(list, function(a, b)
-					return a.Name < b.Name
-				end)
-				local now, best, bestWait = Workspace:GetServerTimeNow(), nil, nil
-				for _, tool in ipairs(list) do
-					local wait = (tonumber(tool:GetAttribute("CooldownEndTime")) or 0) - now
-					if wait <= 0 then
-						return tool
+				local function cooldownEnd(tool)
+					return tonumber(tool:GetAttribute("CooldownEndTime")) or 0
+				end
+				local char = localPlayer.Character
+				local held = char and char:FindFirstChildOfClass("Tool")
+				local heldIndex = held and table.find(list, held)
+				local pick = list[1]
+				if heldIndex then
+					if #list == 1 then
+						return held
+					elseif not (now - (hw.WeaponAt or 0) >= 0.5) and cooldownEnd(held) == hw.WeaponCd then
+						return held
 					end
-					if not bestWait or wait < bestWait then
-						best, bestWait = tool, wait
+					local serverNow, bestWait = Workspace:GetServerTimeNow(), nil
+					for offset = 1, #list - 1 do
+						local tool = list[(heldIndex + offset - 1) % #list + 1]
+						local wait = cooldownEnd(tool) - serverNow
+						if wait <= 0 then
+							pick = tool
+							break
+						end
+						if not bestWait or wait < bestWait then
+							pick, bestWait = tool, wait
+						end
 					end
 				end
-				return best
+				hw.WeaponAt, hw.WeaponCd = now, cooldownEnd(pick)
+				return pick
 			end
 
 			local function swing(tool)
@@ -36171,6 +36530,18 @@ local function fn66()
 					hw.TriggerAt = os.clock()
 					fire("RE/ToolTrigger/Trigger", tool)
 				end
+			end
+
+			-- Steal An Egg monster farm: with "Teleport To Monsters" on (and inside the dimension) the character is snapped 4 studs
+			-- from the monster on the floor every frame, otherwise it runs there at Monster Walk Speed. Noclip is on for the whole fight.
+			local standAt, standFrom, standY = 0, nil, 0
+			local function monsterStand(pos)
+				if standFrom and os.clock() - standAt < 0.1 and (pos - standFrom).Magnitude < 2 then
+					return Vector3.new(pos.X, standY, pos.Z)
+				end
+				local ground = groundNear(pos)
+				standFrom, standAt, standY = pos, os.clock(), ground.Y
+				return ground
 			end
 
 			local function fightMonster(alive)
@@ -36192,11 +36563,11 @@ local function fn66()
 				local sizes = {Small = 12, Medium = 28, Large = 65}
 				local target, best = nil, math.huge
 				for _, monster in ipairs(CollectionService:GetTagged("HalloweenMonster")) do
-					local pos = monster:IsDescendantOf(Workspace) and monster:GetAttribute("KilledBy") == nil and (next(hw.MonsterKinds) == nil or hw.MonsterKinds[monster.Name]) and posOf(monster)
-					if pos then
+					local pos = monster:GetAttribute("KilledBy") == nil and (next(hw.MonsterKinds) == nil or hw.MonsterKinds[monster.Name]) and monster:IsDescendantOf(Workspace) and posOf(monster)
+					if pos and not (safe and inside(safe, pos)) then
 						local dist = (pos - root.Position).Magnitude
 						local score = hw.MonsterOrder == "Most Tokens" and dist - (sizes[monster:GetAttribute("MonsterSize")] or 0) * 1000 or dist
-						if score < best and not (safe and inside(safe, pos)) then
+						if score < best then
 							target, best = monster, score
 						end
 					end
@@ -36209,9 +36580,24 @@ local function fn66()
 					local h = humanoid()
 					return alive() and target.Parent ~= nil and target:GetAttribute("KilledBy") == nil and not carried() and (h == nil or h.Health >= h.MaxHealth * 0.4)
 				end
+				local function stand(pos, from)
+					local away = flat(from - pos)
+					return monsterStand(pos + (away.Magnitude > 0.1 and away.Unit or Vector3.new(0, 0, 1)) * 4)
+				end
+				local snap = on("HwMonTp", true) and inDim()
+				noclip = true
 				local startPos = posOf(target)
-				if startPos and (startPos - root.Position).Magnitude > 30 then
-					if not walkTo(groundNear(startPos), live, hw.MonsterSpeed) then
+				if startPos and (snap or (startPos - root.Position).Magnitude > 30) then
+					local spot = stand(startPos, root.Position)
+					if snap then
+						tp(CFrame.new(spot))
+						step()
+						if not live() then
+							noclip = false
+							return true
+						end
+					elseif not walkTo(spot, live, hw.MonsterSpeed) then
+						noclip = false
 						return true
 					end
 				end
@@ -36221,12 +36607,17 @@ local function fn66()
 					if not pos or not now then
 						break
 					end
-					local away = flat(now.Position - pos)
-					walkStep(groundNear(pos + (away.Magnitude > 0.1 and away.Unit or Vector3.new(0, 0, 1)) * 4), hw.MonsterSpeed)
+					local spot = stand(pos, now.Position)
+					if snap then
+						tp(CFrame.new(spot))
+					else
+						walkStep(spot, hw.MonsterSpeed)
+					end
 					face(pos)
 					swing(pickWeapon() or weapon)
 					step()
 				end
+				noclip = false
 				walkStop()
 				if target:GetAttribute("KilledBy") == localPlayer.UserId then
 					hw.Kills = hw.Kills + 1
@@ -36235,99 +36626,44 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- pumpkin moon
-			-- fast tween -> free pumpkin -> fast tween back to the altar. pumpkins somebody else is carrying are skipped.
-			local function tweenTo(pos, speed, alive, maxSeg)
-				local root = rootPart()
-				if not root then
-					return false
+			-- Steal An Egg flow: nearest pumpkin whose CatchPrompt is enabled -> press the prompt whenever in range while moving onto it
+			-- (snap with "Teleport To Pumpkins" inside the dimension, otherwise run at Pumpkin Speed) -> altar: wait for it to open, go to its
+			-- Target, sweep through the deposit 4 rounds pressing its prompt -> next pumpkin.
+			local pumpkinPrompts = setmetatable({}, {__mode = "k"})
+
+			-- snap to pos for one frame. returns nil when snapping is off / not in the dimension (caller walks instead), else alive()
+			local function pumpkinMove(pos, alive)
+				if not (on("HwPumpTp", true) and inDim()) then
+					return nil
 				end
-				local dist = (pos - root.Position).Magnitude
-				if dist < 1 then
-					return true
-				end
-				local time = math.clamp(dist / math.max(speed or 300, 50), 0.03, maxSeg or 6)
-				local ok, tween = pcall(function()
-					return game:GetService("TweenService"):Create(root, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
-				end)
-				if not ok or not tween then
-					tp(CFrame.new(pos))
-					return true
-				end
-				tween:Play()
-				local started = os.clock()
-				while tween.PlaybackState == Enum.PlaybackState.Playing and alive() and os.clock() - started < time + 0.5 do
-					root.AssemblyLinearVelocity = Vector3.zero
-					step()
-				end
-				pcall(function()
-					tween:Cancel()
-				end)
-				root.AssemblyLinearVelocity = Vector3.zero
+				tp(CFrame.new(pos))
+				step()
 				return alive()
 			end
 
-			-- true when another player is holding / has caught this pumpkin
-			local function pumpkinTaken(pumpkin, quick)
-				local Players = game:GetService("Players")
-				for _, key in ipairs({"CarriedBy", "HeldBy", "Carrier", "CaughtBy", "Owner", "OwnerUserId", "CarrierUserId", "CarriedByUserId"}) do
-					local v = pumpkin:GetAttribute(key)
-					if v ~= nil and v ~= false and v ~= 0 and v ~= "" and v ~= localPlayer.UserId and v ~= localPlayer.Name then
-						return true
+			local function nearestPumpkin(folder)
+				local root = rootPart()
+				local best, bestDist = nil, math.huge
+				for _, child in ipairs(root and folder and folder:GetChildren() or {}) do
+					local prompt = pumpkinPrompts[child]
+					if prompt == nil or (prompt and not prompt.Parent) then
+						prompt = child:IsA("Model") and child:FindFirstChild("CatchPrompt", true) or false
+						pumpkinPrompts[child] = prompt
+					end
+					local pos = prompt and prompt.Enabled and posOf(child)
+					local dist = pos and (pos - root.Position).Magnitude
+					if dist and dist < bestDist then
+						best, bestDist = child, dist
 					end
 				end
-				local prompt = pumpkin:FindFirstChild("CatchPrompt", true)
-				if not prompt or not prompt.Enabled then
-					return true
-				end
-				if quick then
-					return false -- per-frame check: skip the heavy scan over every player and weld
-				end
-				-- welded / parented to another player's character
-				for _, other in ipairs(Players:GetPlayers()) do
-					local char = other ~= localPlayer and other.Character
-					if char then
-						if pumpkin:IsDescendantOf(char) then
-							return true
-						end
-						for _, joint in ipairs(pumpkin:GetDescendants()) do
-							if (joint:IsA("Weld") or joint:IsA("WeldConstraint") or joint:IsA("Motor6D") or joint:IsA("RigidConstraint")) then
-								local p0, p1 = joint.Part0, joint.Part1
-								if (p0 and p0:IsDescendantOf(char)) or (p1 and p1:IsDescendantOf(char)) then
-									return true
-								end
-							end
-						end
-						-- another player carrying it flagged by their own attribute, or glued right on top of them
-						if other:GetAttribute("HalloweenPumpkinCarrying") == true or char:GetAttribute("HalloweenPumpkinCarrying") == true then
-							local hrp, ppos = char:FindFirstChild("HumanoidRootPart"), posOf(pumpkin)
-							if hrp and ppos and (hrp.Position - ppos).Magnitude < 8 then
-								return true
-							end
-						end
-					end
-				end
-				return false
+				return best
 			end
 
-			-- move helper: instant teleport when "Teleport To Pumpkins" is on AND we are inside the Halloween Dimension
-			-- (script_yanz gate: player attribute InHalloweenDimension == true), fast tween otherwise
-			local function pumpkinMove(pos, alive, maxSeg)
-				if (on("HwPumpTp") or on("HwPumpRush", true)) and inDim() then
-					tp(CFrame.new(pos))
-					step()
-					return alive()
-				end
-				return tweenTo(pos, hw.PumpkinSpeed, alive, maxSeg)
-			end
-
-			-- bring the carried pumpkin to the altar (same flow as script_yanz):
-			-- wait for the altar to open, go to its Target, then sweep through it front-to-back and press the prompt, 4 rounds
 			local function pumpkinDeliver(alive, deposit)
 				local function holding()
 					return alive() and attr("HalloweenPumpkinCarrying") == true
 				end
 				hw.Status = "Pumpkin Moon: returning pumpkin"
-				local rush = on("HwPumpRush", true)
 				if deposit:GetAttribute("Open") == false then
 					hw.Status = "Pumpkin Moon: waiting for the altar to open"
 					waitFor(function()
@@ -36335,19 +36671,21 @@ local function fn66()
 					end, 10, holding)
 				end
 				noclip = true
-				pumpkinMove((posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0), holding, 6)
+				local goal = (posOf(deposit:FindFirstChild("Target")) or deposit.Position) + Vector3.new(0, 3, 0)
+				if pumpkinMove(goal, holding) == nil then
+					walkTo(goal, holding, hw.PumpkinSpeed)
+				end
 				for _ = 1, 4 do
 					if not holding() then
 						break
 					end
 					local look, reach = deposit.CFrame.LookVector, deposit.Size.Z / 2 + 3
-					for i = 0, 8, (rush and 4 or 1) do
+					for i = 0, 8 do
 						tp(CFrame.new(deposit.Position + Vector3.new(0, 3, 0) + look * reach * (1 - i / 4)))
 						step()
 					end
-					touch(deposit)
 					press(deposit:FindFirstChildWhichIsA("ProximityPrompt", true))
-					sleep(rush and 0.06 or 0.3, holding)
+					sleep(0.3, holding)
 				end
 				noclip = false
 			end
@@ -36367,43 +36705,27 @@ local function fn66()
 					end
 					return true
 				end
-				-- nearest FREE pumpkin only (skip ones other players are carrying)
-				local folder, root = d:FindFirstChild("RunawayPumpkins"), rootPart()
-				local pumpkin, bestDist = nil, math.huge
-				for _, child in ipairs(folder and folder:GetChildren() or {}) do
-					local prompt = child:IsA("Model") and child:FindFirstChild("CatchPrompt", true)
-					local pos = prompt and prompt.Enabled and posOf(child)
-					local dist = pos and root and (pos - root.Position).Magnitude
-					if dist and dist < bestDist and not pumpkinTaken(child) then
-						bestDist, pumpkin = dist, child
-					end
-				end
+				local pumpkin = nearestPumpkin(d:FindFirstChild("RunawayPumpkins"))
 				if not pumpkin then
 					hw.Status = "Pumpkin Moon: waiting for a free pumpkin"
 					return false
 				end
 				hw.Status = "Pumpkin Moon: catching a pumpkin"
-				local rush = on("HwPumpRush", true)
 				local untilAt = os.clock() + 10
-				noclip = true
 				local prompt
+				noclip = true
 				while alive() and pumpkin.Parent and os.clock() < untilAt and attr("HalloweenPumpkinCarrying") ~= true do
 					prompt = (prompt and prompt.Parent) and prompt or pumpkin:FindFirstChild("CatchPrompt", true)
 					local pos, now = posOf(pumpkin), rootPart()
-					if not prompt or not pos or not now or pumpkinTaken(pumpkin, rush) then
-						break -- gone, or somebody else grabbed it: pick another one next tick
+					if not prompt or not pos or not now then
+						break
 					end
-					if rush then
-						-- land on the pumpkin and grab it in the same frame, no extra wait
-						pumpkinMove(pos + Vector3.new(0, 3, 0), alive, 0.25)
-						if prompt:IsA("ProximityPrompt") then
-							press(prompt)
-						end
-					else
-						if prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
-							press(prompt)
-						end
-						pumpkinMove(pos + Vector3.new(0, 3, 0), alive, 0.25)
+					if prompt:IsA("ProximityPrompt") and (pos - now.Position).Magnitude <= prompt.MaxActivationDistance + 2 then
+						press(prompt)
+					end
+					local goal = pos + Vector3.new(0, 3, 0)
+					if pumpkinMove(goal, alive) == nil then
+						walkStep(goal, hw.PumpkinSpeed)
 						step()
 					end
 				end
@@ -36415,11 +36737,8 @@ local function fn66()
 				return true
 			end
 
-			-- rush mode: catch -> altar -> catch ... in one loop, polling every frame for the next free pumpkin
+			-- catch -> altar -> catch ... in one loop, polling every frame for the next pumpkin (gives up after 3s with nothing to catch)
 			local function pumpkinStep(alive)
-				if not on("HwPumpRush", true) then
-					return pumpkinOnce(alive)
-				end
 				local didAny, idleSince = false, nil
 				while alive() and on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" do
 					if pumpkinOnce(alive) then
@@ -37020,8 +37339,11 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- field scheduler
-			local HW_SCOUT_OUTSIDE = false
+			local HW_SCOUT_OUTSIDE = true -- Halloween has priority and we are in the world: enter the portal (retry throttled by EggRetryAt)
 			local function nextTask()
+				if monsterWaiting() and not carried() and attr("HalloweenPumpkinCarrying") ~= true then
+					return nil
+				end
 				if on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" then
 					return "pumpkin"
 				end
@@ -37058,7 +37380,7 @@ local function fn66()
 			local function pickJob()
 				if hw.Pend then
 					-- a line is out (Farm Monsters While Fishing): drop it when it can no longer be used
-					if not (on("HwFishing") and on("HwFishMon") and on("HwMonsters")) or trainBusy() or os.clock() > hw.Pend.at + 12 then
+					if not (on("HwFishing") and on("HwFishMon") and on("HwMonsters")) or trainBusy() or monsterWaiting() or os.clock() > hw.Pend.at + 12 then
 						cancelPend()
 					elseif os.clock() >= hw.Pend.at then
 						return "reel"
@@ -37071,18 +37393,18 @@ local function fn66()
 					end
 					return base or "reel"
 				end
-				if on("HwFishing") and not trainBusy() and (base == nil or fishFirst()) then
+				if on("HwFishing") and not trainBusy() and (not monsterWaiting() or hw.FishInField()) and (base == nil or fishFirst()) then
 					return "fishing"
 				end
 				return base
 			end
 
 			local runners = {
-				pumpkin = {key = function() return on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" end, run = pumpkinStep},
-				dog = {key = function() return on("HwDog") end, run = dogStep},
-				eggs = {key = function() return on("HwEggs") end, run = stealOne},
+				pumpkin = {key = function() return on("HwPumpkin", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon" and (attr("HalloweenPumpkinCarrying") == true or not monsterWaiting()) end, run = pumpkinStep},
+				dog = {key = function() return on("HwDog") and not monsterWaiting() end, run = dogStep},
+				eggs = {key = function() return on("HwEggs") and (carried() or not monsterWaiting()) end, run = stealOne},
 				monsters = {key = function() return on("HwMonsters") and not monsterWaiting() end, run = fightMonster},
-				fishing = {key = function() return on("HwFishing") end, run = fishOnce},
+				fishing = {key = function() return on("HwFishing") and (not monsterWaiting() or hw.FishInField()) end, run = fishOnce},
 				reel = {key = function() return on("HwFishing") end, run = reelPending},
 			}
 
@@ -37102,9 +37424,12 @@ local function fn66()
 					elseif hw.Owner == nil or hw.Owner == "field" then
 						local job = pickJob()
 						if not job then
-							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or ("Waiting for something to do" .. ((on("HwEggs") and hw.EggDiag) and (" | " .. hw.EggDiag) or ""))
+							local held = monsterWaiting()
+							hw.Status = held and (inDim() and "Night / wall closed - leaving the Halloween Dimension" or "Night / wall closed - waiting in the world") or ("Waiting for something to do" .. ((on("HwEggs") and hw.EggDiag) and (" | " .. hw.EggDiag) or ""))
 							idleSince = idleSince or os.clock()
-							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and not trainBusy() and os.clock() - idleSince > 6 and claim("field") then
+							local leaveNow = held or (on("HwForceExit", true) and os.clock() - idleSince > 6)
+							if leaveNow and inDim() and not hw.Chase and not carried() and attr("HalloweenPumpkinCarrying") ~= true and not trainBusy() and os.clock() >= (hw.HoldExitAt or 0) and claim("field") then
+								hw.HoldExitAt = os.clock() + (held and 4 or 0)
 								local alive = makeAlive(function() return not pickJob() end)
 								pcall(leaveDim, alive)
 								release("field")
@@ -38220,6 +38545,7 @@ local function fn66()
 			hwSection:AddSubSection("Auto Steal Halloween Eggs")
 			toggle("Auto Steal Halloween Eggs", "Steals the Halloween eggs in the dimension and carries them to the safe zone. Needs 2.5M speed and the guard tutorial done.", "HwEggs", false)
 			toggle("Instant Steal Halloween Eggs", "Dashes straight to the egg and drops it at the safe zone edge. Turn off for a slower, safer route.", "HwInstant", true)
+			toggle("Teleport To Eggs", "Steal An Egg / Chilli logic: teleports straight onto the egg and to the safe zone edge (inside the Halloween Dimension) instead of dashing. Re-teleports if the server pulls you back. Off = the dash route with Steal Speed.", "HwEggTp", true)
 			hwSection:AddSlider({Flag = "Halloween_StealSpeed", Title = "Steal Speed", Content = "Studs per frame while dashing to the egg and the safe zone.", Min = 10, Max = 100, Default = 40, Increment = 5, Callback = fn144(function(arg)
 				hw.Step = tonumber(arg) or 40
 			end)})
@@ -38247,7 +38573,7 @@ local function fn66()
 
 			hwSection:AddSubSection("Auto Farm Monsters")
 			toggle("Auto Farm Monsters", "Fights Halloween monsters for Candy Corn. Needs a bat or a weapon.", "HwMonsters", false)
-			toggle("Wait On Night / Wall", "Pauses monster farming while it is night or the reset wall is closed, and resumes by itself when it opens.", "HwMonsterWait", true)
+			toggle("Wait On Night / Wall", "Applies to ALL Halloween jobs (eggs, monsters, pumpkin moon, dog quest, fishing in the dimension). At night, on a day reset or while the 10s reset wall is up you leave the dimension through the exit portal and wait in the world, then enter again by itself once it is day and the wall is gone.", "HwMonsterWait", true)
 			hwSection:AddDropdown({Flag = "Halloween_MonsterKinds", Title = "Monsters To Kill", Content = "Leave empty to fight every kind.", Options = {"Candy Corn (+12 Candy)", "Hollow Bat (+12 Candy)", "Scarecrow (+28 Candy)", "Chest Mimic (+28 Candy)", "Pumpkin Golem (+65 Candy)", "Soul Phantom (+65 Candy)"}, Multi = true, Default = {}, Callback = fn144(function(arg)
 				local kinds = {}
 				for _, label in ipairs(selected(arg)) do
@@ -38258,7 +38584,8 @@ local function fn66()
 			hwSection:AddDropdown({Flag = "Halloween_MonsterOrder", Title = "Monster Order", Content = "Closest first, or the biggest token reward first.", Options = {"Closest", "Most Tokens"}, Multi = false, Default = "Closest", Callback = fn144(function(arg)
 				hw.MonsterOrder = arg
 			end)})
-			hwSection:AddSlider({Flag = "Halloween_MonsterSpeed", Title = "Monster Walk Speed", Content = "How fast you run to the next monster.", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
+			toggle("Teleport To Monsters", "Steal An Egg logic: snaps next to the monster every frame (inside the Halloween Dimension) while swinging. Off = run to it at Monster Walk Speed.", "HwMonTp", true)
+			hwSection:AddSlider({Flag = "Halloween_MonsterSpeed", Title = "Monster Walk Speed", Content = "How fast you run to the next monster when Teleport To Monsters is off.", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				hw.MonsterSpeed = tonumber(arg) or 300
 			end)})
 			local weaponOptions = {}
@@ -38285,9 +38612,8 @@ local function fn66()
 
 			hwSection:AddSubSection("Auto Pumpkin Moon")
 			toggle("Auto Pumpkin Moon", "During the Pumpkin Moon, catches the runaway pumpkins and brings them to the altar.", "HwPumpkin", true)
-			toggle("Fast Pumpkin (no delay)", "Instant teleport to every pumpkin and the altar, grabs the moment you land, and goes straight to the next pumpkin with no waiting in between.", "HwPumpRush", true)
-			toggle("Teleport To Pumpkins", "Teleports straight to pumpkins and the altar instead of tweening. Faster, but riskier.", "HwPumpTp", false)
-			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Tween Speed", Content = "How fast you tween to pumpkins and back to the altar (studs/sec).", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
+			toggle("Teleport To Pumpkins", "Steal An Egg logic: snaps straight onto each pumpkin and the altar (inside the Halloween Dimension) and presses the prompt as you land. Off = run there at Pumpkin Speed.", "HwPumpTp", true)
+			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Walk Speed", Content = "How fast you run to pumpkins and back to the altar when Teleport To Pumpkins is off (studs/sec).", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				hw.PumpkinSpeed = tonumber(arg) or 300
 			end)})
 
