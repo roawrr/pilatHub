@@ -892,7 +892,7 @@ local function fn30(character)
 end
 
 localPlayer.CharacterAdded:Connect(fn30)
-local pilatV4Config = {AutoSteal = false, HelpFriend = false, ForceInstant = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggKeepMutated = true, SellEggBlacklist = {}, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
+local pilatV4Config = {AutoSteal = false, HelpFriend = false, ForceInstant = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggKeepMutated = true, SellEggBlacklist = {}, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0, WebhookPhantom = false}
 local EggState = require(game:GetService("ReplicatedStorage").Client.EggState)
 EggState.GetAreaEggSnapshot = EggState.ReadFieldEggs
 EggState.GetAreaEggRecord = EggState.ReadFieldEgg
@@ -11750,6 +11750,12 @@ local v8 = (function()
 		end
 		arg.reportedUid = activeTarget.Uid
 
+		local stealSeconds
+		local stealTimer = arg._stealTimer
+		if type(stealTimer) == "table" and os.clock() - stealTimer.at < 600 then
+			stealSeconds = os.clock() - stealTimer.at
+		end
+
 		task.delay(1.5, function()
 			if arg.destroyed then
 				return
@@ -11774,12 +11780,13 @@ local v8 = (function()
 			end
 
 			arg.stats.delivered = (arg.stats.delivered or 0) + 1
+			arg._stealTimer = nil
 			local pilatV4Webhook = genv.__PilatV4Webhook
 			if not pilatV4Webhook then
 				return
 			end
 			local ok, result = pcall(arg.catalog.resolve, activeTarget)
-			pcall(pilatV4Webhook.stolen, activeTarget, ok and result or nil, nil)
+			pcall(pilatV4Webhook.stolen, activeTarget, ok and result or nil, nil, stealSeconds)
 		end)
 	end
 
@@ -12301,6 +12308,12 @@ local v8 = (function()
 		arg.safeStarting = true
 		arg.running = true
 		arg.activeTarget = v10
+		if type(v10) == "table" then
+			local stealTimer = arg._stealTimer
+			if type(stealTimer) ~= "table" or stealTimer.uid ~= v10.Uid or os.clock() - stealTimer.at > 120 then
+				arg._stealTimer = {uid = v10.Uid, at = os.clock()}
+			end
+		end
 		local v11 = arg.catalog.resolve(v10)
 		arg.stats.lastTarget = string.format("%s \194\183 %s \194\183 %s", v11.rarity, v11.name, v10.AreaId)
 
@@ -15692,7 +15705,7 @@ genv.__PilatV4Webhook = (function()
 		return nil
 	end
 
-	tbl12.stolen = function(arg, arg2, arg3)
+	tbl12.stolen = function(arg, arg2, arg3, arg4)
 		if pilatV4Config.WebhookEnabled ~= true then
 			return
 		end
@@ -15716,6 +15729,10 @@ genv.__PilatV4Webhook = (function()
 			return
 		end
 		local tbl17 = {{name = "User", value = localPlayer2.Name, inline = true}, {name = "Rarity", value = tostring(tbl16.rarity), inline = true}, {name = "Size", value = tbl12.sizeText(arg), inline = true}, {name = "Weight", value = tbl12.weightText(tbl12.weightOf(arg)), inline = true}, {name = "Cash/s", value = tbl12.rateText(v15), inline = true}, {name = "Area", value = tostring(arg.AreaId or "?"), inline = true}}
+		if type(arg4) == "number" and arg4 >= 0 then
+			tbl17[#tbl17 + 1] = {name = "Steal Time", value = string.format("%.2fs", arg4), inline = true}
+		end
+
 		local mutations = arg.Mutations or {}
 
 		if #mutations > 0 then
@@ -15776,6 +15793,93 @@ genv.__PilatV4Webhook = (function()
 		end
 
 		table.insert(tbl13, {url = webhookURL, payload = {embeds = {tbl16}}, imageAsset = tbl12.eggIcon("Dog")})
+		fn64()
+		return true
+	end
+
+	tbl12.spectralCount = function()
+		local ok, result = pcall(function()
+			local count = 0
+			local backpack = localPlayer2:FindFirstChildOfClass("Backpack")
+			for _, container in ipairs({localPlayer2.Character, backpack}) do
+				if container then
+					for _, tool in ipairs(container:GetChildren()) do
+						if tool:IsA("Tool") and tostring(tool:GetAttribute("ItemType")) == "MutationConsumable" then
+							local id = tostring(tool:GetAttribute("MutationId") or tool:GetAttribute("MutationTemplate") or "Boss")
+							if id:lower() == "spectral" then
+								local uses = tonumber(tool:GetAttribute("Uses")) or tonumber(string.match(tool.Name, "%[X(%d+)%]")) or 1
+								if uses > 0 then
+									count += uses
+								end
+							end
+						end
+					end
+				end
+			end
+			return count
+		end)
+		if ok and type(result) == "number" then
+			return result
+		end
+		return nil
+	end
+
+	tbl12.phantom = function(info)
+		if pilatV4Config.WebhookPhantom ~= true then
+			return false
+		end
+		local webhookURL = pilatV4Config.WebhookURL
+		if type(webhookURL) ~= "string" or webhookURL == "" then
+			return false
+		end
+		info = type(info) == "table" and info or {}
+
+		local function whole(value)
+			return math.floor((tonumber(value) or 0) + 0.5)
+		end
+
+		local seconds = math.max(0, math.floor(tonumber(info.duration) or 0))
+		local duration = string.format("%dm %ds", seconds // 60, seconds % 60)
+		local spectral
+		if info.spectralNow == nil then
+			spectral = "unknown"
+		elseif info.spectralStart ~= nil then
+			local delta = info.spectralNow - info.spectralStart
+			spectral = string.format("%s%d this run (%d in inventory)", delta >= 0 and "+" or "", delta, info.spectralNow)
+		else
+			spectral = string.format("%d in inventory", info.spectralNow)
+		end
+		local tradeText = info.tradeOn and (info.tradeDone and "Done" or "Not finished (timed out)") or "Off"
+		local left = info.soulsLeft ~= nil and tostring(whole(info.soulsLeft)) or "-"
+		local icon = fn63()
+
+		local embed = {
+			title = "Phantom Express Finished",
+			description = string.format("**%s** finished a Phantom Express run", localPlayer2.Name),
+			color = 9055202,
+			timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+			author = {name = "Pilat Hub", icon_url = icon},
+			footer = {text = "Pilat Hub", icon_url = icon},
+			fields = {
+				{name = "Username", value = localPlayer2.Name, inline = true},
+				{name = "User ID", value = tostring(localPlayer2.UserId), inline = true},
+				{name = "Duration", value = duration, inline = true},
+				{name = "Souls Earned", value = tostring(whole(info.soulsEarned)), inline = true},
+				{name = "Souls Traded", value = string.format("%d (%d trades)", whole(info.soulsTraded), whole(info.trades)), inline = true},
+				{name = "Souls Left", value = left, inline = true},
+				{name = "Spectral Mutation", value = spectral, inline = true},
+				{name = "Trade Souls", value = tradeText, inline = true},
+				{name = "Total Rides", value = tostring(whole(info.rides)), inline = true},
+			},
+		}
+		if icon then
+			embed.thumbnail = {url = icon}
+		end
+
+		if #tbl13 > 40 then
+			table.remove(tbl13, 1)
+		end
+		table.insert(tbl13, {url = webhookURL, payload = {embeds = {embed}}})
 		fn64()
 		return true
 	end
@@ -27860,7 +27964,7 @@ local function fn65()
 			local stolen = pilatV4Webhook.stolen
 			rawset(pilatV4Webhook, "__pilatStatsWrapped", true)
 
-			pilatV4Webhook.stolen = function(arg, arg2, arg3)
+			pilatV4Webhook.stolen = function(arg, arg2, arg3, arg4)
 				pcall(function()
 					local uid = type(arg) == "table" and arg.Uid or nil
 
@@ -27878,7 +27982,7 @@ local function fn65()
 					end
 				end)
 
-				return stolen(arg, arg2, arg3)
+				return stolen(arg, arg2, arg3, arg4)
 			end
 		end
 	end
@@ -34493,11 +34597,15 @@ local function fn66()
 	tbl24.espMinValue = v43:AddInput({Title = "ESP Min Value", Content = "Only label eggs making at least this much per second. Supports k, m and b.", Placeholder = "e.g. 500k, 2m, 1b", Default = "", Callback = fn144(tbl10.applyEspMinValue)})
 	tbl24.backpackRates = v43:AddToggle({Title = "Backpack Value/s", Content = "Shows how much money per second each egg in your backpack makes, right on its slot.", Default = false, Callback = fn144(fn99)})
 	local v44 = tbl24.section(v32, "Steal Webhook", "bell")
-	tbl24.webhookEnabled = v44:AddToggle({Title = "Steal Webhook", Content = "Posts a Discord embed the moment a stolen egg is banked, with its rarity, size, weight and cash per second.", Default = false, Callback = fn144(fn150)})
+	tbl24.webhookEnabled = v44:AddToggle({Title = "Steal Webhook", Content = "Posts a Discord embed the moment a stolen egg is banked, with its rarity, size, weight, cash per second and the seconds it took from picking the target to banking it.", Default = false, Callback = fn144(fn150)})
 	tbl24.webhookUrl = v44:AddInput({Title = "Webhook URL", Content = "Paste the Discord webhook URL for the channel you want.", Placeholder = "https://discord.com/api/webhooks/...", Default = "", Callback = fn144(fn151)})
 
 	tbl24.webhookDisconnect = v44:AddToggle({Title = "Disconnect Alert", Content = "Posts to the same webhook when this account gets disconnected or kicked, with the reason.", Default = false, Callback = fn144(function(arg)
 		pilatV4Config.WebhookDisconnect = arg == true
+	end)})
+
+	tbl24.webhookPhantom = v44:AddToggle({Title = "Phantom Express Webhook", Content = "Posts when a Phantom Express run is finished (after Trade Souls when it is on), with username, user ID, souls and Spectral mutation count.", Default = false, Callback = fn144(function(arg)
+		pilatV4Config.WebhookPhantom = arg == true
 	end)})
 
 	v44:AddSubSection("Filter")
@@ -36093,6 +36201,20 @@ local function fn66()
 				return true
 			end
 
+			-- record for the Steal Webhook, same shape the normal steal path sends
+			local function webhookRecord(model)
+				local name = eggName(model)
+				local entry = eggEntry(name)
+				local rarity = entry and type(entry.Rarity) == "table" and entry.Rarity or nil
+				return {
+					Uid = model:GetAttribute("HalloweenEggUid"),
+					AssetCategory = name,
+					AssetScale = model:IsA("Model") and model:GetScale() or 1,
+					Mutations = {},
+					Info = {name = entry and (entry.DisplayName or entry._id) or tostring(name), category = name, rarity = rarity and (rarity.DisplayName or rarity._id) or "Unknown", rarityColor = rarity and rarity.Color or nil},
+				}
+			end
+
 			local function eggFolder()
 				local d = dim()
 				return d and d:FindFirstChild("WorldEggs")
@@ -36294,6 +36416,19 @@ local function fn66()
 				if attr("HalloweenDelivered") ~= before then
 					hw.Eggs = hw.Eggs + 1
 					hw.Status = "Halloween egg secured"
+					-- Steal Webhook also covers Halloween eggs (seconds = target picked -> banked)
+					local record, startedAt = hw.StealRecord, hw.StealStart
+					hw.StealRecord, hw.StealStart = nil, nil
+					if type(record) == "table" then
+						local hook = genv.__PilatV4Webhook
+						if type(hook) == "table" and type(hook.stolen) == "function" then
+							local seconds = startedAt and os.clock() - startedAt or nil
+							if seconds and seconds > 600 then
+								seconds = nil
+							end
+							pcall(hook.stolen, record, record.Info, "Halloween Dimension", seconds)
+						end
+					end
 				end
 			end
 
@@ -36369,6 +36504,12 @@ local function fn66()
 					return false
 				end
 				local uid = egg:GetAttribute("HalloweenEggUid")
+				-- Steal Webhook timer: starts when the egg is picked as target, keeps the first stamp across retries of the same egg
+				if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealStart and os.clock() - hw.StealStart < 120) then
+					pcall(function()
+						hw.StealRecord, hw.StealStart = webhookRecord(egg), os.clock()
+					end)
+				end
 				hw.Status = "Going to a zone " .. tostring(zone) .. " Halloween egg"
 				local function live()
 					return alive() and egg.Parent ~= nil and canTake(egg) and not carried()
@@ -37531,6 +37672,7 @@ local function fn66()
 					conns[#conns + 1] = bossRemote.OnClientEvent:Connect(function(info)
 						tr.BossDefeatedAt = os.clock()
 						if type(info) == "table" then
+							tr.RunSoulsEarned = (tr.RunSoulsEarned or 0) + (tonumber(info.Souls) or 0)
 							pcall(function()
 								flag6:Notify({Title = "Ghouler", Content = "+" .. tostring(info.Souls or 0) .. " Souls", Duration = 3})
 							end)
@@ -37896,6 +38038,8 @@ local function fn66()
 							break
 						end
 						trades = trades + 1
+						tr.RunTrades = (tr.RunTrades or 0) + 1
+						tr.RunSoulsTraded = (tr.RunSoulsTraded or 0) + (tonumber(shop.Cost) or 0)
 						local updated = type(reply) == "table" and (reply.SoulShop or (reply.Souls ~= nil and reply)) or nil
 						if type(updated) == "table" and updated.Souls ~= nil then
 							shop = updated
@@ -37919,6 +38063,7 @@ local function fn66()
 						sleep(0.5, alive)
 					else
 						noAnswer = 0
+						tr.RunSoulsLeft = tonumber(fresh.Souls) or tr.RunSoulsLeft
 						if shopBelowCost(fresh) then
 							emptyReads, blockedReads = emptyReads + 1, 0
 							if emptyReads >= 2 then
@@ -38360,6 +38505,61 @@ local function fn66()
 						end
 					end
 					local phase = trPhase()
+					-- Phantom Express finished webhook: armed when a ride starts, sent once back Home (after Trade Souls when it is on)
+					if trainRiding[phase] or phase == "Town" then
+						if not tr.RunArmed then
+							tr.RunArmed, tr.RunStartedAt, tr.RunSending = true, os.clock(), false
+							tr.RunSoulsEarned, tr.RunSoulsTraded, tr.RunTrades, tr.RunSoulsLeft = 0, 0, 0, nil
+							tr.RunSpectralStart = nil
+							local hook = genv.__PilatV4Webhook
+							if type(hook) == "table" and type(hook.spectralCount) == "function" then
+								local okCount, count = pcall(hook.spectralCount)
+								tr.RunSpectralStart = okCount and count or nil
+							end
+						end
+						if tr.State and tr.State.DepartureAt ~= nil then
+							tr.RunKey = tr.State.DepartureAt
+						end
+						tr.RunHomeTicks = 0
+					elseif tr.RunArmed and phase == "Home" then
+						tr.RunHomeTicks = (tr.RunHomeTicks or 0) + 1
+						if tr.RunHomeTicks >= 2 then
+							tr.RunArmed, tr.RunHomeTicks = false, 0
+							local runKey, startedAt, startSpectral = tr.RunKey, tr.RunStartedAt, tr.RunSpectralStart
+							local earned, traded, trades, left = tr.RunSoulsEarned, tr.RunSoulsTraded, tr.RunTrades, tr.RunSoulsLeft
+							task.spawn(function()
+								local tradeOn = on("TrainSouls")
+								local tradeDone = not tradeOn
+								if tradeOn then
+									-- never report before Trade Souls is finished for this ride (give up after 90s)
+									local giveUp = os.clock() + 90
+									while tr.SoulsDoneFor ~= tostring(runKey) and os.clock() < giveUp and fn2() do
+										task.wait(0.5)
+									end
+									tradeDone = tr.SoulsDoneFor == tostring(runKey)
+								end
+								task.wait(1.5)
+								if not tr.RunArmed then
+									earned, traded, trades, left = tr.RunSoulsEarned, tr.RunSoulsTraded, tr.RunTrades, tr.RunSoulsLeft
+								end
+								if left == nil and tr.State and type(tr.State.SoulShop) == "table" then
+									left = tonumber(tr.State.SoulShop.Souls)
+								end
+								local hook = genv.__PilatV4Webhook
+								if type(hook) ~= "table" or type(hook.phantom) ~= "function" then
+									return
+								end
+								local nowSpectral
+								if type(hook.spectralCount) == "function" then
+									local okCount, count = pcall(hook.spectralCount)
+									nowSpectral = okCount and count or nil
+								end
+								pcall(hook.phantom, {duration = os.clock() - (startedAt or os.clock()), soulsEarned = earned, soulsTraded = traded, trades = trades, soulsLeft = left, tradeOn = tradeOn, tradeDone = tradeDone, spectralStart = startSpectral, spectralNow = nowSpectral, rides = tr.Rides})
+							end)
+						end
+					else
+						tr.RunHomeTicks = 0
+					end
 					if not rideOn and not bossOn then
 						tr.Status = "Off"
 					elseif trainRiding[phase] then
@@ -39420,6 +39620,10 @@ local function fn66()
 
 	fn157(tbl24.webhookDisconnect, function(arg)
 		pilatV4Config.WebhookDisconnect = arg == true
+	end)
+
+	fn157(tbl24.webhookPhantom, function(arg)
+		pilatV4Config.WebhookPhantom = arg == true
 	end)
 
 	fn157(tbl24.helpFriend, function(arg)
