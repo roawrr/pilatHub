@@ -33250,12 +33250,16 @@ local function fn66()
 	-- ported from StealAnEggg: collect every sellable egg (unplaced, not in hand, rarity/value match, optional keep-mutated)
 	local function eggSellList()
 		local list = {}
-		if not pilatV4Config.AutoSellEgg then
+		local function why(text)
+			genv.__PilatV4EggSellStatus = text
 			return list
+		end
+		if not pilatV4Config.AutoSellEgg then
+			return why("Off")
 		end
 		local rarities = fn33(v23)
 		if not rarities or #rarities == 0 or table.find(rarities, "None") then
-			return list
+			return why("Tidak jalan: rarity belum dipilih")
 		end
 		local RS = game:GetService("ReplicatedStorage")
 		local okAssets, assets = pcall(function()
@@ -33263,7 +33267,7 @@ local function fn66()
 		end)
 		local directory = okAssets and assets and assets.Directory
 		if not directory then
-			return list
+			return why("Tidak jalan: data game (Assets) belum siap")
 		end
 		local eggs
 		local okState, EggState = pcall(function()
@@ -33283,7 +33287,7 @@ local function fn66()
 			eggs = data and data.EggInventory
 		end
 		if type(eggs) ~= "table" then
-			return list
+			return why("Tidak jalan: inventory egg belum terbaca")
 		end
 		local held
 		local char = localPlayer.Character
@@ -33291,29 +33295,68 @@ local function fn66()
 		if tool then
 			held = tool:GetAttribute("UID")
 		end
+		-- the egg Auto Steal is carrying right now is the only thing we step around; everything else sells immediately
+		local rt = genv.__PilatV4EggRuntime
+		local carryUid = rt and not rt.destroyed and rt.carry and rt.carry.active == true and rt.carry.uid or nil
 		local keepMutated = pilatV4Config.SellEggKeepMutated ~= false
 		local maxRate = pilatV4Config.SellEggMaxRate or 0
 		local blacklist = type(pilatV4Config.SellEggBlacklist) == "table" and pilatV4Config.SellEggBlacklist or {}
 		local blockAll = table.find(blacklist, "All") ~= nil
+		local n = {total = 0, placed = 0, held = 0, carried = 0, black = 0, mutated = 0, rate = 0, rarity = 0}
 		for uid, egg in pairs(eggs) do
-			if type(egg) == "table" and egg.Placement == nil and uid ~= held then
-				local entry = directory[egg.AssetCategory]
-				local rarityName = entry and entry.Rarity and (entry.Rarity.DisplayName or entry.Rarity._id)
-				local mutated = type(egg.Mutations) == "table" and next(egg.Mutations) ~= nil
-				local eggName = entry and (entry.DisplayName or entry._id or entry.Name)
-				if blockAll or (eggName ~= nil and table.find(blacklist, eggName) ~= nil) then
-					continue
-				end
-				local rateOk = true
-				if maxRate > 0 then
-					rateOk = rateOf({Category = egg.AssetCategory, Scale = egg.AssetScale or 1, Mutations = egg.Mutations or {}}) <= maxRate
-				end
-				if rateOk and not (keepMutated and mutated) and fn35(rarityName or "Unknown", rarities) then
-					list[#list + 1] = uid
+			if type(egg) == "table" then
+				n.total = n.total + 1
+				if egg.Placement ~= nil then
+					n.placed = n.placed + 1
+				elseif uid == held then
+					n.held = n.held + 1
+				elseif carryUid ~= nil and uid == carryUid then
+					n.carried = n.carried + 1
+				else
+					local entry = directory[egg.AssetCategory]
+					local rarityName = entry and entry.Rarity and (entry.Rarity.DisplayName or entry.Rarity._id)
+					local mutated = type(egg.Mutations) == "table" and next(egg.Mutations) ~= nil
+					local eggName = entry and (entry.DisplayName or entry._id or entry.Name)
+					if blockAll or (eggName ~= nil and table.find(blacklist, eggName) ~= nil) then
+						n.black = n.black + 1
+					else
+						local rateOk = true
+						if maxRate > 0 then
+							rateOk = rateOf({Category = egg.AssetCategory, Scale = egg.AssetScale or 1, Mutations = egg.Mutations or {}}) <= maxRate
+						end
+						if not rateOk then
+							n.rate = n.rate + 1
+						elseif keepMutated and mutated then
+							n.mutated = n.mutated + 1
+						elseif not fn35(rarityName or "Unknown", rarities) then
+							n.rarity = n.rarity + 1
+						else
+							list[#list + 1] = uid
+						end
+					end
 				end
 			end
 		end
-		return list
+		if #list > 0 then
+			return why(string.format("Siap jual %d egg", #list))
+		end
+		if n.total == 0 then
+			return why("Menunggu: tidak ada egg di inventory")
+		end
+		local parts = {}
+		local function add(count, label)
+			if count > 0 then
+				parts[#parts + 1] = count .. " " .. label
+			end
+		end
+		add(n.rarity, "rarity tidak cocok")
+		add(n.mutated, "mutated disimpan")
+		add(n.black, "blacklist")
+		add(n.rate, "di atas batas value")
+		add(n.placed, "sedang ditaruh")
+		add(n.held, "dipegang")
+		add(n.carried, "dibawa Auto Steal")
+		return why("Menunggu: tidak ada egg yang bisa dijual (" .. table.concat(parts, ", ") .. ")")
 	end
 
 	local function sellRemote()
@@ -33348,16 +33391,15 @@ local function fn66()
 		return tbl20.value
 	end
 
+	-- Auto Sell Egg runs on its own loop and is NOT part of the task ladder anymore (it only fires a sell remote, no movement),
+	-- so it never waits for / blocks other tasks. This entry is the pet auto-sell only.
 	pilatV4TaskLadder.register("auto_sell", {wants = function()
-		return pilatV4Config.AutoSell == true and tbl19.petPending == true or pilatV4Config.AutoSellEgg == true and fn77()
+		return pilatV4Config.AutoSell == true and tbl19.petPending == true
 	end, active = function()
-		return tbl19.petBusy == true or flag10 == true
+		return tbl19.petBusy == true
 	end, enabled = function()
-		return pilatV4Config.AutoSell == true or pilatV4Config.AutoSellEgg == true
+		return pilatV4Config.AutoSell == true
 	end, status = function()
-		if flag10 then
-			return "Selling eggs"
-		end
 		return tbl19.status
 	end})
 
@@ -33369,51 +33411,63 @@ local function fn66()
 
 		task.spawn(function()
 			while pilatV4Config.AutoSellEgg and fn2() do
-				if fn32() then
-					local list = eggSellList()
-					if #list > 0 then
-						flag10 = true
-						local remote = sellRemote()
-						if remote then
-							-- one packet per 50 eggs, no equipping, no movement
-							local i = 1
-							while i <= #list and pilatV4Config.AutoSellEgg and fn32() do
-								local batch = {}
-								for j = i, math.min(i + 49, #list) do
-									batch[#batch + 1] = list[j]
-								end
-								pcall(remote.FireServer, remote, {Eggs = batch, Assets = {}})
-								i = i + 50
-								if i <= #list then
-									task.wait(0.3)
-								end
+				local okL, list = pcall(eggSellList)
+				if not okL then
+					genv.__PilatV4EggSellStatus = "Error: " .. tostring(list)
+					list = {}
+				end
+				if #list > 0 then
+					flag10 = true
+					genv.__PilatV4EggSellStatus = string.format("Menjual %d egg", #list)
+					local sent = 0
+					local remote = sellRemote()
+					if remote then
+						-- one packet per 50 eggs, no equipping, no movement
+						local i = 1
+						while i <= #list and pilatV4Config.AutoSellEgg do
+							local batch = {}
+							for j = i, math.min(i + 49, #list) do
+								batch[#batch + 1] = list[j]
 							end
-						else
-							-- fallback (remote missing): the old one-by-one sell
-							local okR, Remotes = pcall(function()
-								return require(game:GetService("ReplicatedStorage").Shared.Remotes)
-							end)
-							if okR and Remotes then
-								for _, uid in ipairs(list) do
-									if not fn32() then
-										break
-									end
-									pcall(function()
-										Remotes.PetSatchel.SellPet:FireServer({uid})
-									end)
-									task.wait(0.25)
-								end
+							pcall(remote.FireServer, remote, {Eggs = batch, Assets = {}})
+							sent = sent + #batch
+							i = i + 50
+							if i <= #list then
+								task.wait(0.3)
 							end
 						end
-						task.wait(1)
-						flag10 = false
+					else
+						-- fallback (remote missing): the old one-by-one sell
+						local okR, Remotes = pcall(function()
+							return require(game:GetService("ReplicatedStorage").Shared.Remotes)
+						end)
+						if okR and Remotes then
+							for _, uid in ipairs(list) do
+								if not pilatV4Config.AutoSellEgg then
+									break
+								end
+								pcall(function()
+									Remotes.PetSatchel.SellPet:FireServer({uid})
+								end)
+								sent = sent + 1
+								task.wait(0.25)
+							end
+						else
+							genv.__PilatV4EggSellStatus = "Gagal: remote jual egg tidak ditemukan"
+						end
 					end
+					if sent > 0 then
+						genv.__PilatV4EggSellLast = string.format("%d egg dijual (%s)", sent, os.date("%H:%M:%S"))
+					end
+					task.wait(1)
+					flag10 = false
 				end
 				flag10 = false
 				task.wait(0.5)
 			end
 
 			flag10, flag9 = false, false
+			genv.__PilatV4EggSellStatus = pilatV4Config.AutoSellEgg and "Berhenti" or "Off"
 		end)
 	end
 
@@ -33857,7 +33911,10 @@ local function fn66()
 		pilatV4Config.AutoSellEgg = arg == true
 
 		if pilatV4Config.AutoSellEgg then
+			genv.__PilatV4EggSellStatus = "Memulai..."
 			tbl10.startAutoSellEggLoop()
+		else
+			genv.__PilatV4EggSellStatus = "Off"
 		end
 	end
 
@@ -34910,6 +34967,25 @@ local function fn66()
 	end)})
 
 	tbl24.sellEggValue = v46:AddInput({Flag = "sellEggValue", Title = "Sell By Value (max money/s)", Content = "Only sell eggs whose money per second is this or lower. Blank = no value limit. Supports k, m, b.", Placeholder = "e.g. 100k, 2m", Default = "", Callback = fn144(fn130)})
+	tbl24.sellEggStatus = v46:AddParagraph({Title = "Egg Sell Status", Content = "Off"})
+
+	task.spawn(function()
+		local lastText
+		while fn2() do
+			pcall(function()
+				local text = tostring(genv.__PilatV4EggSellStatus or "Off")
+				local last = genv.__PilatV4EggSellLast
+				if last then
+					text = text .. "\nTerakhir: " .. tostring(last)
+				end
+				if text ~= lastText then
+					lastText = text
+					tbl24.sellEggStatus:SetContent(text)
+				end
+			end)
+			task.wait(0.5)
+		end
+	end)
 	fn68 = tbl24.section(v34, "Pet Favorite", tbl24.gameIcon("Assets", "Directory", "Unicorn", "Icon"))
 	tbl24.autoFavorite = fn68:AddToggle({Title = "Auto Favorite", Content = "Marks every pet that matches the rule below as a favorite, so Auto Sell and Auto Fuse leave it alone.", Default = false, Callback = fn144(fn101)})
 	tbl24.favoriteRule = fn68:AddDropdown({Title = "Favorite Rule", Content = "Match pets by rarity or by species.", Options = {"Rarity", "Species"}, Default = "Rarity", Callback = fn144(fn102)})
