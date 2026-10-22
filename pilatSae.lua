@@ -892,7 +892,7 @@ local function fn30(character)
 end
 
 localPlayer.CharacterAdded:Connect(fn30)
-local pilatV4Config = {AutoSteal = false, HelpFriend = false, ForceInstant = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
+local pilatV4Config = {AutoSteal = false, HelpFriend = false, ForceInstant = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggKeepMutated = true, SellEggBlacklist = {}, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
 local EggState = require(game:GetService("ReplicatedStorage").Client.EggState)
 EggState.GetAreaEggSnapshot = EggState.ReadFieldEggs
 EggState.GetAreaEggRecord = EggState.ReadFieldEgg
@@ -32872,62 +32872,88 @@ local function fn66()
 	local flag9 = false
 	local flag10 = false
 
-	local function fn76()
+	-- ported from StealAnEggg: collect every sellable egg (unplaced, not in hand, rarity/value match, optional keep-mutated)
+	local function eggSellList()
+		local list = {}
 		if not pilatV4Config.AutoSellEgg then
-			return false
+			return list
 		end
-		local v24 = fn33(v23)
-
-		if v24 then
-			if #v24 == 0 then
-				return false
-			elseif table.find(v24, "None") then
-				return false
-			end
-		else
-			return false
+		local rarities = fn33(v23)
+		if not rarities or #rarities == 0 or table.find(rarities, "None") then
+			return list
 		end
-
-		local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
-
-		local ok2, result = pcall(function()
-			return require(ReplicatedStorage2.Shared.Save)
+		local RS = game:GetService("ReplicatedStorage")
+		local okAssets, assets = pcall(function()
+			return require(RS.Data.Assets)
 		end)
-
-		if ok2 then
-			if not result then
-				return false
-			end
-		else
-			return false
-		end
-
-		local v25 = (result.Peek or result.Get)()
-		local eggInventory = v25 and v25.EggInventory
-		if type(eggInventory) ~= "table" then
-			return false
-		end
-
-		local ok3, result2 = pcall(function()
-			return require(ReplicatedStorage2.Data.Assets)
-		end)
-
-		local directory = ok3 and result2 and result2.Directory
+		local directory = okAssets and assets and assets.Directory
 		if not directory then
-			return false
+			return list
 		end
-
-		for k, v26 in pairs(eggInventory) do
-			local flag11 = type(v26) == "table" and directory[v26.AssetCategory]
-			local displayName = flag11 and flag11.Rarity and (flag11.Rarity.DisplayName or flag11.Rarity._id)
-			local sellEggMaxRate = pilatV4Config.SellEggMaxRate or 0
-			local v27 = if sellEggMaxRate > 0 then if type(v26) == "table" then rateOf({Category = v26.AssetCategory, Scale = v26.AssetScale or 1, Mutations = v26.Mutations or {}}) <= sellEggMaxRate else true else true
-			if v26.Placement == nil and (v27 and fn35(displayName or "Unknown", v24)) then
-				return true
+		local eggs
+		local okState, EggState = pcall(function()
+			return require(RS.Client.EggState)
+		end)
+		if okState and type(EggState) == "table" and type(EggState.ReadOwnerEggs) == "function" then
+			local okRead, res = pcall(EggState.ReadOwnerEggs, localPlayer.UserId)
+			if okRead and type(res) == "table" then
+				eggs = res
 			end
 		end
+		if not eggs then
+			local okSave, Save = pcall(function()
+				return require(RS.Shared.Save)
+			end)
+			local data = okSave and Save and (Save.Peek or Save.Get) and (Save.Peek or Save.Get)()
+			eggs = data and data.EggInventory
+		end
+		if type(eggs) ~= "table" then
+			return list
+		end
+		local held
+		local char = localPlayer.Character
+		local tool = char and char:FindFirstChildWhichIsA("Tool")
+		if tool then
+			held = tool:GetAttribute("UID")
+		end
+		local keepMutated = pilatV4Config.SellEggKeepMutated ~= false
+		local maxRate = pilatV4Config.SellEggMaxRate or 0
+		local blacklist = type(pilatV4Config.SellEggBlacklist) == "table" and pilatV4Config.SellEggBlacklist or {}
+		local blockAll = table.find(blacklist, "All") ~= nil
+		for uid, egg in pairs(eggs) do
+			if type(egg) == "table" and egg.Placement == nil and uid ~= held then
+				local entry = directory[egg.AssetCategory]
+				local rarityName = entry and entry.Rarity and (entry.Rarity.DisplayName or entry.Rarity._id)
+				local mutated = type(egg.Mutations) == "table" and next(egg.Mutations) ~= nil
+				local eggName = entry and (entry.DisplayName or entry._id or entry.Name)
+				if blockAll or (eggName ~= nil and table.find(blacklist, eggName) ~= nil) then
+					continue
+				end
+				local rateOk = true
+				if maxRate > 0 then
+					rateOk = rateOf({Category = egg.AssetCategory, Scale = egg.AssetScale or 1, Mutations = egg.Mutations or {}}) <= maxRate
+				end
+				if rateOk and not (keepMutated and mutated) and fn35(rarityName or "Unknown", rarities) then
+					list[#list + 1] = uid
+				end
+			end
+		end
+		return list
+	end
 
-		return false
+	local function sellRemote()
+		local RS = game:GetService("ReplicatedStorage")
+		local packages = RS:FindFirstChild("Packages")
+		local net = packages and packages:FindFirstChild("Networking")
+		local remote = net and net:FindFirstChild("RE/PetSatchel/SellSelection")
+		if remote and remote:IsA("RemoteEvent") then
+			return remote
+		end
+		return nil
+	end
+
+	local function fn76()
+		return #eggSellList() > 0
 	end
 
 	genv.__PilatV4IsAutoSellEggBusy = function()
@@ -32967,60 +32993,47 @@ local function fn66()
 		flag9 = true
 
 		task.spawn(function()
-			local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
-			local directory = require(ReplicatedStorage2.Data.Assets).Directory
-			local EggState2 = require(ReplicatedStorage2.Client.EggState)
-			local Remotes = require(ReplicatedStorage2.Shared.Remotes)
-			local Save = require(ReplicatedStorage2.Shared.Save)
-
 			while pilatV4Config.AutoSellEgg and fn2() do
-				local v24 = fn33(v23)
-				local v25 = (Save.Peek or Save.Get)()
-				local eggInventory = v25 and v25.EggInventory
-
-				if v24 and type(eggInventory) == "table" and fn32() then
-					for k, v26 in pairs(eggInventory) do
-						if pilatV4Config.AutoSellEgg then
-							if not fn32() then
-								break
+				if fn32() then
+					local list = eggSellList()
+					if #list > 0 then
+						flag10 = true
+						local remote = sellRemote()
+						if remote then
+							-- one packet per 50 eggs, no equipping, no movement
+							local i = 1
+							while i <= #list and pilatV4Config.AutoSellEgg and fn32() do
+								local batch = {}
+								for j = i, math.min(i + 49, #list) do
+									batch[#batch + 1] = list[j]
+								end
+								pcall(remote.FireServer, remote, {Eggs = batch, Assets = {}})
+								i = i + 50
+								if i <= #list then
+									task.wait(0.3)
+								end
 							end
 						else
-							break
-						end
-
-						local flag11 = type(v26) == "table" and directory[v26.AssetCategory]
-						local displayName = flag11 and flag11.Rarity and (flag11.Rarity.DisplayName or flag11.Rarity._id)
-						local sellEggMaxRate = pilatV4Config.SellEggMaxRate or 0
-						local v27 = if sellEggMaxRate > 0 then if type(v26) == "table" then rateOf({Category = v26.AssetCategory, Scale = v26.AssetScale or 1, Mutations = v26.Mutations or {}}) <= sellEggMaxRate else true else true
-
-						if v26.Placement == nil and (v27 and fn35(displayName or "Unknown", v24)) then
-							if not fn32() then
-								break
-							end
-							flag10 = true
-
-							if genv.__PilatV4TreadmillManager and genv.__PilatV4TreadmillManager.activeTreadmill ~= nil then
-								genv.__PilatV4TreadmillManager:_cancelIdle(true)
-								task.wait(0.25)
-							end
-
-							if EggState2.WearEggTool(k) then
-								task.wait(0.2)
-								if not fn32() then
-									break
-								end
-								v26 = (Save.Peek or Save.Get)()
-								local eggInventory2 = v26 and v26.EggInventory and v26.EggInventory[k]
-
-								if eggInventory2 and eggInventory2.Placement == nil then
-									Remotes.PetSatchel.SellPet:FireServer({k})
+							-- fallback (remote missing): the old one-by-one sell
+							local okR, Remotes = pcall(function()
+								return require(game:GetService("ReplicatedStorage").Shared.Remotes)
+							end)
+							if okR and Remotes then
+								for _, uid in ipairs(list) do
+									if not fn32() then
+										break
+									end
+									pcall(function()
+										Remotes.PetSatchel.SellPet:FireServer({uid})
+									end)
 									task.wait(0.25)
 								end
 							end
 						end
+						task.wait(1)
+						flag10 = false
 					end
 				end
-
 				flag10 = false
 				task.wait(0.5)
 			end
@@ -34499,6 +34512,14 @@ local function fn66()
 		pilatV4Config.SellEggRarities = fn67(arg)
 	end)})
 
+	tbl24.sellEggKeepMutated = v46:AddToggle({Title = "Keep Mutated Eggs", Content = "Never sell eggs that carry a mutation, even if the rarity matches.", Default = true, Callback = fn144(function(arg)
+		pilatV4Config.SellEggKeepMutated = arg == true
+	end)})
+
+	tbl24.sellEggBlacklist = v46:AddDropdown({Title = "Blacklist Sell Eggs", Content = "These eggs are never sold, whatever the rarity filter says.", Options = fn73, Multi = true, Default = {}, Callback = fn144(function(arg)
+		pilatV4Config.SellEggBlacklist = fn67(arg)
+	end)})
+
 	tbl24.sellEggValue = v46:AddInput({Flag = "sellEggValue", Title = "Sell By Value (max money/s)", Content = "Only sell eggs whose money per second is this or lower. Blank = no value limit. Supports k, m, b.", Placeholder = "e.g. 100k, 2m", Default = "", Callback = fn144(fn130)})
 	fn68 = tbl24.section(v34, "Pet Favorite", tbl24.gameIcon("Assets", "Directory", "Unicorn", "Icon"))
 	tbl24.autoFavorite = fn68:AddToggle({Title = "Auto Favorite", Content = "Marks every pet that matches the rule below as a favorite, so Auto Sell and Auto Fuse leave it alone.", Default = false, Callback = fn144(fn101)})
@@ -35178,6 +35199,19 @@ local function fn66()
 				return not mgr:isEngaged()
 			end
 
+			-- Phantom Express in progress (town stay, boarded, ride, return): nothing that moves the character (fishing) may run
+			local TRAIN_BUSY_PHASES = {Town = true, Boarded = true, Departing = true, Returning = true, Respawning = true}
+			local function trainBusy()
+				local phase = attr("TrainEventPhase")
+				if phase == nil and tr.State and os.clock() - tr.At < 10 then
+					phase = tr.State.Phase
+				end
+				if TRAIN_BUSY_PHASES[phase] == true then
+					return true
+				end
+				return hw.Owner == "train" or hw.Owner == "ghouler"
+			end
+
 			-- a task ranked above Halloween in Task Order that is running right now (egg delivery, race, boss fight...), or nil
 			local higherAt, higherValue = {}, {}
 			local function higherTask(selfId)
@@ -35188,6 +35222,10 @@ local function fn66()
 				higherAt[selfId] = os.clock()
 				local ladder = genv.__PilatV4TaskLadder
 				local ok, found = pcall(function()
+					-- FIX: Phantom Express always beats fishing, whatever the Task Order says (fishing used to tween out of the train)
+					if selfId == "fishing" and trainBusy() then
+						return "halloween"
+					end
 					if ladder.bossFighting() then
 						return "mech_boss"
 					end
@@ -35200,7 +35238,12 @@ local function fn66()
 						end
 						if id == "halloween" and selfId == "fishing" then
 							-- Halloween ranked above fishing: fishing steps aside as soon as Halloween has a real job
-							if type(hw.NextTask) == "function" and hw.NextTask() ~= nil then
+							if (type(hw.NextTask) == "function" and hw.NextTask() ~= nil) or ladder.wants(id) then
+								return id
+							end
+						elseif selfId == "fishing" then
+							-- fishing: ANY task ranked above it that is running or wants the character stops the fishing first
+							if ladder.active(id) or ladder.wants(id) then
 								return id
 							end
 						elseif ladder.active(id) then
@@ -36666,7 +36709,229 @@ local function fn66()
 				return nil
 			end
 
+			-- ported from StealAnEggg: search a fan of directions (maxStep * 10 degrees) for water in cast range
+			local function findWater(pos, baseAngle, maxStep, avoid)
+				for i = 0, maxStep do
+					local angle = baseAngle + (i % 2 == 0 and 1 or -1) * math.ceil(i / 2) * math.pi / 18
+					local found = waterAt(pos + Vector3.new(math.cos(angle), 0, math.sin(angle)) * (10 + 32 * hw.Charge))
+					if found and not (avoid and (found - avoid.Position).Magnitude < 12) then
+						return found
+					end
+				end
+				return nil
+			end
+
+			-- ---------------- saved fishing spots (ported from StealAnEggg: Default / Spot 1-3)
+			hw.SpotName = hw.SpotName or "Default"
+			hw.Spots = hw.Spots or {}
+			local spotFile = "PilatV4_FishSpots_" .. tostring(localPlayer.UserId) .. ".json"
+			pcall(function()
+				if type(isfile) == "function" and type(readfile) == "function" and isfile(spotFile) then
+					local data = game:GetService("HttpService"):JSONDecode(readfile(spotFile))
+					if type(data) == "table" then
+						hw.Spots = data
+					end
+				end
+			end)
+			local function saveSpots()
+				pcall(function()
+					if type(writefile) == "function" then
+						writefile(spotFile, game:GetService("HttpService"):JSONEncode(hw.Spots))
+					end
+				end)
+			end
+			local function mySpot()
+				local n = tostring(hw.SpotName or ""):match("%d")
+				local d = n and hw.Spots[n]
+				if type(d) == "table" and tonumber(d[1]) and tonumber(d[2]) and tonumber(d[3]) then
+					return {p = Vector3.new(d[1], d[2], d[3]), dim = d[4] == 1, k = n .. "|" .. table.concat(d, ",")}
+				end
+				return nil
+			end
+			hw.MySpot = mySpot
+			hw.SaveSpotHere = function()
+				local root = rootPart()
+				if not root then
+					return false, "No character"
+				end
+				if not findWater(root.Position, 0, 35) then
+					return false, "No water in reach here"
+				end
+				local n = tostring(hw.SpotName or ""):match("%d") or "1"
+				hw.Spots[n] = {math.floor(root.Position.X), math.floor(root.Position.Y), math.floor(root.Position.Z), inDim() and 1 or 0}
+				hw.SpotCast = nil
+				saveSpots()
+				return true, n
+			end
+			-- a saved spot outside the dimension is fished from the main world (no portal needed)
+			hw.FishInField = function()
+				local spot = mySpot()
+				return spot ~= nil and not spot.dim
+			end
+
+			-- keep the same cast water for a saved spot (so every cast lands on the same ripple), pin the character to the ground
+			local function pinTo(root, water)
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.FilterDescendantsInstances = {localPlayer.Character}
+				local hit = Workspace:Raycast(root.Position + Vector3.new(0, 4, 0), Vector3.new(0, -20, 0), params)
+				local y = hit and hit.Position.Y + 3 or root.Position.Y
+				local pos = Vector3.new(root.Position.X, y, root.Position.Z)
+				return CFrame.lookAt(pos, Vector3.new(water.X, y, water.Z))
+			end
+
+			-- ---------------- fishing history (ported from StealAnEggg): catches, candy, eggs, mutations, pets
+			hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}}
+			local logFile = "PilatV4_FishLog_" .. tostring(localPlayer.UserId) .. ".json"
+			pcall(function()
+				if type(isfile) == "function" and type(readfile) == "function" and isfile(logFile) then
+					local data = game:GetService("HttpService"):JSONDecode(readfile(logFile))
+					if type(data) == "table" then
+						hw.Log.n = tonumber(data.n) or 0
+						hw.Log.candy = tonumber(data.candy) or 0
+						for _, key in ipairs({"eggs", "muts", "pets", "last"}) do
+							if type(data[key]) == "table" then
+								hw.Log[key] = data[key]
+							end
+						end
+					end
+				end
+			end)
+			local function saveLog()
+				pcall(function()
+					if type(writefile) == "function" then
+						writefile(logFile, game:GetService("HttpService"):JSONEncode(hw.Log))
+					end
+				end)
+				if type(hw.OnLog) == "function" then
+					pcall(hw.OnLog)
+				end
+			end
+			hw.RecordFish = function(result)
+				local log = hw.Log
+				local name, amount = tostring(result.DisplayName or "?"), tonumber(result.Amount) or 1
+				log.n = log.n + 1
+				if name == "Candy Corn" then
+					log.candy = log.candy + amount
+				elseif name:find("Egg$") then
+					log.eggs[name] = (log.eggs[name] or 0) + amount
+				else
+					local bucket = name:find("Mutation") and log.muts or log.pets
+					bucket[name] = (bucket[name] or 0) + amount
+				end
+				table.insert(log.last, 1, name .. " x" .. tostring(amount))
+				while #log.last > 8 do
+					table.remove(log.last)
+				end
+				saveLog()
+			end
+			hw.ResetLog = function()
+				hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}}
+				saveLog()
+			end
+			local function topOf(bucket, limit)
+				local list = {}
+				for name, count in pairs(bucket) do
+					list[#list + 1] = {name = name, count = tonumber(count) or 0}
+				end
+				table.sort(list, function(a, b)
+					if a.count ~= b.count then
+						return a.count > b.count
+					end
+					return a.name < b.name
+				end)
+				local out = {}
+				for i = 1, math.min(limit, #list) do
+					out[#out + 1] = list[i].name .. " x" .. tostring(list[i].count)
+				end
+				return #out > 0 and table.concat(out, ", ") or "-"
+			end
+			hw.LogText = function()
+				local log = hw.Log
+				local function total(bucket)
+					local sum = 0
+					for _, count in pairs(bucket) do
+						sum = sum + (tonumber(count) or 0)
+					end
+					return sum
+				end
+				return string.format("Catches %d  \194\183  Candy Corn %d  \194\183  Eggs %d  \194\183  Mutations %d  \194\183  Pets %d\nTop eggs: %s\nTop mutations: %s\nTop pets: %s\nLast: %s",
+					log.n, log.candy, total(log.eggs), total(log.muts), total(log.pets), topOf(log.eggs, 5), topOf(log.muts, 5), topOf(log.pets, 5),
+					#log.last > 0 and table.concat(log.last, ", ") or "-")
+			end
+
+			-- ---------------- farm monsters while fishing: reel in a line that was left out while we fought
+			local function cancelPend()
+				local pend = hw.Pend
+				hw.Pend = nil
+				if pend then
+					fire("RE/Fishing/Cancel", pend.id)
+				end
+			end
+			hw.CancelPend = cancelPend
+
+			local function reelPending(alive)
+				local pend = hw.Pend
+				if not pend then
+					return false
+				end
+				if os.clock() < pend.at then
+					hw.Status = "Cast done, farming monsters until the bite"
+					sleep(math.min(pend.at - os.clock(), 0.5), alive)
+					return true
+				end
+				hw.Pend = nil
+				local rod = rodTool()
+				if not rod then
+					fire("RE/Fishing/Cancel", pend.id)
+					return false
+				end
+				local char = localPlayer.Character
+				local previous = char and char:FindFirstChildOfClass("Tool")
+				equip(rod)
+				hw.Status = "Reeling in"
+				sleep(0.35, alive)
+				local sinceBite = os.clock() - pend.bite
+				local _, success, result = invoke("RF/Fishing/Reel", pend.id, "Caught", math.ceil((0.7 + 0.3 * sinceBite) / 0.075) + 2)
+				if success and type(result) == "table" then
+					hw.Fish = hw.Fish + 1
+					hw.RecordFish(result)
+					hw.Status = "Caught " .. tostring(result.DisplayName) .. " x" .. tostring(result.Amount)
+				else
+					hw.Status = "Fishing: the fish got away"
+				end
+				fire("RE/Fishing/Cancel", pend.id)
+				hw.FishAt = os.clock()
+				if previous and previous ~= rod and previous.Parent then
+					equip(previous)
+				end
+				return true
+			end
+
+			local function monsterAvailable()
+				local root, safe = rootPart(), zonePart("SafeZone")
+				for _, monster in ipairs(CollectionService:GetTagged("HalloweenMonster")) do
+					local pos = monster:IsDescendantOf(Workspace) and monster:GetAttribute("KilledBy") == nil and (next(hw.MonsterKinds) == nil or hw.MonsterKinds[monster.Name]) and posOf(monster)
+					if pos and not (safe and inside(safe, pos)) then
+						return true
+					end
+				end
+				return false
+			end
+
 			local function fishOnce(alive)
+				-- FIX: never fish (and never tween to the fishing spot) while the Phantom Express is running or a higher task wants the character
+				if trainBusy() then
+					hw.Status = "Fishing paused: Phantom Express in progress"
+					sleep(0.5, alive)
+					return false
+				end
+				local higher = higherTask("fishing")
+				if higher ~= nil and not carried() then
+					hw.Status = "Fishing paused: " .. tostring(pilatV4TaskLadder.TITLES[higher] or higher) .. " first"
+					sleep(0.5, alive)
+					return false
+				end
 				if questStage() == 3 then
 					hw.Status = "Ghost Dog quest blocks fishing, casting at the ripples"
 					return dogStep(alive)
@@ -36685,26 +36950,34 @@ local function fn66()
 				if not root then
 					return false
 				end
+				local saved = mySpot()
 				local spot = marker("ReturnSpot")
-				if spot and (flat(root.Position - spot.Position).Magnitude > 8 or spot.Position.Y + 1 > root.Position.Y) then
-					hw.Status = "Going to the fishing spot"
-					return flyTo(spot.Position + Vector3.new(0, 3, 0), alive, 300)
-				end
-				local castTarget, fisherman = marker("CastTarget"), Workspace:FindFirstChild("GhostFisherman")
-				local look = fisherman and fisherman:IsA("Model") and fisherman:GetPivot().LookVector or spot and spot.CFrame.LookVector or Vector3.new(0, 0, -1)
-				local base, water = math.atan2(look.Z, look.X), nil
-				for i = 0, 12 do
-					local angle = base + (i % 2 == 0 and 1 or -1) * math.ceil(i / 2) * math.pi / 18
-					local found = waterAt(root.Position + Vector3.new(math.cos(angle), 0, math.sin(angle)) * (10 + 32 * hw.Charge))
-					if found and not (castTarget and (found - castTarget.Position).Magnitude < 12) then
-						water = found
-						break
+				local goal = saved and saved.p or spot and spot.Position
+				if goal and (flat(root.Position - goal).Magnitude > 8 or (not saved and goal.Y + 1 > root.Position.Y)) then
+					if trainBusy() or higherTask("fishing") ~= nil then
+						return false
 					end
+					hw.Status = saved and "Going back to your fishing spot" or "Going to the fishing spot"
+					hw.SpotCast = nil
+					return flyTo(goal + Vector3.new(0, 3, 0), alive, 300)
+				end
+				local castTarget, fisherman = (not saved) and marker("CastTarget") or nil, Workspace:FindFirstChild("GhostFisherman")
+				local look = fisherman and fisherman:IsA("Model") and fisherman:GetPivot().LookVector or spot and spot.CFrame.LookVector or Vector3.new(0, 0, -1)
+				local water = saved and hw.SpotCast and hw.SpotCast[1] == saved.k and hw.SpotCast[2] or nil
+				if not water then
+					water = findWater(root.Position, math.atan2(look.Z, look.X), saved and 35 or 12, castTarget)
 				end
 				if not water then
-					hw.Status = "Looking for water to fish"
-					sleep(1, alive)
+					hw.Status = saved and "No water in reach here, stand closer to the water" or "Looking for water to fish"
+					sleep(saved and 3 or 1, alive)
 					return true
+				end
+				if saved then
+					hw.SpotCast = {saved.k, water}
+				end
+				local pin = pinTo(root, water)
+				if (root.Position - pin.Position).Magnitude > 1.5 then
+					tp(pin)
 				end
 				hw.Status = "Casting (" .. tostring(hw.LuckName) .. ")"
 				equip(rod)
@@ -36713,10 +36986,18 @@ local function fn66()
 				hw.FishAt = os.clock() + 1.2
 				if not data then
 					hw.FishAt = os.clock() + (tostring(reason):lower():find("closed") and 30 or 3)
+					hw.SpotCast = nil
 					return true
 				end
 				hw.Status = "Waiting for a bite"
 				local wait = tonumber(data.Wait) or 3
+				-- Farm Monsters While Fishing: leave the line out, fight, and reel in when the bite comes (hw.Pend)
+				if on("HwFishMon") and on("HwMonsters") and data.Mode ~= "GhostFish" and data.Mode ~= "Nothing" and data.Mode ~= "Hint" and data.Mode ~= "Quest" then
+					hw.Pend = {id = data.Id, at = os.clock() + wait + 0.9, bite = os.clock() + wait}
+					hw.Status = "Cast done, farming monsters until the bite"
+					hw.FishAt = os.clock()
+					return true
+				end
 				if data.Mode == "GhostFish" then
 					ghostFish(data, alive)
 				elseif data.Mode == "Nothing" or data.Mode == "Hint" or data.Mode == "Quest" then
@@ -36729,6 +37010,7 @@ local function fn66()
 					local _, success, result = invoke("RF/Fishing/Reel", data.Id, "Caught", 16)
 					if success and type(result) == "table" then
 						hw.Fish = hw.Fish + 1
+						hw.RecordFish(result)
 						hw.Status = "Caught " .. tostring(result.DisplayName) .. " x" .. tostring(result.Amount)
 					end
 					fire("RE/Fishing/Cancel", data.Id)
@@ -36774,8 +37056,22 @@ local function fn66()
 			end
 
 			local function pickJob()
+				if hw.Pend then
+					-- a line is out (Farm Monsters While Fishing): drop it when it can no longer be used
+					if not (on("HwFishing") and on("HwFishMon") and on("HwMonsters")) or trainBusy() or os.clock() > hw.Pend.at + 12 then
+						cancelPend()
+					elseif os.clock() >= hw.Pend.at then
+						return "reel"
+					end
+				end
 				local base = nextTask()
-				if on("HwFishing") and (base == nil or fishFirst()) then
+				if hw.Pend then
+					if base == "monsters" and not monsterAvailable() then
+						return "reel"
+					end
+					return base or "reel"
+				end
+				if on("HwFishing") and not trainBusy() and (base == nil or fishFirst()) then
 					return "fishing"
 				end
 				return base
@@ -36787,6 +37083,7 @@ local function fn66()
 				eggs = {key = function() return on("HwEggs") end, run = stealOne},
 				monsters = {key = function() return on("HwMonsters") and not monsterWaiting() end, run = fightMonster},
 				fishing = {key = function() return on("HwFishing") end, run = fishOnce},
+				reel = {key = function() return on("HwFishing") end, run = reelPending},
 			}
 
 			task.spawn(function()
@@ -36807,29 +37104,43 @@ local function fn66()
 						if not job then
 							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or ("Waiting for something to do" .. ((on("HwEggs") and hw.EggDiag) and (" | " .. hw.EggDiag) or ""))
 							idleSince = idleSince or os.clock()
-							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and os.clock() - idleSince > 6 and claim("field") then
+							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and not trainBusy() and os.clock() - idleSince > 6 and claim("field") then
 								local alive = makeAlive(function() return not pickJob() end)
 								pcall(leaveDim, alive)
 								release("field")
 							end
-						elseif higherTask(job == "fishing" and "fishing" or nil) ~= nil and not carried() then
+						elseif trainBusy() and not carried() then
+							-- Phantom Express running: no field job (eggs / monsters / dog / pumpkin / fishing) may move the character
+							idleSince = nil
+							hw.Status = "Yielding to Halloween / Phantom Express"
+						elseif higherTask((job == "fishing" or job == "reel") and "fishing" or nil) ~= nil and not carried() then
 							-- a task ranked above Halloween is running: wait for it instead of fighting over the character
 							idleSince = nil
-							hw.Status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[higherTask(job == "fishing" and "fishing" or nil)] or higherTask(job == "fishing" and "fishing" or nil))
+							hw.Status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[higherTask((job == "fishing" or job == "reel") and "fishing" or nil)] or higherTask((job == "fishing" or job == "reel") and "fishing" or nil))
 						elseif claim("field") then
 							idleSince = nil
 							hw.Job = job
 							local runner = runners[job]
 							local alive = makeAlive(function()
-								return runner.key() and hw.Owner == "field" and (carried() or higherTask(job == "fishing" and "fishing" or nil) == nil)
+								return runner.key() and hw.Owner == "field" and (carried() or (not trainBusy() and higherTask((job == "fishing" or job == "reel") and "fishing" or nil) == nil)) and not (job == "monsters" and hw.Pend ~= nil and os.clock() >= hw.Pend.at)
 							end)
 							local ok2, err = pcall(function()
 								leaveTreadmill(alive)
 								if carried() and inDim() and hw.CarryUid then
 									deliver(alive)
 								end
-								if not enterDim(alive) then
+								if job == "reel" then
+									-- reeling in a line that is already out: never move the character for it
+								elseif job == "fishing" and hw.FishInField() then
+									-- saved spot lives in the main world: fish there, no portal
+									if inDim() and not carried() then
+										pcall(leaveDim, alive)
+									end
+								elseif not enterDim(alive) then
 									sleep(2, alive)
+									return
+								end
+								if job == "fishing" and trainBusy() then
 									return
 								end
 								if runner.run(alive) then
@@ -37824,7 +38135,7 @@ local function fn66()
 						local value = false
 						if fn2() then
 							local phase = trPhase()
-							if hw.Owner ~= nil and hw.Job ~= "fishing" then
+							if hw.Owner ~= nil and (hw.Job ~= "fishing" and hw.Job ~= "reel") then
 								value = true
 							elseif on("TrainRide") and (phase == "Town" or trainRiding[phase] == true) then
 								value = true
@@ -37839,7 +38150,7 @@ local function fn66()
 						wantValue = value
 						return value
 					end, active = function()
-						return hw.Owner ~= nil and hw.Job ~= "fishing"
+						return hw.Owner ~= nil and (hw.Job ~= "fishing" and hw.Job ~= "reel")
 					end, enabled = function()
 						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwPumpkin", true) or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
 					end, status = function()
@@ -37850,9 +38161,9 @@ local function fn66()
 					end})
 
 					ladder.register("fishing", {wants = function()
-						return fn2() and on("HwFishing") == true
+						return fn2() and on("HwFishing") == true and not trainBusy()
 					end, active = function()
-						return hw.Owner ~= nil and hw.Job == "fishing"
+						return hw.Owner ~= nil and (hw.Job == "fishing" or hw.Job == "reel")
 					end, enabled = function()
 						return on("HwFishing")
 					end, status = function()
@@ -37983,9 +38294,30 @@ local function fn66()
 			hwSection:AddSubSection("Ghost Dog Quest & Fishing")
 			toggle("Auto Ghost Dog Quest", "Plays the whole Ghost Dog quest: the dog, the 4 memories, the fisherman and the ghost fish.", "HwDog", false)
 			toggle("Auto Fishing", "Fishes in the Halloween Dimension. Needs the rod from the Ghost Dog quest. Runs as its own task (Task Order > Halloween Fishing, default just above the Treadmill).", "HwFishing", false)
+			hwSection:AddDropdown({Flag = "Halloween_FishSpot", Title = "Fishing Spot", Content = "Default = the fisherman's spot in the dimension. Spot 1-3 = a place you saved with the button below (works in the main world too).", Options = {"Default", "Spot 1", "Spot 2", "Spot 3"}, Multi = false, Default = "Default", Callback = fn144(function(arg)
+				hw.SpotName = tostring(arg or "Default")
+				hw.SpotCast = nil
+			end)})
+			hwSection:AddButton({Title = "Save Fishing Spot Here", Content = "Stand next to the water first. Saves your position into the Fishing Spot picked above.", Callback = fn144(function()
+				local ok2, info = hw.SaveSpotHere()
+				pcall(function()
+					flag6:Notify({Title = "Fishing", Content = ok2 and ("Spot " .. tostring(info) .. " saved") or tostring(info), Duration = 3})
+				end)
+			end)})
 			hwSection:AddDropdown({Flag = "Halloween_CastLuck", Title = "Cast Luck", Content = "Perfect cast takes longest to charge, x1.0 is the fastest.", Options = {"x1.5 Perfect", "x1.2", "x1.1", "x1.0 Fastest"}, Multi = false, Default = "x1.5 Perfect", Callback = fn144(function(arg)
 				hw.Charge = ({["x1.2"] = 1, ["x1.1"] = 0.5, ["x1.0 Fastest"] = 0.02})[arg] or 0.875
 				hw.LuckName = arg
+			end)})
+
+			toggle("Farm Monsters While Fishing", "Casts, then fights monsters while the line is out and reels in when the fish bites. Needs Auto Monsters and Auto Fishing both on.", "HwFishMon", false)
+			local fishLogPara = hwSection:AddParagraph({Title = "Fishing History", Content = hw.LogText()})
+			hw.OnLog = function()
+				pcall(function()
+					fishLogPara:SetContent(hw.LogText())
+				end)
+			end
+			hwSection:AddButton({Title = "Reset Fishing History", Content = "Clears the saved catch log.", Callback = fn144(function()
+				hw.ResetLog()
 			end)})
 
 			hwSection:AddSubSection("Phantom Express")
@@ -38662,7 +38994,13 @@ local function fn66()
 	end)
 
 	fn157(tbl24.sellPetValue, fn129)
+	fn157(tbl24.sellEggBlacklist, function(arg)
+		pilatV4Config.SellEggBlacklist = fn67(arg)
+	end)
 	fn157(tbl24.sellEggValue, fn130)
+	fn157(tbl24.sellEggKeepMutated, function(arg)
+		pilatV4Config.SellEggKeepMutated = arg == true
+	end)
 	fn157(tbl24.godMode, fn80)
 	fn157(tbl24.antiAfk, fn141)
 	fn157(tbl24.autoReconnect, fn142)
