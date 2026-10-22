@@ -33258,8 +33258,10 @@ local function fn66()
 			return why("Off")
 		end
 		local rarities = fn33(v23)
-		if not rarities or #rarities == 0 or table.find(rarities, "None") then
-			return why("Tidak jalan: rarity belum dipilih")
+		-- rarity is optional when a value limit is set: no rarity picked + limit > 0 = value-only mode (every rarity is eligible)
+		local noRarity = not rarities or #rarities == 0 or table.find(rarities, "None") ~= nil
+		if noRarity and (tonumber(pilatV4Config.SellEggMaxRate) or 0) <= 0 then
+			return why("Tidak jalan: pilih rarity atau isi batas value")
 		end
 		local RS = game:GetService("ReplicatedStorage")
 		local okAssets, assets = pcall(function()
@@ -33357,7 +33359,7 @@ local function fn66()
 							-- above the value limit (or value unreadable): kept
 						elseif keepMutated and mutated then
 							n.mutated = n.mutated + 1
-						elseif not fn35(rarityName or "Unknown", rarities) then
+						elseif not noRarity and not fn35(rarityName or "Unknown", rarities) then
 							n.rarity = n.rarity + 1
 						else
 							list[#list + 1] = uid
@@ -33366,7 +33368,7 @@ local function fn66()
 				end
 			end
 		end
-		local limitText = maxRate > 0 and (" - batas value <= " .. fmt(maxRate) .. "/s") or ""
+		local limitText = maxRate > 0 and (" - batas value <= " .. fmt(maxRate) .. "/s" .. (noRarity and ", semua rarity" or "")) or ""
 		if #list > 0 then
 			return why(string.format("Siap jual %d egg%s", #list, limitText))
 		end
