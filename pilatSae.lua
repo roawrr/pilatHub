@@ -15334,7 +15334,7 @@ genv.__PilatV4Webhook = (function()
 	local HttpService = game:GetService("HttpService")
 	local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
 	local localPlayer2 = game:GetService("Players").LocalPlayer
-	local request_, tbl12, tbl13, flag5, tbl14, str3, flag6, AssetEarnings, EggRecords = http_request or request or http and http.request or syn and syn.request or fluxus and fluxus.request, {}, {}, false, {}, "96240498384290"
+	local request_, tbl12, tbl13, flag5, tbl14, str3, flag6, AssetEarnings, EggRecords = http_request or request or http and http.request or syn and syn.request or fluxus and fluxus.request, {}, {}, false, {}, "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png"
 
 	pcall(function()
 		AssetEarnings = require(ReplicatedStorage2.Shared.Util.AssetEarnings)
@@ -15345,6 +15345,9 @@ genv.__PilatV4Webhook = (function()
 	end)
 
 	local function fn62(arg)
+		if type(arg) == "string" and arg:find("^https?://") then
+			return arg
+		end
 		local match = tostring(arg or ""):match("%d+")
 		if not match then
 			return nil
@@ -26695,7 +26698,6 @@ local function fn65()
 	local Save = require(ReplicatedStorage.Shared.Save)
 	local tbl14 = {strokeCol = Color3.fromRGB(36, 36, 42), accent = Color3.fromRGB(26, 147, 250), accentA = Color3.fromRGB(19, 96, 250), accentB = Color3.fromRGB(33, 198, 250), surface = Color3.fromRGB(22, 22, 27), surfaceHi = Color3.fromRGB(28, 28, 34), text = Color3.fromRGB(235, 236, 245), btnText = Color3.fromRGB(186, 184, 198), muted = Color3.fromRGB(156, 154, 170), shadow = Color3.fromRGB(4, 4, 8), obsTop = Color3.fromRGB(18, 18, 24), obsMid = Color3.fromRGB(12, 12, 16), obsLow = Color3.fromRGB(10, 14, 26), btnBg = Color3.fromRGB(30, 30, 36), btnHover = Color3.fromRGB(44, 44, 52), inputBg = Color3.fromRGB(14, 14, 18), switchOff = Color3.fromRGB(42, 42, 48), good = Color3.fromRGB(163, 230, 53)}
 	local v21 = tbl14
-	local image = "rbxassetid://96240498384290"
 	local text = "Pilat Hub"
 
 	local function fn67()
@@ -29875,18 +29877,10 @@ local function fn65()
 		uiStroke.Color = tbl14.strokeCol
 		uiStroke.Thickness = 1
 		uiStroke.Transparency = 0.72
-		local imageLabel2 = Instance.new("ImageLabel")
-		imageLabel2.AnchorPoint = Vector2.new(0, 0.5)
-		imageLabel2.BackgroundTransparency = 1
-		imageLabel2.Image = image
-		imageLabel2.Position = UDim2.fromOffset(12, 22)
-		imageLabel2.ScaleType = Enum.ScaleType.Fit
-		imageLabel2.Size = UDim2.fromOffset(20, 20)
-		imageLabel2.Parent = frame3
 		local frame4 = Instance.new("Frame")
 		frame4.BackgroundTransparency = 1
-		frame4.Position = UDim2.fromOffset(40, 10)
-		frame4.Size = UDim2.new(1, -86, 0, 24)
+		frame4.Position = UDim2.fromOffset(12, 10)
+		frame4.Size = UDim2.new(1, -58, 0, 24)
 		frame4.Parent = frame3
 		local uiListLayout = Instance.new("UIListLayout", frame4)
 		uiListLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -31337,9 +31331,8 @@ do
 		end
 
 		color2 = fn70(34)
-		fn67(fn66("ImageLabel", {Size = UDim2.new(0, 34, 0, 34), BackgroundColor3 = color4, BorderSizePixel = 0, Image = "rbxassetid://96240498384290", ScaleType = Enum.ScaleType.Fit}, color2), 9)
-		fn71(color2, {Position = UDim2.new(0, 44, 0, 0), Size = UDim2.new(1, -80, 0, 18), Text = "Rare Egg Hop", Font = Enum.Font.BuilderSansBold, TextSize = 14})
-		fn71(color2, {Position = UDim2.new(0, 44, 0, 18), Size = UDim2.new(1, -80, 0, 16), Text = "Find Divine, Eternal and Secret across servers", TextSize = 11, TextColor3 = color8, Font = Enum.Font.BuilderSans})
+		fn71(color2, {Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(1, -36, 0, 18), Text = "Rare Egg Hop", Font = Enum.Font.BuilderSansBold, TextSize = 14})
+		fn71(color2, {Position = UDim2.new(0, 0, 0, 18), Size = UDim2.new(1, -36, 0, 16), Text = "Find Divine, Eternal and Secret across servers", TextSize = 11, TextColor3 = color8, Font = Enum.Font.BuilderSans})
 		local TextButton = fn66("TextButton", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 2), Size = UDim2.new(0, 28, 0, 28), BackgroundColor3 = color3, BorderSizePixel = 0, Text = "X", Font = Enum.Font.BuilderSansBold, TextSize = 12, TextColor3 = color8, AutoButtonColor = false}, color2)
 		fn67(TextButton, 8)
 
