@@ -11752,8 +11752,12 @@ local v8 = (function()
 
 		local stealSeconds
 		local stealTimer = arg._stealTimer
-		if type(stealTimer) == "table" and os.clock() - stealTimer.at < 600 then
-			stealSeconds = os.clock() - stealTimer.at
+		if type(stealTimer) == "table" then
+			-- counted from the moment the egg was first carried (set by the carry watcher); falls back to target pick
+			local from = stealTimer.carriedAt or stealTimer.at
+			if os.clock() - from < 600 then
+				stealSeconds = os.clock() - from
+			end
 		end
 
 		task.delay(1.5, function()
@@ -35427,7 +35431,7 @@ local function fn66()
 			local CollectionService = game:GetService("CollectionService")
 			local cfg = pilatV4Config
 			local rt = hwRuntime
-			local hw = {Bad = {}, Known = {}, Names = {}, Rarities = {}, MinValue = 0, Step = 40, MonsterKinds = {}, MonsterOrder = "Closest", MonsterSpeed = 300, Weapons = {}, RegrabSettle = 0.8, PumpkinSpeed = 300, Charge = 0.875, LuckName = "x1.5 Perfect", FishAt = 0, DogAt = 0, Eggs = 0, Kills = 0, Fish = 0, Status = "Off"}
+			local hw = {Bad = {}, Known = {}, Names = {}, Rarities = {}, MinValue = 0, Step = 40, MonsterKinds = {}, MonsterOrder = "Closest", MonsterSpeed = 300, Weapons = {}, RegrabSettle = 0, PumpkinSpeed = 300, Charge = 0.875, LuckName = "x1.5 Perfect", FishAt = 0, DogAt = 0, Eggs = 0, Kills = 0, Fish = 0, Status = "Off"}
 			local tr = {At = 0, Prompts = {}, Missing = {}, GhostMode = "Rarest First", GhostSpeed = 300, GhostGap = 12, FlyHeight = 9, Rides = 0, Status = "Off", DropWords = {}, NewDrops = setmetatable({}, {__mode = "k"})}
 			genv.__PilatV4HalloweenTools = hw
 
@@ -36428,7 +36432,7 @@ local function fn66()
 						else
 							tp(CFrame.new(p + Vector3.new(0, 3, 0)))
 						end
-						if os.clock() - (hw.TakeAt or 0) > (on("HwEggTp", true) and 0.1 or 0.3) then
+						if true then -- no regrab delay: take every frame as soon as the egg is dropped
 							hw.TakeAt = os.clock()
 							takeEgg(model)
 						end
@@ -36501,7 +36505,9 @@ local function fn66()
 					end
 					if instant and uid and carried() then
 						hw.Status = "Carrying: instant steal"
-						sleep(hw.RegrabSettle, alive)
+						if hw.RegrabSettle > 0 then
+							sleep(hw.RegrabSettle, alive)
+						end
 						regrab(uid, alive, edge.Y)
 					end
 				end
@@ -36527,7 +36533,7 @@ local function fn66()
 					hw.Status = "Halloween egg secured"
 					-- Steal Webhook also covers Halloween eggs (seconds = target picked -> banked)
 					local record, startedAt = hw.StealRecord, hw.StealStart
-					hw.StealRecord, hw.StealStart = nil, nil
+					hw.StealRecord, hw.StealStart, hw.StealPickAt = nil, nil, nil
 					if type(record) == "table" then
 						local hook = genv.__PilatV4Webhook
 						if type(hook) == "table" and type(hook.stolen) == "function" then
@@ -36615,10 +36621,11 @@ local function fn66()
 				end
 				hw.EggEmpty = 0
 				local uid = egg:GetAttribute("HalloweenEggUid")
-				-- Steal Webhook timer: starts when the egg is picked as target, keeps the first stamp across retries of the same egg
-				if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealStart and os.clock() - hw.StealStart < 120) then
+				-- Steal Webhook record: made when the egg is picked; the TIMER (hw.StealStart) only starts once the egg is carried
+				if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealPickAt and os.clock() - hw.StealPickAt < 120) then
 					pcall(function()
-						hw.StealRecord, hw.StealStart = webhookRecord(egg), os.clock()
+						hw.StealRecord, hw.StealPickAt = webhookRecord(egg), os.clock()
+						hw.StealStart = nil
 					end)
 				end
 				hw.Status = "Going to a zone " .. tostring(zone) .. " Halloween egg"
@@ -36677,6 +36684,10 @@ local function fn66()
 					end
 				end
 				if carried() then
+					-- steal time counts from the moment the egg is in hand (first carry only, kept across drop/regrab)
+					if not hw.StealStart then
+						hw.StealStart = os.clock()
+					end
 					-- egg in hand: go straight to the safe zone, no landing step, no delay
 					hw.CarryUid = uid
 					noclip = false
@@ -39747,6 +39758,30 @@ local function fn66()
 	-- Force Instant: egg carried by hand (not by Auto Steal) -> instant return via the egg runtime
 	fn157(tbl24.forceInstant, function(arg)
 		pilatV4Config.ForceInstant = arg == true
+	end)
+
+	-- Steal Webhook (world): stamp the first moment our egg is carried so the reported time starts from the carry
+	task.spawn(function()
+		while fn2() do
+			task.wait()
+			pcall(function()
+				local rt = genv.__PilatV4EggRuntime
+				local timer = rt and rt._stealTimer
+				if type(timer) ~= "table" or timer.carriedAt then
+					return
+				end
+				local snap = EggState.ReadFieldEggs and EggState.ReadFieldEggs()
+				if not (snap and snap.Records) then
+					return
+				end
+				for _, rec in ipairs(snap.Records) do
+					if rec.Uid == timer.uid and rec.State == "Carried" and rec.CarrierUserId == localPlayer.UserId then
+						timer.carriedAt = os.clock()
+						return
+					end
+				end
+			end)
+		end
 	end)
 
 	do
