@@ -33302,7 +33302,28 @@ local function fn66()
 		local maxRate = pilatV4Config.SellEggMaxRate or 0
 		local blacklist = type(pilatV4Config.SellEggBlacklist) == "table" and pilatV4Config.SellEggBlacklist or {}
 		local blockAll = table.find(blacklist, "All") ~= nil
-		local n = {total = 0, placed = 0, held = 0, carried = 0, black = 0, mutated = 0, rate = 0, rarity = 0}
+		local n = {total = 0, placed = 0, held = 0, carried = 0, black = 0, mutated = 0, rate = 0, rarity = 0, unknown = 0}
+		local exRate -- first egg found above the limit, shown in the status so the limit can be sanity-checked
+		local wh = genv.__PilatV4Webhook
+		local function fmt(x)
+			if wh and type(wh.compact) == "function" then
+				local okF, t = pcall(wh.compact, x)
+				if okF and t then
+					return t
+				end
+			end
+			return string.format("%.0f", x)
+		end
+		-- same value the Egg Predictor shows: full egg record (category, scale, base mutation, mutations)
+		local function eggRate(egg)
+			if wh and type(wh.rateOf) == "function" then
+				local okR, r = pcall(wh.rateOf, egg)
+				if okR and type(r) == "number" and r > 0 then
+					return r
+				end
+			end
+			return rateOf({Category = egg.AssetCategory, Scale = egg.AssetScale or 1, AssetScale = egg.AssetScale or 1, BaseMutation = egg.BaseMutation, Mutations = egg.Mutations or {}})
+		end
 		for uid, egg in pairs(eggs) do
 			if type(egg) == "table" then
 				n.total = n.total + 1
@@ -33322,10 +33343,18 @@ local function fn66()
 					else
 						local rateOk = true
 						if maxRate > 0 then
-							rateOk = rateOf({Category = egg.AssetCategory, Scale = egg.AssetScale or 1, Mutations = egg.Mutations or {}}) <= maxRate
+							local r = eggRate(egg)
+							if r <= 0 then
+								rateOk = false
+								n.unknown = n.unknown + 1
+							elseif r > maxRate then
+								rateOk = false
+								n.rate = n.rate + 1
+								exRate = exRate or r
+							end
 						end
 						if not rateOk then
-							n.rate = n.rate + 1
+							-- above the value limit (or value unreadable): kept
 						elseif keepMutated and mutated then
 							n.mutated = n.mutated + 1
 						elseif not fn35(rarityName or "Unknown", rarities) then
@@ -33337,8 +33366,9 @@ local function fn66()
 				end
 			end
 		end
+		local limitText = maxRate > 0 and (" - batas value <= " .. fmt(maxRate) .. "/s") or ""
 		if #list > 0 then
-			return why(string.format("Siap jual %d egg", #list))
+			return why(string.format("Siap jual %d egg%s", #list, limitText))
 		end
 		if n.total == 0 then
 			return why("Menunggu: tidak ada egg di inventory")
@@ -33352,7 +33382,8 @@ local function fn66()
 		add(n.rarity, "rarity tidak cocok")
 		add(n.mutated, "mutated disimpan")
 		add(n.black, "blacklist")
-		add(n.rate, "di atas batas value")
+		add(n.rate, "di atas batas value" .. (exRate and (" (contoh " .. fmt(exRate) .. "/s > " .. fmt(maxRate) .. "/s)") or ""))
+		add(n.unknown, "value tidak terbaca (disimpan)")
 		add(n.placed, "sedang ditaruh")
 		add(n.held, "dipegang")
 		add(n.carried, "dibawa Auto Steal")
@@ -36575,10 +36606,12 @@ local function fn66()
 				if not egg then
 					if inDim() then
 						hw.EggDiag = eggDiag()
-						hw.EggRetryAt = os.clock() + 30
+						hw.EggEmpty = (hw.EggEmpty or 0) + 1
+						hw.EggRetryAt = os.clock() + math.min(30 * 2 ^ (hw.EggEmpty - 1), 600)
 					end
 					return false
 				end
+				hw.EggEmpty = 0
 				local uid = egg:GetAttribute("HalloweenEggUid")
 				-- Steal Webhook timer: starts when the egg is picked as target, keeps the first stamp across retries of the same egg
 				if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealStart and os.clock() - hw.StealStart < 120) then
@@ -37549,7 +37582,10 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- field scheduler
-			local HW_SCOUT_OUTSIDE = true -- Halloween has priority and we are in the world: enter the portal (retry throttled by EggRetryAt)
+			-- FIX in/out portal loop: with this on, Halloween walked into the portal only to look for eggs, found none, left (the ladder
+			-- sent it back out) and came back 30s later. Off by default: eggs are only scouted once we are already inside the dimension.
+			-- Turn it back on with  getgenv().__PilatV4HwScoutOutside = true  (it then backs off 30s -> 60s -> ... -> 10min after empty scouts)
+			local HW_SCOUT_OUTSIDE = false
 			local function nextTask()
 				if monsterWaiting() and not carried() and attr("HalloweenPumpkinCarrying") ~= true then
 					return nil
@@ -37567,7 +37603,7 @@ local function fn66()
 					if dimOk() then
 						-- FIX: jangan masuk portal cuma buat nyari egg. scouting hanya kalau sudah di dalam dimension
 						-- (ubah HW_SCOUT_OUTSIDE jadi true kalau mau scouting dari luar seperti dulu)
-						if (inDim() or HW_SCOUT_OUTSIDE) and os.clock() >= (hw.EggRetryAt or 0) then
+						if (inDim() or HW_SCOUT_OUTSIDE or genv.__PilatV4HwScoutOutside == true) and os.clock() >= (hw.EggRetryAt or 0) then
 							return "eggs"
 						end
 					else
