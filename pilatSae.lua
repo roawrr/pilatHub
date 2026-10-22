@@ -892,7 +892,7 @@ local function fn30(character)
 end
 
 localPlayer.CharacterAdded:Connect(fn30)
-local pilatV4Config = {AutoSteal = false, HelpFriend = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
+local pilatV4Config = {AutoSteal = false, HelpFriend = false, ForceInstant = false, LowSpeedBoost = false, StarAlert = true, ScrambleTradeInTrade = false, ScrambleTradeInReroll = false, ScrambleTradeInBanners = {}, ScrambleBossAuto = false, StealMode = "Instant", InstantBeta = true, InstantV2 = false, BetaDecoy = true, FlyAerial = false, FlyZigzag = false, StealHoldSeconds = 5, StealAreas = {"None"}, StealRarities = {"None"}, StealNamesFilter = {"None"}, StealMinValue = 0, StealMutations = {"None"}, StealMinWeight = 0, StealPriority = "Rarity", TaskOrder = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}, AutoFavorite = false, FavMode = "Rarity", FavRarities = {"None"}, FavSpecies = {"None"}, AutoEquipBest = false, AutoClaimOffline = false, AutoBaseUpgrade = false, AutoClaimAlmanac = false, AutoFusePets = false, ScrambleAutoBuy = false, ScrambleBuyList = {}, ButterflyAutoNet = false, ButterflyAutoCatch = false, ButterflyEsp = false, ButterflyTiers = {}, ButterflyAutoTrade = false, ButterflyTradeRecipe = "All", ButterflyCatchMode = "Tween", ButterflyAutoCraft = false, WispAutoQuest = false, BanjoAuto = false, Noclip = false, BottingMode = false, AntiCutscene = false, FuseSelectedOnly = false, FuseRarities = {"None"}, FuseSpecies = {"None"}, EspDetails = {"Name", "Rarity", "Value"}, BackpackRateEsp = false, AntiAFK = true, AutoReconnect = true, AutoExecute = false, AutoPlace = false, PlaceRarities = {"None"}, AutoHatch = false, SellAll = false, AutoSell = false, SellNames = {"None"}, SellRarities = {"None"}, AutoSellEgg = false, SellEggRarities = {"None"}, WebhookEnabled = false, WebhookURL = "", WebhookDisconnect = false, TweenSpeedMultiplier = 60, AutoTreadmillIdle = false, AutoTreadmillUpgrade = false, AntiTreadmill = false, HopNoMatch = false, PrivateServerMax = "2", PrivateServerAuto = false, HopCooldown = 5, AutoIndex = false, AntiHitGuard = false, FlyForCapture = false, AutoStealCapture = false, InstantGrab = false, InfiniteJump = false, WalkSpeedMultiplier = 1, AntiGuardKnockback = true, GodMode = true, EggPredictUI = false, EggESP = false, StealPlayers = false, StealPlayerRarities = {"None"}, StealPlayerMinValue = 0, StealPlayerTarget = "Any Player", WebhookRarities = {"None"}, WebhookMinValue = 0}
 local EggState = require(game:GetService("ReplicatedStorage").Client.EggState)
 EggState.GetAreaEggSnapshot = EggState.ReadFieldEggs
 EggState.GetAreaEggRecord = EggState.ReadFieldEgg
@@ -986,9 +986,35 @@ end
 local pilatV4TaskLadder = {}
 
 do
-	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "halloween", "treadmill"}
-	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", halloween = "Halloween / Phantom Express", treadmill = "Treadmill"}
+	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "halloween", "fishing", "treadmill"}
+	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", halloween = "Halloween / Phantom Express", fishing = "Halloween Fishing", treadmill = "Treadmill"}
 	pilatV4TaskLadder.PINNED = {treadmill = true}
+
+	-- Halloween Dimension exit gate: a task that is NOT Halloween/fishing/treadmill must not start (tween/teleport) while the
+	-- character is still inside the Halloween Dimension. It yields until the exit portal has been used.
+	pilatV4TaskLadder.DIM_EXEMPT = {halloween = true, fishing = true, treadmill = true}
+	pilatV4TaskLadder.dimPausedUntil = 0 -- failsafe: if the exit keeps failing the gate switches itself off for a minute
+
+	pilatV4TaskLadder.dimExitNeeded = function(arg)
+		if arg == nil or pilatV4TaskLadder.DIM_EXEMPT[arg] then
+			return false
+		end
+		if os.clock() < pilatV4TaskLadder.dimPausedUntil then
+			return false
+		end
+		if localPlayer:GetAttribute("InHalloweenDimension") ~= true then
+			return false
+		end
+		local hw = genv.__PilatV4HalloweenTools
+		if not (hw and type(hw.ExitDim) == "function") then
+			return false
+		end
+		-- carrying a Halloween egg / pumpkin: Halloween delivers it first
+		if hw.CarryUid or localPlayer:GetAttribute("HalloweenCarrying") == true or localPlayer:GetAttribute("HalloweenPumpkinCarrying") == true then
+			return false
+		end
+		return true
+	end
 	local tbl5 = {}
 
 	pilatV4TaskLadder.register = function(arg, arg2)
@@ -1132,6 +1158,10 @@ do
 	end
 
 	pilatV4TaskLadder.blocker = function(arg)
+		if pilatV4TaskLadder.dimExitNeeded(arg) then
+			return "halloween"
+		end
+
 		local now = os.clock()
 		local v7 = tbl6[arg]
 		if v7 and now - v7.at < 0.1 then
@@ -1204,6 +1234,51 @@ do
 end
 
 genv.__PilatV4TaskLadder = pilatV4TaskLadder
+
+do -- leaves the Halloween Dimension through the exit portal as soon as a non-Halloween task is next in line
+	local exiting, fails = false, 0
+
+	task.spawn(function()
+		while genv.__PilatV4HubSession == pilatV4HubSession do
+			task.wait(0.4)
+
+			if not exiting and os.clock() >= pilatV4TaskLadder.dimPausedUntil and localPlayer:GetAttribute("InHalloweenDimension") == true then
+				local hw = genv.__PilatV4HalloweenTools
+
+				if hw and type(hw.ExitDim) == "function" and hw.Owner == nil then
+					local target
+
+					for _, id in ipairs(pilatV4TaskLadder.order()) do
+						if pilatV4TaskLadder.wants(id) then
+							target = id
+							break
+						end
+					end
+
+					if target and pilatV4TaskLadder.dimExitNeeded(target) then
+						exiting = true
+
+						task.spawn(function()
+							local ok, left = pcall(hw.ExitDim)
+
+							if ok and left == true then
+								fails = 0
+							else
+								fails = fails + 1
+								pilatV4TaskLadder.dimPausedUntil = os.clock() + (fails >= 3 and 60 or 3)
+								if fails >= 3 then
+									fails = 0
+								end
+							end
+
+							exiting = false
+						end)
+					end
+				end
+			end
+		end
+	end)
+end
 
 local function fn32()
 	return pilatV4TaskLadder.blocker("auto_sell") == nil
@@ -34021,6 +34096,10 @@ local function fn66()
 		pilatV4Config.HelpFriend = arg == true
 	end)})
 
+	tbl24.forceInstant = v40:AddToggle({Title = "Force Instant", Content = "If you pick up an egg yourself (not from Auto Steal), it gets an instant return to base right away.", Default = false, Callback = fn144(function(arg)
+		pilatV4Config.ForceInstant = arg == true
+	end)})
+
 	tbl24.godMode = v40:AddToggle({Title = "Aura Bat", Content = "", Default = false, Callback = fn144(fn80)})
 
 	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes only applies to Titan Temple, Light Dark and Enchanted Forest (grab and drop, line hops, treadmill reset, regrab), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
@@ -34157,7 +34236,7 @@ local function fn66()
 	end)})
 
 	fn68 = v30:AddSection("Task Order")
-	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", halloween = "ghost", treadmill = "activity"}
+	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", halloween = "ghost", fishing = "fish", treadmill = "activity"}
 	local tbl28 = {}
 
 	for i, v45 in ipairs(pilatV4TaskLadder.DEFAULT) do
@@ -35100,12 +35179,13 @@ local function fn66()
 			end
 
 			-- a task ranked above Halloween in Task Order that is running right now (egg delivery, race, boss fight...), or nil
-			local higherAt, higherValue = 0, nil
-			local function higherTask()
-				if os.clock() - higherAt < 0.25 then
-					return higherValue
+			local higherAt, higherValue = {}, {}
+			local function higherTask(selfId)
+				selfId = selfId or "halloween"
+				if os.clock() - (higherAt[selfId] or 0) < 0.25 then
+					return higherValue[selfId]
 				end
-				higherAt = os.clock()
+				higherAt[selfId] = os.clock()
 				local ladder = genv.__PilatV4TaskLadder
 				local ok, found = pcall(function()
 					if ladder.bossFighting() then
@@ -35115,17 +35195,22 @@ local function fn66()
 						return "auto_steal"
 					end
 					for _, id in ipairs(ladder.order()) do
-						if id == "halloween" then
+						if id == selfId then
 							return nil
 						end
-						if ladder.active(id) then
+						if id == "halloween" and selfId == "fishing" then
+							-- Halloween ranked above fishing: fishing steps aside as soon as Halloween has a real job
+							if type(hw.NextTask) == "function" and hw.NextTask() ~= nil then
+								return id
+							end
+						elseif ladder.active(id) then
 							return id
 						end
 					end
 					return nil
 				end)
-				higherValue = ok and found or nil
-				return higherValue
+				higherValue[selfId] = ok and found or nil
+				return higherValue[selfId]
 			end
 
 			-- on the Phantom Express (town stay and the ride itself) the Halloween noclip toggle applies too
@@ -35585,6 +35670,21 @@ local function fn66()
 
 			-- exposed so the Treadmill can use the exit portal before it walks to the treadmill
 			hw.InDim, hw.LeaveDim = inDim, leaveDim
+
+			-- used by the task ladder: other tasks must leave the dimension via the exit portal before they move the character
+			hw.ExitDim = function()
+				if not inDim() then
+					return true
+				end
+				if not claim("exit") then
+					return false
+				end
+				local okExit, left = pcall(leaveDim, makeAlive(function()
+					return true
+				end))
+				release("exit")
+				return okExit and left == true
+			end
 
 			local function healSafe(alive)
 				local point = safePoint()
@@ -36663,10 +36763,22 @@ local function fn66()
 				if on("HwMonsters") and not monsterWaiting() then
 					return "monsters"
 				end
-				if on("HwFishing") then
+				return nil
+			end
+			hw.NextTask = nextTask
+
+			-- Fishing is its own task in Task Order ("Halloween Fishing", default just above the Treadmill)
+			local function fishFirst()
+				local ladder = genv.__PilatV4TaskLadder
+				return ladder ~= nil and ladder.rank("fishing") < ladder.rank("halloween")
+			end
+
+			local function pickJob()
+				local base = nextTask()
+				if on("HwFishing") and (base == nil or fishFirst()) then
 					return "fishing"
 				end
-				return nil
+				return base
 			end
 
 			local runners = {
@@ -36691,24 +36803,25 @@ local function fn66()
 						hw.Status = "Off"
 						idleSince = nil
 					elseif hw.Owner == nil or hw.Owner == "field" then
-						local job = nextTask()
+						local job = pickJob()
 						if not job then
 							hw.Status = (on("HwMonsters") and monsterWaiting()) and "Night / wall closed - waiting to farm monsters" or ("Waiting for something to do" .. ((on("HwEggs") and hw.EggDiag) and (" | " .. hw.EggDiag) or ""))
 							idleSince = idleSince or os.clock()
 							if on("HwForceExit", true) and inDim() and not hw.Chase and not carried() and os.clock() - idleSince > 6 and claim("field") then
-								local alive = makeAlive(function() return not nextTask() end)
+								local alive = makeAlive(function() return not pickJob() end)
 								pcall(leaveDim, alive)
 								release("field")
 							end
-						elseif higherTask() ~= nil and not carried() then
+						elseif higherTask(job == "fishing" and "fishing" or nil) ~= nil and not carried() then
 							-- a task ranked above Halloween is running: wait for it instead of fighting over the character
 							idleSince = nil
-							hw.Status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[higherTask()] or higherTask())
+							hw.Status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[higherTask(job == "fishing" and "fishing" or nil)] or higherTask(job == "fishing" and "fishing" or nil))
 						elseif claim("field") then
 							idleSince = nil
+							hw.Job = job
 							local runner = runners[job]
 							local alive = makeAlive(function()
-								return runner.key() and hw.Owner == "field" and (carried() or higherTask() == nil)
+								return runner.key() and hw.Owner == "field" and (carried() or higherTask(job == "fishing" and "fishing" or nil) == nil)
 							end)
 							local ok2, err = pcall(function()
 								leaveTreadmill(alive)
@@ -36733,6 +36846,7 @@ local function fn66()
 							walkStop()
 							hw.Stealing = false
 							release("field")
+							hw.Job = nil
 						end
 					end
 				end
@@ -37710,7 +37824,7 @@ local function fn66()
 						local value = false
 						if fn2() then
 							local phase = trPhase()
-							if hw.Owner ~= nil then
+							if hw.Owner ~= nil and hw.Job ~= "fishing" then
 								value = true
 							elseif on("TrainRide") and (phase == "Town" or trainRiding[phase] == true) then
 								value = true
@@ -37725,13 +37839,23 @@ local function fn66()
 						wantValue = value
 						return value
 					end, active = function()
-						return hw.Owner ~= nil
+						return hw.Owner ~= nil and hw.Job ~= "fishing"
 					end, enabled = function()
-						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwFishing") or on("HwPumpkin", true) or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
+						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwPumpkin", true) or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
 					end, status = function()
 						if hw.Owner == "train" or hw.Owner == "ghouler" then
 							return tr.Status
 						end
+						return hw.Status
+					end})
+
+					ladder.register("fishing", {wants = function()
+						return fn2() and on("HwFishing") == true
+					end, active = function()
+						return hw.Owner ~= nil and hw.Job == "fishing"
+					end, enabled = function()
+						return on("HwFishing")
+					end, status = function()
 						return hw.Status
 					end})
 				end
@@ -37858,7 +37982,7 @@ local function fn66()
 
 			hwSection:AddSubSection("Ghost Dog Quest & Fishing")
 			toggle("Auto Ghost Dog Quest", "Plays the whole Ghost Dog quest: the dog, the 4 memories, the fisherman and the ghost fish.", "HwDog", false)
-			toggle("Auto Fishing", "Fishes in the Halloween Dimension. Needs the rod from the Ghost Dog quest.", "HwFishing", false)
+			toggle("Auto Fishing", "Fishes in the Halloween Dimension. Needs the rod from the Ghost Dog quest. Runs as its own task (Task Order > Halloween Fishing, default just above the Treadmill).", "HwFishing", false)
 			hwSection:AddDropdown({Flag = "Halloween_CastLuck", Title = "Cast Luck", Content = "Perfect cast takes longest to charge, x1.0 is the fastest.", Options = {"x1.5 Perfect", "x1.2", "x1.1", "x1.0 Fastest"}, Multi = false, Default = "x1.5 Perfect", Callback = fn144(function(arg)
 				hw.Charge = ({["x1.2"] = 1, ["x1.1"] = 0.5, ["x1.0 Fastest"] = 0.02})[arg] or 0.875
 				hw.LuckName = arg
@@ -38644,6 +38768,82 @@ local function fn66()
 	fn157(tbl24.helpFriend, function(arg)
 		pilatV4Config.HelpFriend = arg == true
 	end)
+
+	-- Force Instant: egg carried by hand (not by Auto Steal) -> instant return via the egg runtime
+	fn157(tbl24.forceInstant, function(arg)
+		pilatV4Config.ForceInstant = arg == true
+	end)
+
+	do
+		local seenAt, triedAt = {}, {}
+
+		local function manualCarriedUid(rt)
+			local uid
+			pcall(function()
+				local snap = EggState.ReadFieldEggs and EggState.ReadFieldEggs()
+				if not (snap and snap.Records) then
+					return
+				end
+				for _, rec in ipairs(snap.Records) do
+					if rec.State == "Carried" and rec.CarrierUserId == localPlayer.UserId then
+						uid = rec.Uid
+						return
+					end
+				end
+			end)
+			return uid
+		end
+
+		task.spawn(function()
+			while fn2() do
+				task.wait(0.3)
+
+				if pilatV4Config.ForceInstant == true then
+					pcall(function()
+						local rt = genv.__PilatV4EggRuntime
+						if not rt or rt.destroyed or type(rt.deliverCarriedEgg) ~= "function" then
+							return
+						end
+
+						-- skip anything Auto Steal / Player Steal owns
+						local ps = genv.__PilatV4PlayerSteal
+						if rt._instantReturnToken ~= nil or rt._externalDeliver or rt._forestDropInProgress ~= nil
+							or rt.carryAttemptToken ~= nil or rt.instantPhase ~= nil or rt.captureObjectiveEnabled
+							or (rt.carry and rt.carry.active) or (rt.enabled and rt.activeTarget ~= nil)
+							or (ps and ps.running) then
+							table.clear(seenAt)
+							return
+						end
+
+						local uid = manualCarriedUid(rt)
+						if not uid or uid == rt.primerUid then
+							table.clear(seenAt)
+							return
+						end
+
+						local now = os.clock()
+						seenAt[uid] = seenAt[uid] or now
+
+						-- must be held by hand for a moment so we never race Auto Steal's own grab
+						if now - seenAt[uid] < 0.35 or (triedAt[uid] and now - triedAt[uid] < 3) then
+							return
+						end
+
+						triedAt[uid] = now
+						pcall(function()
+							local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+							if hum then
+								hum:UnequipTools()
+							end
+						end)
+						rt:deliverCarriedEgg(uid)
+					end)
+				else
+					table.clear(seenAt)
+				end
+			end
+		end)
+	end
 
 	fn157(tbl24.lowSpeedBoost, function(arg)
 		pilatV4Config.LowSpeedBoost = arg == true
