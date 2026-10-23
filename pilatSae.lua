@@ -35166,9 +35166,35 @@ local function fn66()
 			return nil
 		end
 
+		-- known mutation looks (same names the game uses); Rainbow/Prismatic cycle through hues instead of one color
+		local KNOWN = {
+			golden = Color3.fromRGB(255, 196, 0), silver = Color3.fromRGB(196, 208, 228), sakura = Color3.fromRGB(255, 130, 190),
+			greatbloom = Color3.fromRGB(60, 225, 150), boss = Color3.fromRGB(255, 60, 60), monstrous = Color3.fromRGB(150, 90, 255),
+			scrambled = Color3.fromRGB(40, 215, 170), frozen = Color3.fromRGB(130, 215, 255), burnt = Color3.fromRGB(70, 42, 32),
+			shocked = Color3.fromRGB(255, 232, 60), rainbow = Color3.fromRGB(255, 80, 80), prismatic = Color3.fromRGB(190, 170, 255),
+		}
+		local RAINBOW = {
+			Color3.fromRGB(255, 60, 60), Color3.fromRGB(255, 160, 40), Color3.fromRGB(255, 235, 60),
+			Color3.fromRGB(70, 220, 90), Color3.fromRGB(60, 190, 255), Color3.fromRGB(70, 90, 255), Color3.fromRGB(190, 80, 255),
+		}
+		local function specialOf(id)
+			local l = string.lower(tostring(id))
+			if l == "rainbow" then
+				return "rainbow"
+			elseif l == "prismatic" then
+				return "prism"
+			end
+			return nil
+		end
+
 		local function mutColor(id)
 			if colorCache[id] then
 				return colorCache[id]
+			end
+			local known = KNOWN[string.lower(tostring(id))]
+			if known then
+				colorCache[id] = known
+				return known
 			end
 			local found
 			local Mu = D.Mutations
@@ -35192,7 +35218,7 @@ local function fn66()
 				for i = 1, #id do
 					h = (h * 31 + string.byte(id, i)) % 3600
 				end
-				found = Color3.fromHSV(h / 3600, 0.62, 1)
+				found = Color3.fromHSV(h / 3600, 0.85, 1)
 			end
 			colorCache[id] = found
 			return found
@@ -35202,7 +35228,12 @@ local function fn66()
 			local t
 			for _, id in ipairs(ids) do
 				local c = mutColor(id)
-				if not t then
+				if specialOf(id) then
+					c = nil
+				end
+				if not c then
+					-- handled by the animated hue cycle
+				elseif not t then
 					t = c
 				else
 					t = t:Lerp(c, 0.5)
@@ -35290,14 +35321,16 @@ local function fn66()
 			local dist = radius / math.sin(math.rad(cam.FieldOfView / 2)) * 1.04
 			local dir = Vector3.new(0.55, 0.32, 1).Unit
 			cam.CFrame = CFrame.lookAt(dir * dist, Vector3.new(0, 0, 0))
-			return base
+			return base, cam, dist, dir
 		end
 
 		local function collectColors(model)
 			local list = {}
+			local _, size = model:GetBoundingBox()
+			local norm = math.max(size.Magnitude, 1)
 			for _, d in ipairs(model:GetDescendants()) do
 				if d:IsA("BasePart") then
-					list[#list + 1] = {d, d.Color}
+					list[#list + 1] = {d, d.Color, (d.Position.X + d.Position.Y * 0.8 + d.Position.Z * 0.4) / norm}
 				end
 			end
 			return list
@@ -35306,8 +35339,9 @@ local function fn66()
 		-- ---------- state / ui ----------
 		local ui = nil
 		local st = {
-			entry = nil, model = nil, base = nil, colors = nil, ang = 0, vel = 0.7,
-			dragging = false, lastX = 0, scale = 1, stack = {}, search = "", rarity = "All",
+			entry = nil, model = nil, base = nil, colors = nil,
+			yaw = 0, pitch = 0, tYaw = 0, tPitch = 0, zoom = 1, tZoom = 1, cam = nil, dist = 1, dir = nil,
+			dragging = false, lastX = 0, lastY = 0, scale = 1, stack = {}, search = "", rarity = "All",
 		}
 		local conns = {}
 		local renderConn = nil
@@ -35365,13 +35399,27 @@ local function fn66()
 			end
 			ui.stackText.Text = (#names > 0) and table.concat(names, "  >  ") or "No mutation (natural colors)"
 			if #st.stack > 0 then
-				local pts = {}
-				for i, id in ipairs(st.stack) do
-					local alpha = (#st.stack == 1) and 0 or ((i - 1) / (#st.stack - 1))
-					pts[#pts + 1] = ColorSequenceKeypoint.new(alpha, mutColor(id))
+				local cols = {}
+				for _, id in ipairs(st.stack) do
+					local sp = specialOf(id)
+					if sp == "rainbow" then
+						for _, c in ipairs(RAINBOW) do
+							cols[#cols + 1] = c
+						end
+					elseif sp == "prism" then
+						for _, c in ipairs(RAINBOW) do
+							cols[#cols + 1] = c:Lerp(Color3.fromRGB(255, 255, 255), 0.45)
+						end
+					else
+						cols[#cols + 1] = mutColor(id)
+					end
 				end
-				if #pts == 1 then
-					pts[2] = ColorSequenceKeypoint.new(1, pts[1].Value)
+				if #cols == 1 then
+					cols[2] = cols[1]
+				end
+				local pts = {}
+				for i, c in ipairs(cols) do
+					pts[#pts + 1] = ColorSequenceKeypoint.new((i - 1) / (#cols - 1), c)
 				end
 				ui.stackBar.UIGradient.Color = ColorSequence.new(pts)
 				ui.stackBar.BackgroundTransparency = 0
@@ -35387,13 +35435,40 @@ local function fn66()
 				return
 			end
 			local tint = stackTint(st.stack)
-			local strength = math.min(0.8, 0.5 + 0.08 * #st.stack)
+			local strength = math.min(0.85, 0.7 + 0.05 * #st.stack)
+			st.special = nil
+			for _, id in ipairs(st.stack) do
+				local sp = specialOf(id)
+				if sp then
+					st.special = sp
+				end
+			end
 			for _, e in ipairs(st.colors) do
 				if e[1].Parent then
 					if tint then
-						e[1].Color = e[2]:Lerp(tint, strength)
+						e[4] = e[2]:Lerp(tint, strength)
 					else
-						e[1].Color = e[2]
+						e[4] = e[2]
+					end
+					e[1].Color = e[4]
+				end
+			end
+		end
+
+		-- animated hue cycle for Rainbow / Prismatic (called every frame while one is stacked)
+		local function animateSpecial()
+			local sp = st.special
+			if not sp or not st.colors then
+				return
+			end
+			local t = os.clock() * 0.22
+			for _, e in ipairs(st.colors) do
+				if e[1].Parent and e[4] then
+					local hue = (t + e[3] * 1.4) % 1
+					if sp == "rainbow" then
+						e[1].Color = e[4]:Lerp(Color3.fromHSV(hue, 0.95, 1), 0.88)
+					else
+						e[1].Color = e[4]:Lerp(Color3.fromHSV(hue, 0.42, 1), 0.78)
 					end
 				end
 			end
@@ -35493,11 +35568,12 @@ local function fn66()
 			st.entry = entry
 			local m = prep(entry.model)
 			if m then
-				st.base = setupVP(ui.stageVP, m, 38)
+				st.base, st.cam, st.dist, st.dir = setupVP(ui.stageVP, m, 38)
 				st.model = m
 				st.colors = collectColors(m)
-				st.ang = 0
-				st.vel = 7
+				st.yaw, st.tYaw = 0.5, 0.5
+				st.pitch, st.tPitch = 0, 0
+				st.zoom, st.tZoom = 1, 1
 				applyColors()
 				ui.noModel.Visible = false
 			else
@@ -35772,12 +35848,23 @@ local function fn66()
 			ui.stageVP = stageVP
 			ui.noModel = label(holder, "3D model not found", 13, T.dim, FONT_M, 0, 140, 310, 20, Enum.TextXAlignment.Center)
 			ui.noModel.Visible = false
-			label(stage, "drag to rotate", 11, T.dim, FONT_M, 0, 486, 330, 16, Enum.TextXAlignment.Center)
+			label(stage, "drag: rotate  |  scroll: zoom  |  double click: reset", 11, T.dim, FONT_M, 0, 486, 330, 16, Enum.TextXAlignment.Center)
 
 			stageVP.InputBegan:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					st.dragging = true
 					st.lastX = input.Position.X
+					st.lastY = input.Position.Y
+					local now = os.clock()
+					if now - (st.lastClick or 0) < 0.3 then
+						st.tYaw, st.tPitch, st.tZoom = 0.5, 0, 1
+					end
+					st.lastClick = now
+				end
+			end)
+			stageVP.InputChanged:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseWheel then
+					st.tZoom = math.clamp(st.tZoom - input.Position.Z * 0.1, 0.45, 1.6)
 				end
 			end)
 			stageVP.InputEnded:Connect(function(input)
@@ -35787,8 +35874,10 @@ local function fn66()
 			end)
 			conns[#conns + 1] = UIS.InputChanged:Connect(function(input)
 				if st.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-					st.ang = st.ang + (input.Position.X - st.lastX) * 0.012
+					st.tYaw = st.tYaw + (input.Position.X - st.lastX) * 0.012
+					st.tPitch = math.clamp(st.tPitch + (input.Position.Y - st.lastY) * 0.008, -0.6, 0.9)
 					st.lastX = input.Position.X
+					st.lastY = input.Position.Y
 				end
 			end)
 			conns[#conns + 1] = UIS.InputEnded:Connect(function(input)
@@ -35889,6 +35978,13 @@ local function fn66()
 				local s = stroke(b, T.stroke, 1)
 				local dot = new("Frame", {BackgroundColor3 = mutColor(m.id), BorderSizePixel = 0, Position = UDim2.fromOffset(8, 8), Size = UDim2.fromOffset(10, 10)}, b)
 				corner(dot, 5)
+				if specialOf(m.id) then
+					local seq = {}
+					for k, c in ipairs(RAINBOW) do
+						seq[#seq + 1] = ColorSequenceKeypoint.new((k - 1) / (#RAINBOW - 1), specialOf(m.id) == "prism" and c:Lerp(Color3.fromRGB(255, 255, 255), 0.45) or c)
+					end
+					new("UIGradient", {Color = ColorSequence.new(seq), Rotation = 45}, dot)
+				end
 				new("TextLabel", {
 					BackgroundTransparency = 1, Text = m.label, Font = FONT_M, TextSize = 12, TextColor3 = T.text,
 					Position = UDim2.fromOffset(24, 0), Size = UDim2.new(1, -26, 1, 0), TextXAlignment = Enum.TextXAlignment.Left,
@@ -35936,11 +36032,17 @@ local function fn66()
 					return
 				end
 				if st.model and st.model.Parent then
-					if not st.dragging then
-						st.vel = st.vel + (0.7 - st.vel) * math.min(1, dt * 2.2)
-						st.ang = st.ang + st.vel * dt
+					local k = 1 - math.exp(-dt * 16)
+					st.yaw = st.yaw + (st.tYaw - st.yaw) * k
+					st.pitch = st.pitch + (st.tPitch - st.pitch) * k
+					st.zoom = st.zoom + (st.tZoom - st.zoom) * k
+					st.model:PivotTo(CFrame.Angles(st.pitch, st.yaw, 0) * st.base)
+					if st.special then
+						animateSpecial()
 					end
-					st.model:PivotTo(CFrame.Angles(0, st.ang, 0) * st.base)
+					if st.cam and st.dir then
+						st.cam.CFrame = CFrame.lookAt(st.dir * (st.dist * st.zoom), Vector3.new(0, 0, 0))
+					end
 				end
 			end)
 		end
