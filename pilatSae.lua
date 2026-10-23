@@ -15954,6 +15954,78 @@ genv.__PilatV4Webhook = (function()
 		end)
 	end)
 
+	-- Script Executed ping: one embed per execution, sent only when a Discord webhook URL is already saved in the Webhook tab
+	local executedSent = false
+
+	local function isDiscordHook(u)
+		if type(u) ~= "string" then
+			return false
+		end
+		return u:match("^https://discord%.com/api/webhooks/%d+/[%w%-_]+") ~= nil
+			or u:match("^https://discordapp%.com/api/webhooks/%d+/[%w%-_]+") ~= nil
+			or u:match("^https://%w+%.discord%.com/api/webhooks/%d+/[%w%-_]+") ~= nil
+	end
+
+	local function headshotUrl(userId)
+		local url
+		pcall(function()
+			local api = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. tostring(userId) .. "&size=420x420&format=Png&isCircular=false"
+			local body
+			if request_ then
+				local r = request_({Url = api, Method = "GET"})
+				body = type(r) == "table" and (r.Body or r.body) or nil
+			else
+				body = HttpService:GetAsync(api)
+			end
+			if type(body) == "string" and body ~= "" then
+				local d = HttpService:JSONDecode(body)
+				local item = d and d.data and d.data[1]
+				if item and item.state == "Completed" and type(item.imageUrl) == "string" and item.imageUrl ~= "" then
+					url = item.imageUrl
+				end
+			end
+		end)
+		return url or ("https://www.roblox.com/headshot-thumbnail/image?userId=" .. tostring(userId) .. "&width=420&height=420&format=png")
+	end
+
+	tbl12.executed = function(force)
+		if executedSent and not force then
+			return false
+		end
+		local webhookURL = pilatV4Config.WebhookURL
+		if not isDiscordHook(webhookURL) then
+			return false
+		end
+		executedSent = true
+
+		task.spawn(function()
+			pcall(function()
+				local logo = fn63()
+				local embed = {
+					title = "Script Executed",
+					description = string.format("**%s** just executed Pilat Hub.", localPlayer2.Name),
+					color = 5763719,
+					timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+					thumbnail = {url = headshotUrl(localPlayer2.UserId)},
+					author = {name = "Pilat Hub", icon_url = logo},
+					footer = {text = "Pilat Hub", icon_url = logo},
+					fields = {
+						{name = "Username", value = localPlayer2.Name, inline = true},
+						{name = "User ID", value = tostring(localPlayer2.UserId), inline = true},
+						{name = "Date", value = "<t:" .. tostring(os.time()) .. ":F>", inline = false},
+					},
+				}
+				local json = HttpService:JSONEncode({embeds = {embed}})
+				if request_ then
+					request_({Url = webhookURL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = json})
+				else
+					HttpService:PostAsync(webhookURL, json, Enum.HttpContentType.ApplicationJson)
+				end
+			end)
+		end)
+		return true
+	end
+
 	return tbl12
 end)()
 
@@ -40901,6 +40973,28 @@ local function fn66()
 
 	fn157(tbl24.webhookPhantom, function(arg)
 		pilatV4Config.WebhookPhantom = arg == true
+	end)
+
+	-- Script Executed ping: fires once per execution when the Webhook tab already holds a Discord webhook URL
+	task.spawn(function()
+		task.wait(2)
+		if not fn2() then
+			return
+		end
+		local cur = pilatV4Config.WebhookURL
+		if type(cur) ~= "string" or cur == "" then
+			local v = tbl24.webhookUrl and tbl24.webhookUrl.Value
+			if type(v) == "table" then
+				v = v[1]
+			end
+			if type(v) == "string" and v ~= "" then
+				pilatV4Config.WebhookURL = v
+			end
+		end
+		local wh = genv.__PilatV4Webhook
+		if wh and type(wh.executed) == "function" then
+			pcall(wh.executed)
+		end
 	end)
 
 	fn157(tbl24.helpFriend, function(arg)
