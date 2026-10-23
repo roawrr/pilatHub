@@ -38379,16 +38379,87 @@ local function fn66()
 				return chase(castNumber, seconds, alive)
 			end
 
+			-- ---------------- client fishing feedback (ported from StealAnEggg): charge bar, perfect popup, reel bar, line, catch reveal
+			-- every call is pcall-guarded: if the game changes a controller the fishing still works, it just stops drawing
+			local fishFx = {}
+			fishFx.ctl = function(name)
+				local ok2, mod = pcall(function()
+					return require(ReplicatedStorage.Controllers.Game.FishingController[name])
+				end)
+				return ok2 and type(mod) == "table" and mod or nil
+			end
+			fishFx.util = function()
+				local ok2, mod = pcall(function()
+					return require(ReplicatedStorage.Shared.Util.Fishing)
+				end)
+				return ok2 and type(mod) == "table" and mod or nil
+			end
+			fishFx.flags = function()
+				local ok2, mod = pcall(function()
+					return require(ReplicatedStorage.Shared.Flags.FishingFlags)
+				end)
+				return ok2 and type(mod) == "table" and mod or nil
+			end
+			-- Acquire() locks the rod UI while we drive it and hands back a release function
+			fishFx.acquire = function(ui)
+				if not ui or type(ui.Acquire) ~= "function" then
+					return function() end
+				end
+				local ok2, release = pcall(ui.Acquire)
+				return ok2 and type(release) == "function" and release or function() end
+			end
+			fishFx.headPoint = function(offset)
+				local head = localPlayer.Character and localPlayer.Character:FindFirstChild("Head")
+				local cam = Workspace.CurrentCamera
+				if not head or not cam then
+					return nil
+				end
+				local vp = cam:WorldToViewportPoint(head.Position + (offset or Vector3.zero))
+				return Vector2.new(vp.X / cam.ViewportSize.X, vp.Y / cam.ViewportSize.Y)
+			end
+
 			local function fishCast(target, alive)
 				if not rootPart() then
 					return nil
 				end
 				face(target)
 				local hold = 1.2 * hw.Charge ^ 0.7142857142857143
+				local ui, util, flags = fishFx.ctl("Ui"), fishFx.util(), fishFx.flags()
 				fire("RE/Fishing/Hold")
-				if not sleep(hold, alive) then
-					return nil
+				local started, release, shown = os.clock(), fishFx.acquire(ui), false
+				while os.clock() - started < hold do
+					if alive and not alive() then
+						if ui then
+							pcall(ui.ShowCharge, false)
+						end
+						release()
+						return nil
+					end
+					local ramp = (os.clock() - started - hold + 0.25) / 0.2
+					if ui and util and ramp >= 0 then
+						pcall(function()
+							if not shown then
+								ui.ShowCharge(true, flags and flags.PerfectMin:Get() or 0.8, flags and flags.PerfectMax:Get() or 0.95)
+								shown = true
+							end
+							local charge = util.ChargeAt(hold) * math.min(ramp, 1)
+							ui.SetCharge(charge, util.LuckText(util.LuckFor(charge)), util.IsPerfect(charge), fishFx.headPoint())
+						end)
+					end
+					step()
 				end
+				if ui then
+					pcall(ui.ShowCharge, false)
+					pcall(function()
+						if util and util.IsPerfect(util.ChargeAt(hold)) then
+							local point = fishFx.headPoint(Vector3.new(0, 2.6, 0))
+							if point then
+								ui.Perfect(point)
+							end
+						end
+					end)
+				end
+				task.delay(0.8, release)
 				local _, data, reason = invoke("RF/Fishing/Cast", hold, target)
 				if type(data) ~= "table" then
 					hw.Status = "Fishing: " .. tostring(reason or "no answer")
@@ -38580,7 +38651,7 @@ local function fn66()
 			end
 
 			-- ---------------- fishing history (ported from StealAnEggg): catches, candy, eggs, mutations, pets
-			hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}}
+			hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}, top = {}}
 			local logFile = "PilatV4_FishLog_" .. tostring(localPlayer.UserId) .. ".json"
 			pcall(function()
 				if type(isfile) == "function" and type(readfile) == "function" and isfile(logFile) then
@@ -38588,7 +38659,7 @@ local function fn66()
 					if type(data) == "table" then
 						hw.Log.n = tonumber(data.n) or 0
 						hw.Log.candy = tonumber(data.candy) or 0
-						for _, key in ipairs({"eggs", "muts", "pets", "last"}) do
+						for _, key in ipairs({"eggs", "muts", "pets", "last", "top"}) do
 							if type(data[key]) == "table" then
 								hw.Log[key] = data[key]
 							end
@@ -38606,14 +38677,95 @@ local function fn66()
 					pcall(hw.OnLog)
 				end
 			end
+			-- ---------------- best catch tracking (ported from StealAnEggg): after an egg drops, diff the egg bag and keep the best one per type
+			hw.EggBag = function()
+				local ok2, bag = pcall(function()
+					return require(ReplicatedStorage.Client.EggState).ReadOwnerEggs(localPlayer.UserId)
+				end)
+				return ok2 and type(bag) == "table" and bag or {}
+			end
+			-- remember every egg we own right now, so only the egg that the next catch adds counts as new
+			hw.SnapBag = function()
+				hw.FishSeen = {}
+				for uid in next, hw.EggBag() do
+					hw.FishSeen[uid] = true
+				end
+			end
+			hw.FishCategory = function(display)
+				if not hw.FishIcons then
+					hw.FishIcons = {}
+					for key, entry in next, assetDirectory() do
+						local egg = type(entry) == "table" and type(entry.Egg) == "table" and entry.Egg
+						if egg and egg.DisplayName then
+							hw.FishIcons[egg.DisplayName] = key
+						end
+					end
+				end
+				return hw.FishIcons[display]
+			end
+			hw.GrabBest = function(display)
+				local category = hw.FishCategory(display)
+				if not category or not hw.FishSeen then
+					return
+				end
+				for uid, egg in next, hw.EggBag() do
+					if not hw.FishSeen[uid] then
+						hw.FishSeen[uid] = true
+						if type(egg) == "table" and tostring(egg.AssetCategory) == category then
+							local entry = assetDirectory()[category]
+							local scale = tonumber(egg.AssetScale) or 1
+							local okMut, mut = pcall(function()
+								return require(ReplicatedStorage.Shared.Modules.Mutations).EarningsFor(egg.Mutations or {})
+							end)
+							local okKg, kg = pcall(function()
+								return require(ReplicatedStorage.Shared.Util.EggRecords).WeightKg(egg)
+							end)
+							local earn = (tonumber(entry and entry.EarningRate) or 0)
+								* (scale > 5 and (scale / 5) ^ 1.2 * 19.637875755794113 or scale ^ 1.85)
+								* (okMut and tonumber(mut) or 1)
+							local top = hw.Log.top
+							local old = top[display]
+							if type(old) ~= "table" or earn > (tonumber(old.v) or 0) then
+								top[display] = {v = earn, kg = okKg and tonumber(kg) or 0, s = scale}
+								saveLog()
+							end
+							return
+						end
+					end
+				end
+			end
+			hw.FishMoney = function(value)
+				local suffix = {"", "K", "M", "B", "T", "Qa", "Qi"}
+				value = tonumber(value) or 0
+				local i = 1
+				while value >= 1000 and i < #suffix do
+					value, i = value / 1000, i + 1
+				end
+				return ("$%s%s/s"):format(i == 1 and ("%d"):format(value) or ("%.2f"):format(value), suffix[i])
+			end
+			hw.BestText = function()
+				local bestName, best
+				for name, entry in next, hw.Log.top or {} do
+					if type(entry) == "table" and (not best or (tonumber(entry.v) or 0) > (tonumber(best.v) or 0)) then
+						bestName, best = name, entry
+					end
+				end
+				if not best then
+					return "-"
+				end
+				return string.format("%s  %s  %.2f kg", bestName, hw.FishMoney(best.v), tonumber(best.kg) or 0)
+			end
+
 			hw.RecordFish = function(result)
 				local log = hw.Log
+				log.top = type(log.top) == "table" and log.top or {}
 				local name, amount = tostring(result.DisplayName or "?"), tonumber(result.Amount) or 1
 				log.n = log.n + 1
 				if name == "Candy Corn" then
 					log.candy = log.candy + amount
 				elseif name:find("Egg$") then
 					log.eggs[name] = (log.eggs[name] or 0) + amount
+					task.delay(0.8, hw.GrabBest, name)
 				else
 					local bucket = name:find("Mutation") and log.muts or log.pets
 					bucket[name] = (bucket[name] or 0) + amount
@@ -38625,7 +38777,7 @@ local function fn66()
 				saveLog()
 			end
 			hw.ResetLog = function()
-				hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}}
+				hw.Log = {n = 0, candy = 0, eggs = {}, muts = {}, pets = {}, last = {}, top = {}}
 				saveLog()
 			end
 			local function topOf(bucket, limit)
@@ -38654,8 +38806,8 @@ local function fn66()
 					end
 					return sum
 				end
-				return string.format("Catches %d  \194\183  Candy Corn %d  \194\183  Eggs %d  \194\183  Mutations %d  \194\183  Pets %d\nTop eggs: %s\nTop mutations: %s\nTop pets: %s\nLast: %s",
-					log.n, log.candy, total(log.eggs), total(log.muts), total(log.pets), topOf(log.eggs, 5), topOf(log.muts, 5), topOf(log.pets, 5),
+				return string.format("Catches %d  \194\183  Candy Corn %d  \194\183  Eggs %d  \194\183  Mutations %d  \194\183  Pets %d\nTop eggs: %s\nTop mutations: %s\nTop pets: %s\nBest egg: %s\nLast: %s",
+					log.n, log.candy, total(log.eggs), total(log.muts), total(log.pets), topOf(log.eggs, 5), topOf(log.muts, 5), topOf(log.pets, 5), hw.BestText(),
 					#log.last > 0 and table.concat(log.last, ", ") or "-")
 			end
 
@@ -38689,17 +38841,38 @@ local function fn66()
 				local previous = char and char:FindFirstChildOfClass("Tool")
 				equip(rod)
 				hw.Status = "Reeling in"
-				sleep(0.35, alive)
+				local ui = fishFx.ctl("Ui")
+				local release = fishFx.acquire(ui)
+				if ui then
+					pcall(ui.ShowReel, true, "Click Fast!")
+				end
+				local began = os.clock()
+				while os.clock() - began < 0.3 or (rod.Parent ~= localPlayer.Character and os.clock() - began < 0.8) do
+					local fill = math.min((os.clock() - began) / 0.3, 1)
+					if ui then
+						pcall(ui.SetReel, fill, math.floor(fill * 16), "Click Fast!")
+						pcall(ui.PunchReel)
+					end
+					step()
+				end
+				if ui then
+					pcall(ui.ShowReel, false)
+				end
 				local sinceBite = os.clock() - pend.bite
+				hw.SnapBag()
 				local _, success, result = invoke("RF/Fishing/Reel", pend.id, "Caught", math.ceil((0.7 + 0.3 * sinceBite) / 0.075) + 2)
 				if success and type(result) == "table" then
 					hw.Fish = hw.Fish + 1
 					hw.RecordFish(result)
 					hw.Status = "Caught " .. tostring(result.DisplayName) .. " x" .. tostring(result.Amount)
+					if ui then
+						task.spawn(pcall, ui.Reveal, result, 2.6)
+					end
 				else
 					hw.Status = "Fishing: the fish got away"
 				end
 				fire("RE/Fishing/Cancel", pend.id)
+				task.delay(success and 3 or 0, release)
 				hw.FishAt = os.clock()
 				if previous and previous ~= rod and previous.Parent then
 					equip(previous)
@@ -38716,6 +38889,245 @@ local function fn66()
 					end
 				end
 				return false
+			end
+
+			-- ---------------- nearest water (ported from StealAnEggg): scan every water part once, then stand at the closest shore
+			-- used when "Farm Monsters While Fishing" is on, because the monster fights leave us far from any fixed fishing spot
+			hw.PondScan = function()
+				if hw.PondPoints or hw.PondBusy then
+					return
+				end
+				local world = dim()
+				if not world then
+					return
+				end
+				hw.PondBusy = true
+				task.spawn(function()
+					local points, work = {}, 0
+					for _, part in ipairs(world:GetDescendants()) do
+						work = work + 1
+						if work % 3000 == 0 then
+							task.wait()
+						end
+						if part:IsA("BasePart") and (part.Material == Enum.Material.Water or part:GetAttribute("TerrainRole") == "Basin" or part:GetAttribute("FishingWater") or CollectionService:HasTag(part, "FishingWater")) then
+							local size = part.Size
+							local nx, nz = math.max(1, math.ceil(size.X / 24)), math.max(1, math.ceil(size.Z / 24))
+							for ix = 1, nx do
+								for iz = 1, nz do
+									local hit = waterAt(part.CFrame:PointToWorldSpace(Vector3.new(((ix - 0.5) / nx - 0.5) * size.X, size.Y / 2 + 1, ((iz - 0.5) / nz - 0.5) * size.Z)))
+									if hit then
+										points[#points + 1] = hit
+									end
+									work = work + 20
+									if work % 3000 < 20 then
+										task.wait()
+									end
+								end
+							end
+						end
+					end
+					hw.PondPoints, hw.PondBusy = points, nil
+				end)
+			end
+
+			hw.GroundAt = function(pos)
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.FilterDescendantsInstances = {localPlayer.Character}
+				local hit = Workspace:Raycast(pos + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), params)
+				return (hit and hit.Position or pos) + Vector3.new(0, 3, 0)
+			end
+
+			-- returns a water position to cast at, false while the pond scan is still running, nil when there is no pond at all
+			hw.NearWater = function(root, alive)
+				local found = findWater(root.Position, 0, 35)
+				if found then
+					return found
+				end
+				hw.PondScan()
+				if hw.PondBusy then
+					return false
+				end
+				local best, bestDist
+				for _, point in ipairs(hw.PondPoints or {}) do
+					local dist = flat(point - root.Position).Magnitude
+					if not bestDist or dist < bestDist then
+						best, bestDist = point, dist
+					end
+				end
+				if not best then
+					return nil
+				end
+				hw.Status = "Going to the nearest water"
+				local away = flat(root.Position - best)
+				local stand = hw.GroundAt(best + (away.Magnitude > 1 and away.Unit or Vector3.new(1, 0, 0)) * (10 + 32 * hw.Charge))
+				local arrived = true
+				if on("HwMonTp", true) and inDim() then
+					tp(CFrame.new(stand) * root.CFrame.Rotation)
+				else
+					arrived = flyTo(stand, alive, hw.MonsterSpeed)
+				end
+				local now = rootPart()
+				if not arrived or not now then
+					return false
+				end
+				return findWater(now.Position, math.atan2(best.Z - now.Position.Z, best.X - now.Position.X), 35) or best
+			end
+
+			-- ---------------- rotate fishing and treadmill (ported from StealAnEggg)
+			-- Timer: fish N minutes, then treadmill M minutes, on the wall clock. Every Day: swap at every dawn.
+			-- A cast that is already out (or a line left out while we fight monsters) is finished before the turn flips.
+			hw.Rot = {clock = nil, turn = nil, dawn = nil, dawnAt = nil, wasDay = nil, left = nil}
+			hw.RotMode, hw.RotFishMin, hw.RotTreadMin = hw.RotMode or "Timer", hw.RotFishMin or 5, hw.RotTreadMin or 5
+			hw.TreadmillOn = function()
+				local tm = genv.__PilatV4TreadmillManager
+				return tm ~= nil and not tm.destroyed and type(tm.config) == "table" and tm.config.idleFarm == true
+			end
+			hw.RotLive = function()
+				return on("HwRot") and on("HwFishing") and hw.TreadmillOn()
+			end
+			hw.RotTurn = function()
+				return hw.RotLive() and hw.Rot.turn or nil
+			end
+			-- may a NEW cast start? (false during the treadmill half, even while the last line is still being finished)
+			hw.RotCast = function()
+				return hw.RotTurn() == nil or hw.Rot.clock ~= "tread"
+			end
+			hw.RotText = function()
+				local turn = hw.RotTurn()
+				if not turn then
+					return "Off (needs Auto Fishing, Auto Treadmill and Rotate all on)"
+				end
+				local left = hw.Rot.left and string.format("%d:%02d", math.floor(hw.Rot.left / 60), math.floor(hw.Rot.left % 60)) or "next day"
+				return "Now: " .. (turn == "fish" and "Fishing" or "Treadmill") .. "  \194\183  Switch in: " .. left
+			end
+			task.spawn(function()
+				local rot = hw.Rot
+				while fn2() do
+					task.wait(1)
+					local isDay = not wallClosed()
+					if isDay and rot.wasDay == false then
+						rot.dawnAt = os.clock()
+					end
+					rot.wasDay = isDay
+					if hw.RotLive() then
+						if hw.RotMode == "Every day" then
+							rot.clock = rot.clock or "fish"
+							rot.dawn = rot.dawn or rot.dawnAt or 0
+							if rot.dawn ~= (rot.dawnAt or 0) then
+								rot.dawn = rot.dawnAt
+								rot.clock = rot.clock == "fish" and "tread" or "fish"
+							end
+							rot.left = nil
+						else
+							rot.dawn = nil
+							local fishSec, treadSec = (tonumber(hw.RotFishMin) or 5) * 60, (tonumber(hw.RotTreadMin) or 5) * 60
+							local t = os.time() % (fishSec + treadSec)
+							rot.clock = t < fishSec and "fish" or "tread"
+							rot.left = t < fishSec and fishSec - t or fishSec + treadSec - t
+						end
+						local busy = hw.Pend ~= nil or hw.CastBusy == true
+						rot.turn = (rot.clock == "fish" or (busy and rot.turn ~= "tread")) and "fish" or "tread"
+					end
+					if type(hw.OnRot) == "function" then
+						pcall(hw.OnRot)
+					end
+				end
+			end)
+
+			-- cast, wait for the bite and reel in (with the game's own charge / line / reel visuals)
+			hw.CastAndReel = function(alive, rod, water)
+				hw.Status = "Casting (" .. tostring(hw.LuckName) .. ")"
+				equip(rod)
+				sleep(0.3, alive)
+				local data, reason = fishCast(water, alive)
+				hw.FishAt = os.clock() + 1.2
+				if not data then
+					hw.FishAt = os.clock() + (tostring(reason):lower():find("closed") and 30 or 3)
+					hw.SpotCast = nil
+					return true
+				end
+				local wait = tonumber(data.Wait) or 3
+				-- Farm Monsters While Fishing: leave the line out, fight, and reel in when the bite comes (hw.Pend)
+				if on("HwFishMon") and on("HwMonsters") and data.Mode ~= "GhostFish" and data.Mode ~= "Nothing" and data.Mode ~= "Hint" and data.Mode ~= "Quest" then
+					hw.Pend = {id = data.Id, at = os.clock() + wait + 0.9, bite = os.clock() + wait}
+					hw.Status = "Cast done, farming monsters until the bite"
+					hw.FishAt = os.clock()
+					return true
+				end
+
+				-- the line: fly from the rod tip to the water, float, thrash when the fish bites
+				local lineMod, ui = fishFx.ctl("Line"), fishFx.ctl("Ui")
+				local tip = rod:FindFirstChild("RodTip", true)
+				local root = rootPart()
+				local from = tip and tip:IsA("Attachment") and tip.WorldPosition or (root and root.Position + Vector3.new(0, 4, 0))
+				local line, live, thrash = nil, true, false
+				if lineMod and from then
+					local okLine, made = pcall(lineMod.Spawn, tip, from)
+					line = okLine and made or nil
+				end
+				if line then
+					task.spawn(function()
+						pcall(lineMod.Fly, line, from, water, 0.75, function()
+							return live
+						end)
+						local floatStart = os.clock()
+						while live and line.Parent do
+							pcall(thrash and lineMod.Thrash or lineMod.Float, line, water, thrash and 1 or os.clock() - floatStart, 0)
+							task.wait(thrash and 0.06 or nil)
+						end
+					end)
+				end
+
+				hw.Status = "Waiting for a bite"
+				if data.Mode == "GhostFish" then
+					ghostFish(data, alive)
+				elseif data.Mode == "Nothing" or data.Mode == "Hint" or data.Mode == "Quest" then
+					sleep(wait, alive)
+					fire("RE/Fishing/Cancel", data.Id)
+				elseif sleep(wait, alive) then
+					hw.Status = "Reeling in"
+					thrash = true
+					local began, shown = os.clock(), false
+					while os.clock() - began < 1.2 and alive() do
+						local fill = (os.clock() - began - 1.05) / 0.15
+						if ui and fill >= 0 then
+							if not shown then
+								pcall(ui.ShowReel, true, "Click Fast!")
+								shown = true
+							end
+							pcall(ui.SetReel, math.min(fill, 1), math.floor(math.min(fill, 1) * 16), "Click Fast!")
+							pcall(ui.PunchReel)
+						end
+						task.wait()
+					end
+					if ui then
+						pcall(ui.ShowReel, false)
+					end
+					hw.SnapBag()
+					local _, success, result = invoke("RF/Fishing/Reel", data.Id, "Caught", 16)
+					if success and type(result) == "table" then
+						hw.Fish = hw.Fish + 1
+						hw.RecordFish(result)
+						hw.Status = "Caught " .. tostring(result.DisplayName) .. " x" .. tostring(result.Amount)
+						if ui then
+							task.spawn(pcall, ui.Reveal, result, 2.6)
+						end
+					end
+					fire("RE/Fishing/Cancel", data.Id)
+				else
+					-- the job was interrupted while the line was out: never leave a dangling cast behind
+					fire("RE/Fishing/Cancel", data.Id)
+				end
+				live = false
+				if line then
+					task.spawn(function()
+						pcall(lineMod.Return, line, tip, 0.3)
+						pcall(line.Destroy, line)
+					end)
+				end
+				hw.FishAt = os.clock()
+				return true
 			end
 
 			local function fishOnce(alive)
@@ -38741,6 +39153,11 @@ local function fn66()
 					sleep(1, alive)
 					return false
 				end
+				if not hw.RotCast() then
+					hw.Status = "Rotation: treadmill turn"
+					sleep(0.5, alive)
+					return false
+				end
 				if os.clock() < hw.FishAt then
 					sleep(math.min(hw.FishAt - os.clock(), 1), alive)
 					return true
@@ -38749,9 +39166,23 @@ local function fn66()
 				if not root then
 					return false
 				end
-				local saved = mySpot()
+				-- with Farm Monsters While Fishing there is no fixed spot: fish at the closest water, wherever the fights left us
+				local mixed = on("HwFishMon") and on("HwMonsters")
+				local saved = (not mixed) and mySpot() or nil
+				local nearPos
+				if mixed and inDim() then
+					nearPos = hw.NearWater(root, alive)
+					if nearPos == false then
+						sleep(0.5, alive)
+						return true
+					end
+					root = rootPart()
+					if not root then
+						return false
+					end
+				end
 				local spot = marker("ReturnSpot")
-				local goal = saved and saved.p or spot and spot.Position
+				local goal = saved and saved.p or ((not nearPos) and spot and spot.Position) or nil
 				if goal and (flat(root.Position - goal).Magnitude > 8 or (not saved and goal.Y + 1 > root.Position.Y)) then
 					if trainBusy() or higherTask("fishing") ~= nil then
 						return false
@@ -38762,7 +39193,7 @@ local function fn66()
 				end
 				local castTarget, fisherman = (not saved) and marker("CastTarget") or nil, Workspace:FindFirstChild("GhostFisherman")
 				local look = fisherman and fisherman:IsA("Model") and fisherman:GetPivot().LookVector or spot and spot.CFrame.LookVector or Vector3.new(0, 0, -1)
-				local water = saved and hw.SpotCast and hw.SpotCast[1] == saved.k and hw.SpotCast[2] or nil
+				local water = nearPos or (saved and hw.SpotCast and hw.SpotCast[1] == saved.k and hw.SpotCast[2]) or nil
 				if not water then
 					water = findWater(root.Position, math.atan2(look.Z, look.X), saved and 35 or 12, castTarget)
 				end
@@ -38778,44 +39209,13 @@ local function fn66()
 				if (root.Position - pin.Position).Magnitude > 1.5 then
 					tp(pin)
 				end
-				hw.Status = "Casting (" .. tostring(hw.LuckName) .. ")"
-				equip(rod)
-				sleep(0.3, alive)
-				local data, reason = fishCast(water, alive)
-				hw.FishAt = os.clock() + 1.2
-				if not data then
-					hw.FishAt = os.clock() + (tostring(reason):lower():find("closed") and 30 or 3)
-					hw.SpotCast = nil
-					return true
+				hw.CastBusy = true
+				local ok2, res = pcall(hw.CastAndReel, alive, rod, water)
+				hw.CastBusy = false
+				if not ok2 then
+					error(res, 0)
 				end
-				hw.Status = "Waiting for a bite"
-				local wait = tonumber(data.Wait) or 3
-				-- Farm Monsters While Fishing: leave the line out, fight, and reel in when the bite comes (hw.Pend)
-				if on("HwFishMon") and on("HwMonsters") and data.Mode ~= "GhostFish" and data.Mode ~= "Nothing" and data.Mode ~= "Hint" and data.Mode ~= "Quest" then
-					hw.Pend = {id = data.Id, at = os.clock() + wait + 0.9, bite = os.clock() + wait}
-					hw.Status = "Cast done, farming monsters until the bite"
-					hw.FishAt = os.clock()
-					return true
-				end
-				if data.Mode == "GhostFish" then
-					ghostFish(data, alive)
-				elseif data.Mode == "Nothing" or data.Mode == "Hint" or data.Mode == "Quest" then
-					if sleep(wait, alive) then
-						fire("RE/Fishing/Cancel", data.Id)
-					end
-				elseif sleep(wait, alive) then
-					hw.Status = "Reeling in"
-					sleep(1.2, alive)
-					local _, success, result = invoke("RF/Fishing/Reel", data.Id, "Caught", 16)
-					if success and type(result) == "table" then
-						hw.Fish = hw.Fish + 1
-						hw.RecordFish(result)
-						hw.Status = "Caught " .. tostring(result.DisplayName) .. " x" .. tostring(result.Amount)
-					end
-					fire("RE/Fishing/Cancel", data.Id)
-				end
-				hw.FishAt = os.clock()
-				return true
+				return res
 			end
 
 			-- ---------------------------------------------------------------- field scheduler
@@ -38876,7 +39276,7 @@ local function fn66()
 					end
 					return base or "reel"
 				end
-				if on("HwFishing") and not trainBusy() and (not monsterWaiting() or hw.FishInField()) and (base == nil or fishFirst()) then
+				if on("HwFishing") and hw.RotCast() and not trainBusy() and (not monsterWaiting() or hw.FishInField()) and (base == nil or fishFirst()) then
 					return "fishing"
 				end
 				return base
@@ -38887,7 +39287,7 @@ local function fn66()
 				dog = {key = function() return on("HwDog") and not monsterWaiting() end, run = dogStep},
 				eggs = {key = function() return on("HwEggs") and (carried() or not monsterWaiting()) end, run = stealOne},
 				monsters = {key = function() return on("HwMonsters") and not monsterWaiting() end, run = fightMonster},
-				fishing = {key = function() return on("HwFishing") and (not monsterWaiting() or hw.FishInField()) end, run = fishOnce},
+				fishing = {key = function() return on("HwFishing") and hw.RotTurn() ~= "tread" and (not monsterWaiting() or hw.FishInField()) end, run = fishOnce},
 				reel = {key = function() return on("HwFishing") end, run = reelPending},
 			}
 
@@ -40028,7 +40428,7 @@ local function fn66()
 					end})
 
 					ladder.register("fishing", {wants = function()
-						return fn2() and on("HwFishing") == true and not trainBusy()
+						return fn2() and on("HwFishing") == true and not trainBusy() and hw.RotTurn() ~= "tread"
 					end, active = function()
 						return hw.Owner ~= nil and (hw.Job == "fishing" or hw.Job == "reel")
 					end, enabled = function()
@@ -40114,7 +40514,7 @@ local function fn66()
 			end)})
 
 			hwSection:AddSubSection("Auto Farm Monsters")
-			toggle("Auto Farm Monsters", "Fights Halloween monsters for Candy Corn. Needs a bat or a weapon.", "HwMonsters", false)
+			hw.MonToggle = toggle("Auto Farm Monsters", "Fights Halloween monsters for Candy Corn. Needs a bat or a weapon.", "HwMonsters", false)
 			toggle("Wait On Night / Wall", "Applies to ALL Halloween jobs (eggs, monsters, pumpkin moon, dog quest, fishing in the dimension). At night, on a day reset or while the 10s reset wall is up you leave the dimension through the exit portal and wait in the world, then enter again by itself once it is day and the wall is gone.", "HwMonsterWait", true)
 			hwSection:AddDropdown({Flag = "Halloween_MonsterKinds", Title = "Monsters To Kill", Content = "Leave empty to fight every kind.", Options = {"Candy Corn (+12 Candy)", "Hollow Bat (+12 Candy)", "Scarecrow (+28 Candy)", "Chest Mimic (+28 Candy)", "Pumpkin Golem (+65 Candy)", "Soul Phantom (+65 Candy)"}, Multi = true, Default = {}, Callback = fn144(function(arg)
 				local kinds = {}
@@ -40177,7 +40577,33 @@ local function fn66()
 				hw.LuckName = arg
 			end)})
 
-			toggle("Farm Monsters While Fishing", "Casts, then fights monsters while the line is out and reels in when the fish bites. Needs Auto Monsters and Auto Fishing both on.", "HwFishMon", false)
+			hwSection:AddToggle({Flag = "Halloween_HwFishMon", Title = "Farm Monsters While Fishing", Content = "Casts, then fights monsters while the line is out and reels in when the fish bites. Fishes at the nearest water. Turns Auto Farm Monsters on for you.", Default = false, Callback = fn144(function(arg)
+				cfg.HwFishMon = arg == true
+				if arg == true and not on("HwMonsters") then
+					if hw.MonToggle then
+						pcall(hw.MonToggle.Set, hw.MonToggle, true)
+					end
+					cfg.HwMonsters = true
+				end
+			end)})
+			hwSection:AddSubSection("Rotate Fishing And Treadmill")
+			local rotPara = hwSection:AddParagraph({Title = "Rotation Status", Content = hw.RotText()})
+			hw.OnRot = function()
+				pcall(function()
+					rotPara:SetContent(hw.RotText())
+				end)
+			end
+			toggle("Rotate Fishing And Treadmill", "Swaps between Auto Fishing and the Treadmill. Needs Auto Fishing and Auto Treadmill both on. A cast that is already out is finished before the swap.", "HwRot", false)
+			hwSection:AddDropdown({Flag = "Halloween_RotMode", Title = "Rotation Switch", Content = "Timer = fish N minutes, treadmill M minutes. Every Day = swap at every dawn.", Options = {"Timer", "Every Day"}, Multi = false, Default = "Timer", Callback = fn144(function(arg)
+				hw.RotMode = arg == "Every Day" and "Every day" or "Timer"
+			end)})
+			hwSection:AddSlider({Flag = "Halloween_RotFishMin", Title = "Fishing Minutes", Content = "How long each fishing turn lasts in Timer mode.", Min = 1, Max = 120, Default = 5, Increment = 1, Callback = fn144(function(arg)
+				hw.RotFishMin = tonumber(arg) or 5
+			end)})
+			hwSection:AddSlider({Flag = "Halloween_RotTreadMin", Title = "Treadmill Minutes", Content = "How long each treadmill turn lasts in Timer mode.", Min = 1, Max = 120, Default = 5, Increment = 1, Callback = fn144(function(arg)
+				hw.RotTreadMin = tonumber(arg) or 5
+			end)})
+			hwSection:AddSubSection("Fishing History")
 			local fishLogPara = hwSection:AddParagraph({Title = "Fishing History", Content = hw.LogText()})
 			hw.OnLog = function()
 				pcall(function()
@@ -41140,7 +41566,7 @@ local function fn66()
 			pcall(pilatV4PlayerSteal.setEnabled, pilatV4PlayerSteal, false)
 		end
 
-		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwPumpTp", "HwDog", "HwFishing", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
+		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwPumpTp", "HwDog", "HwFishing", "HwFishMon", "HwRot", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
 			pilatV4Config[v70] = false
 		end
 
