@@ -10650,78 +10650,191 @@ local v8 = (function()
 		end
 
 		-- approach: run to the egg, take it, then hand over to the hub's carry confirmation (which calls _v2Home)
+		-- approach: original Tes teleport approach (lane portal -> ExitPart -> TP onto the egg -> grab)
 		index._v2Hop = function(arg, target)
-			TP.init()
+			local V2 = index.V2
 			local uid = target.Uid
+			local lanePortals = fn91("FuseBiomeLanePortals")
+			local exitPart = fn91("FuseBiomeZone", "ExitPart")
 
 			local function aborted()
 				return arg.destroyed or not arg.enabled or arg.instantPhase ~= "hunting" or not arg.activeTarget or arg.activeTarget.Uid ~= uid
 			end
 
-			-- count the miss, give the egg back to normal Instant after 2
+			-- leave the fuse biome if we got stuck inside, count the miss, give the egg back to normal Instant after 2
 			local function fail(message)
+				local stuck = v2Root()
+
+				if stuck and stuck.Position.Y > n69 then
+					arg:_crossPortal(exitPart, nil, 8)
+				end
+
 				if aborted() then
 					return
 				end
+
 				arg.v2Misses = arg.v2Misses or {}
 				local misses = (arg.v2Misses[uid] or 0) + 1
 				arg.v2Misses[uid] = misses
+
 				if misses >= 2 then
 					arg.v2Misses[uid] = nil
 					arg.v2Failed = arg.v2Failed or {}
-					arg.v2Failed[uid] = os.clock() + index.V2.MissCooldown
+					arg.v2Failed[uid] = os.clock() + V2.MissCooldown
 				end
+
 				arg:_finish(message)
 			end
 
 			local root, humanoid = v2Root()
+
+			if not lanePortals or not exitPart or not root or not humanoid then
+				fail("Steal unavailable - retrying")
+				return
+			end
+
+			local dest = arg:_resolveEggDestination(target, root, humanoid)
+
+			if not dest then
+				fail("Target destination unavailable")
+				return
+			end
+
+			-- 1) start every run from the safe zone
+			local safeCF = arg:_resolveSafeCFrame(root)
+
+			if safeCF and not arg:_isInSafeArea(root) then
+				arg:_setStatus("Instant Steal Tes: flying to the safe zone")
+				arg:_glideRoot(safeCF, aborted)
+
+				if aborted() then
+					return
+				end
+			end
+
+			local ping = 0.1
+
+			pcall(function()
+				ping = localPlayer2:GetNetworkPing() or 0.1
+			end)
+
+			if safeCF then
+				arg:_setStatus("Instant Steal Tes: in the safe zone, letting the server catch up")
+				local untilAt = os.clock() + math.clamp(V2.SafeWait + ping, V2.SafeWait, V2.SafeWaitMax)
+
+				while os.clock() < untilAt and not aborted() do
+					local holdRoot = v2Root()
+
+					if holdRoot then
+						v2Set(holdRoot, safeCF)
+					end
+
+					RunService2.Heartbeat:Wait()
+				end
+
+				if aborted() then
+					return
+				end
+			end
+
+			root, humanoid = v2Root()
+
 			if not root or not humanoid then
 				fail("Character unavailable")
 				return
 			end
 
-			local rec = TP.record(arg, uid)
-			if not rec or (rec.State ~= AreaEggs.States.Slot and rec.State ~= AreaEggs.States.Dropped) then
-				arg:_finish("Target egg no longer available")
-				return
-			end
-			local egg = TP.eggPosition(arg, uid)
-			if not egg then
-				fail("Target destination unavailable")
+			-- 2) lane portal -> fuse biome -> ExitPart
+			arg:_setStatus("Instant Steal Tes: heading to the lane portal")
+			arg:_guardLagback(true)
+			RunService2.PreSimulation:Wait()
+			humanoid.PlatformStand = true
+			arg:_teleportRoot(root, humanoid, dest)
+			RunService2.PreSimulation:Wait()
+			humanoid.PlatformStand = false
+			task.wait(math.clamp(0.15 + ping * 2.5, 0.3, 1))
+
+			if aborted() then
 				return
 			end
 
 			arg:_stopHoverPad()
-			arg:_setStatus("Instant Steal Tes: running to the egg")
-			arg.boostedUid = uid
-			TP.fpsOn()
-			local reached = TP.runToEgg(arg, uid, egg, aborted)
-			if aborted() then
-				TP.fpsOff()
-				return
-			end
-			if not reached then
-				TP.fpsOff()
+			arg:_setStatus("Instant Steal Tes: touching the lane portal")
+			local entered = arg:_crossPortal(lanePortals, aborted, 6)
+			arg:_guardLagback(false)
+
+			if not entered then
 				fail("Could not reach the egg - retrying")
 				return
 			end
 
-			arg:_setStatus("Instant Steal Tes: taking the egg")
-			local got = TP.grab(arg, uid, 4, aborted)
-			TP.fpsOff()
-			if aborted() then
-				return
-			end
-			if not got then
-				fail("The egg would not come free - retrying")
+			arg:_setStatus("Instant Steal Tes: inside the Fuse Biome, touching its exit")
+
+			if not arg:_crossPortal(exitPart, aborted, 8) then
+				fail("Could not reach the egg - retrying")
 				return
 			end
 
-			rec = TP.record(arg, uid)
+			if aborted() then
+				return
+			end
+
+			root, humanoid = v2Root()
+
+			if not root or not humanoid then
+				fail("Character unavailable")
+				return
+			end
+
+			if (root.Position - dest.Position).Magnitude > 25 then
+				fail("Could not reach the egg - retrying")
+				return
+			end
+
+			local rec = EggState2.ReadFieldEgg(uid) or arg.records[uid]
+
+			if not rec or rec.State ~= AreaEggs.States.Slot and rec.State ~= AreaEggs.States.Dropped then
+				arg:_finish("Target egg no longer available")
+				return
+			end
+
+			local dest2 = arg:_resolveEggDestination(rec, root, humanoid) or dest
+			arg:_teleportRoot(root, humanoid, dest2)
+			arg:_setArrivalHold(dest2, uid)
+			arg.boostedUid = uid
+			task.wait(0.35)
+
+			if aborted() then
+				return
+			end
+
+			-- 3) grab and drop a few times, then take it for real
+			arg:_v2FakeGrabs(uid, aborted)
+
+			if aborted() then
+				return
+			end
+
+			rec = EggState2.ReadFieldEgg(uid) or arg.records[uid]
+
 			if not rec then
 				arg:_finish("Target egg no longer available")
 				return
 			end
+
+			if rec.State ~= AreaEggs.States.Slot and rec.State ~= AreaEggs.States.Dropped and not v2Carried(uid) then
+				arg:_finish("Target changed")
+				return
+			end
+
+			arg:_setStatus("Instant Steal Tes: taking the egg for real")
+
+			task.spawn(function()
+				pcall(function()
+					eggWorld.AskFieldEggCarry:InvokeServer({Uid = uid})
+				end)
+			end)
+
 			arg:_requestCarry(rec, true)
 		end
 
@@ -11409,8 +11522,8 @@ local v8 = (function()
 				end
 			end
 
-			if v8 and arg._v2Uid == forestDropInProgress and arg:_v2() and not pilatV4Config.HelpFriend then
-				-- Instant Steal V2 delivery (line hops, drop, treadmill reset, regrab)
+			if v8 and (arg:_v2() or arg:_beta()) and not pilatV4Config.HelpFriend then
+				-- Instant TP delivery (line hops, drop, regrab, run home): Tes and V2, every area
 				arg._forestDropInProgress = forestDropInProgress
 				local okHome, homed = pcall(arg._v2Home, arg, forestDropInProgress, fn94)
 
@@ -35064,7 +35177,7 @@ local function fn66()
 
 	tbl24.godMode = v40:AddToggle({Title = "Aura Bat", Content = "", Default = false, Callback = fn144(fn80)})
 
-	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes only applies to Titan Temple, Light Dark and Enchanted Forest (run to the egg, line hops, drop, regrab, run home: yslemEgg Instant TP logic), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
+	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes: the new run-to-egg approach only applies to Titan Temple, Light Dark and Enchanted Forest, but its Instant TP return is used in every area (V2 uses it too) (run to the egg, line hops, drop, regrab, run home: yslemEgg Instant TP logic), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
 		fn89(arg)
 
 		if type(pilatPanels.syncStealMode) == "function" then
