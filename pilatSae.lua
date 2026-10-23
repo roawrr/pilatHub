@@ -36665,6 +36665,7 @@ local function fn66()
 			if cfg.HwMonsterWait == nil then cfg.HwMonsterWait = true end
 			if cfg.HwDimNoclip == nil then cfg.HwDimNoclip = true end
 			if cfg.HwPumpTp == nil then cfg.HwPumpTp = true end
+			if cfg.HwPumpBat == nil then cfg.HwPumpBat = true end
 			if cfg.HwMonTp == nil then cfg.HwMonTp = true end
 			if cfg.HwEggTp == nil then cfg.HwEggTp = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
@@ -38233,6 +38234,56 @@ local function fn66()
 				end
 				return didAny
 			end
+
+			-- ---------------- Pumpkin Moon: equip the bat and switch the Aura Bat on the moment the moon starts
+			-- Aura Bat = the GodMode object (swings at players near you). If it was off, it is switched off again when the moon ends.
+			task.spawn(function()
+				local moon, ownAura = false, false
+				while fn2() do
+					task.wait(0.5)
+					local want = on("HwPumpkin", true) and on("HwPumpBat", true) and Workspace:GetAttribute("HalloweenWorldEvent") == "PumpkinMoon"
+					local god = genv.__PilatV4GodMode
+					if want and not moon then
+						moon = true
+						hw.Status = "Pumpkin Moon started: bat + Aura Bat on"
+						if god then
+							if not god.enabled then
+								ownAura = true
+								cfg.GodMode = true
+								pcall(god.setEnabled, god, true)
+								pcall(function()
+									tbl24.godMode:Set(true)
+								end)
+							end
+							task.spawn(function()
+								pcall(god._equipBat, god)
+							end)
+							pcall(god.startDefend, god)
+						end
+					elseif want and moon then
+						-- the aura loop ends by itself after an egg carry: start it again once the hands are free
+						if god and god.enabled and not god.defendThread and attr("HalloweenPumpkinCarrying") ~= true then
+							local carrying = god.eggRuntime and god.eggRuntime.carry and god.eggRuntime.carry.active
+							if not carrying then
+								pcall(god.startDefend, god)
+							end
+						end
+					elseif not want and moon then
+						moon = false
+						if god then
+							pcall(god.stopDefend, god)
+							if ownAura then
+								ownAura = false
+								cfg.GodMode = false
+								pcall(god.setEnabled, god, false)
+								pcall(function()
+									tbl24.godMode:Set(false)
+								end)
+							end
+						end
+					end
+				end
+			end)
 
 			-- ---------------------------------------------------------------- ghost dog quest + fishing
 			local function questState()
@@ -40555,6 +40606,7 @@ local function fn66()
 			hwSection:AddSubSection("Auto Pumpkin Moon")
 			toggle("Auto Pumpkin Moon", "During the Pumpkin Moon, catches the runaway pumpkins and brings them to the altar.", "HwPumpkin", true)
 			toggle("Teleport To Pumpkins", "Steal An Egg logic: snaps straight onto each pumpkin and the altar (inside the Halloween Dimension) and presses the prompt as you land. Off = run there at Pumpkin Speed.", "HwPumpTp", true)
+			toggle("Bat + Aura Bat On Pumpkin Moon", "The moment the Pumpkin Moon starts: equips your bat and switches Aura Bat on. Aura Bat goes back off when the moon ends (if it was off before).", "HwPumpBat", true)
 			hwSection:AddSlider({Flag = "Halloween_PumpkinSpeed", Title = "Pumpkin Walk Speed", Content = "How fast you run to pumpkins and back to the altar when Teleport To Pumpkins is off (studs/sec).", Min = 100, Max = 1000, Default = 300, Increment = 10, Callback = fn144(function(arg)
 				hw.PumpkinSpeed = tonumber(arg) or 300
 			end)})
