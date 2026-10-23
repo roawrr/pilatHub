@@ -2466,7 +2466,9 @@ function Chloex:Window(guiconfig)
 	dropshadow.Position = UDim2.new(0.5, 0, 0.5, 0)
 	dropshadow.Size = UDim2.new(1, 47, 1, 47)
 	dropshadow.ZIndex = 0
-	dropshadow.Visible = not isMobile -- (perf)
+	if isMobile then
+		dropshadow.ImageTransparency = 1 -- (perf) hide the shadow image only; main is parented under this frame
+	end
 
 	-- Any Image other than the default Pilat logo is the window background; the
 	-- floating button logo comes from ToggleImage / ToggleIcon / ButtonImage.
