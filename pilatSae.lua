@@ -34975,6 +34975,1056 @@ local function fn66()
 		end
 	end
 
+	-- ============================================================
+	-- Pet Card: full pet browser (3D viewports, spotlight, stackable mutation colors, base stats)
+	-- Read-only viewer: it only reads the game's catalog modules, nothing is sent or spawned.
+	-- ============================================================
+	genv.__PilatPetCard = (function(alive)
+		local Players = game:GetService("Players")
+		local RS = game:GetService("ReplicatedStorage")
+		local RunService = game:GetService("RunService")
+		local TweenService = game:GetService("TweenService")
+		local UIS = game:GetService("UserInputService")
+		local TextService = game:GetService("TextService")
+
+		if type(genv.__PilatPetCard) == "table" and type(genv.__PilatPetCard.destroy) == "function" then
+			pcall(genv.__PilatPetCard.destroy)
+		end
+
+		local M = {}
+		local GUI_NAME = "__Pilat_PetCard"
+		local FONT_B = Enum.Font.GothamBold
+		local FONT_M = Enum.Font.GothamMedium
+		local RANK = {Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mythic = 6, Cosmic = 7, Secret = 8, Eternal = 9, Divine = 10}
+
+		local T = {
+			bg = Color3.fromRGB(11, 11, 18),
+			panel = Color3.fromRGB(18, 18, 28),
+			card = Color3.fromRGB(24, 24, 38),
+			cardHover = Color3.fromRGB(34, 32, 54),
+			stroke = Color3.fromRGB(46, 44, 68),
+			text = Color3.fromRGB(240, 240, 249),
+			sub = Color3.fromRGB(165, 164, 188),
+			dim = Color3.fromRGB(114, 113, 140),
+			accent = Color3.fromRGB(139, 108, 255),
+			accent2 = Color3.fromRGB(86, 196, 255),
+			good = Color3.fromRGB(74, 222, 128),
+		}
+
+		-- ---------- small helpers ----------
+		local function new(class, props, parent)
+			local o = Instance.new(class)
+			for k, v in pairs(props) do
+				o[k] = v
+			end
+			if parent then
+				o.Parent = parent
+			end
+			return o
+		end
+
+		local function corner(p, r)
+			return new("UICorner", {CornerRadius = UDim.new(0, r)}, p)
+		end
+
+		local function stroke(p, c, t, tr)
+			return new("UIStroke", {Color = c, Thickness = t or 1, Transparency = tr or 0, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, p)
+		end
+
+		local function label(parent, text, size, color, font, x, y, w, h, align)
+			return new("TextLabel", {
+				BackgroundTransparency = 1, Text = text, TextSize = size, TextColor3 = color, Font = font or FONT_M,
+				Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h),
+				TextXAlignment = align or Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+			}, parent)
+		end
+
+		local SUFFIX = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"}
+		local function fmt(n)
+			if type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge then
+				return "-"
+			end
+			local a = math.abs(n)
+			local i = 1
+			while a >= 1000 and i < #SUFFIX do
+				a = a / 1000
+				i = i + 1
+			end
+			local s
+			if i == 1 and a == math.floor(a) then
+				s = string.format("%d", a)
+			else
+				s = string.format("%.2f", a)
+			end
+			return (n < 0 and "-" or "") .. s .. SUFFIX[i]
+		end
+
+		local function dig(root, path)
+			local o = root
+			for _, n in ipairs(path) do
+				o = o and o:FindFirstChild(n)
+			end
+			return o
+		end
+
+		local function lib(path)
+			local ok, r = pcall(function()
+				local inst = dig(RS, path)
+				return inst and require(inst)
+			end)
+			if ok then
+				return r
+			end
+			return nil
+		end
+
+		-- ---------- game data (loaded on first open) ----------
+		local D = {loaded = false}
+
+		local function loadData()
+			if D.loaded then
+				return
+			end
+			D.loaded = true
+			D.Assets = lib({"Data", "Assets"})
+			D.Mutations = lib({"Shared", "Modules", "Mutations"})
+			D.Earnings = lib({"Shared", "Util", "AssetEarnings"})
+			D.Records = lib({"Shared", "Util", "EggRecords"})
+			D.models = RS:FindFirstChild("AssetModels")
+
+			-- pets
+			D.pets = {}
+			D.rarities = {}
+			local seenRarity = {}
+			local dir = D.Assets and D.Assets.Directory
+			if type(dir) == "table" then
+				for cat, d in pairs(dir) do
+					if type(cat) == "string" and type(d) == "table" then
+						local model = D.models and D.models:FindFirstChild(cat)
+						if model then
+							local rar = type(d.Rarity) == "table" and d.Rarity or nil
+							local rname = rar and (rar.DisplayName or rar._id) or "?"
+							local rcolor = rar and typeof(rar.Color) == "Color3" and rar.Color or T.sub
+							D.pets[#D.pets + 1] = {
+								cat = cat, name = tostring(d.DisplayName or d._id or cat), rarity = tostring(rname),
+								rank = RANK[rname] or 0, color = rcolor, model = model,
+							}
+							if not seenRarity[rname] then
+								seenRarity[rname] = true
+								D.rarities[#D.rarities + 1] = {name = tostring(rname), rank = RANK[rname] or 0}
+							end
+						end
+					end
+				end
+			end
+			table.sort(D.pets, function(a, b)
+				if a.rank ~= b.rank then
+					return a.rank > b.rank
+				end
+				return a.name < b.name
+			end)
+			table.sort(D.rarities, function(a, b)
+				return a.rank > b.rank
+			end)
+
+			-- mutations
+			D.muts = {}
+			if D.Mutations and type(D.Mutations.Ids) == "function" then
+				local ok, ids = pcall(D.Mutations.Ids)
+				if ok and type(ids) == "table" then
+					for id in pairs(ids) do
+						if type(id) == "string" and id ~= D.Mutations.NO_MUTATION then
+							local okL, lbl = pcall(D.Mutations.LabelOf, id)
+							D.muts[#D.muts + 1] = {id = id, label = (okL and type(lbl) == "string" and lbl ~= "") and lbl or id}
+						end
+					end
+				end
+			end
+			table.sort(D.muts, function(a, b)
+				return a.label < b.label
+			end)
+		end
+
+		-- mutation tint: ask the game's module first, otherwise a stable color from the name
+		local colorCache = {}
+		local function pickColor(t, depth)
+			if typeof(t) == "Color3" then
+				return t
+			end
+			if typeof(t) == "ColorSequence" then
+				return t.Keypoints[1].Value
+			end
+			if type(t) ~= "table" or depth > 2 then
+				return nil
+			end
+			for _, k in ipairs({"Color", "Tint", "Colour", "PrimaryColor", "Primary", "Color1", "Colors"}) do
+				local c = pickColor(t[k], depth + 1)
+				if c then
+					return c
+				end
+			end
+			return nil
+		end
+
+		local function mutColor(id)
+			if colorCache[id] then
+				return colorCache[id]
+			end
+			local found
+			local Mu = D.Mutations
+			if Mu then
+				for _, fname in ipairs({"ColorOf", "GetColor", "TintOf", "Get", "DefOf", "InfoOf", "ConfigOf"}) do
+					if not found and type(Mu[fname]) == "function" then
+						local ok, r = pcall(Mu[fname], id)
+						if ok then
+							found = pickColor(r, 0)
+						end
+					end
+				end
+				for _, tname in ipairs({"Directory", "Definitions", "Defs", "Data"}) do
+					if not found and type(Mu[tname]) == "table" then
+						found = pickColor(Mu[tname][id], 0)
+					end
+				end
+			end
+			if not found then
+				local h = 0
+				for i = 1, #id do
+					h = (h * 31 + string.byte(id, i)) % 3600
+				end
+				found = Color3.fromHSV(h / 3600, 0.62, 1)
+			end
+			colorCache[id] = found
+			return found
+		end
+
+		local function stackTint(ids)
+			local t
+			for _, id in ipairs(ids) do
+				local c = mutColor(id)
+				if not t then
+					t = c
+				else
+					t = t:Lerp(c, 0.5)
+				end
+			end
+			return t
+		end
+
+		local function rateFor(cat, scale, muts)
+			local E = D.Earnings
+			if not E then
+				return nil
+			end
+			local args = {Category = cat, Scale = scale, AssetCategory = cat, AssetScale = scale, Mutations = table.clone(muts)}
+			for _, fname in ipairs({"MutationOnlyRatePerSecond", "CatalogRatePerSecond", "RatePerSecond"}) do
+				if type(E[fname]) == "function" then
+					local ok, r = pcall(E[fname], args)
+					if ok and type(r) == "number" then
+						return r
+					end
+				end
+			end
+			return nil
+		end
+
+		local function weightFor(cat, scale)
+			local R = D.Records
+			if R and type(R.WeightKgForScale) == "function" then
+				local ok, r = pcall(R.WeightKgForScale, cat, scale)
+				if ok and type(r) == "number" then
+					return r
+				end
+			end
+			return nil
+		end
+
+		-- ---------- 3D helpers ----------
+		local function prep(src)
+			local ok, m = pcall(function()
+				return src:Clone()
+			end)
+			if not ok or typeof(m) ~= "Instance" then
+				return nil
+			end
+			if not m:IsA("Model") then
+				local w = Instance.new("Model")
+				m.Parent = w
+				m = w
+			end
+			local has = false
+			for _, d in ipairs(m:GetDescendants()) do
+				if d:IsA("BasePart") then
+					has = true
+					d.Anchored = true
+					d.CanCollide = false
+					d.CanTouch = false
+					d.CanQuery = false
+				elseif d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Sound") or d:IsA("ProximityPrompt") then
+					pcall(function()
+						d:Destroy()
+					end)
+				end
+			end
+			if not has then
+				m:Destroy()
+				return nil
+			end
+			return m
+		end
+
+		local function setupVP(vp, model, fov)
+			vp.Ambient = Color3.fromRGB(175, 175, 190)
+			vp.LightColor = Color3.fromRGB(255, 255, 255)
+			vp.LightDirection = Vector3.new(-0.6, -1, -0.5)
+			local cam = Instance.new("Camera")
+			cam.FieldOfView = fov or 40
+			cam.Parent = vp
+			vp.CurrentCamera = cam
+			model.Parent = vp
+			local pivot = model:GetPivot()
+			local bb, size = model:GetBoundingBox()
+			local base = CFrame.new(-bb.Position) * pivot
+			model:PivotTo(base)
+			local radius = math.max(size.Magnitude / 2, 0.5)
+			local dist = radius / math.sin(math.rad(cam.FieldOfView / 2)) * 1.04
+			local dir = Vector3.new(0.55, 0.32, 1).Unit
+			cam.CFrame = CFrame.lookAt(dir * dist, Vector3.new(0, 0, 0))
+			return base
+		end
+
+		local function collectColors(model)
+			local list = {}
+			for _, d in ipairs(model:GetDescendants()) do
+				if d:IsA("BasePart") then
+					list[#list + 1] = {d, d.Color}
+				end
+			end
+			return list
+		end
+
+		-- ---------- state / ui ----------
+		local ui = nil
+		local st = {
+			entry = nil, model = nil, base = nil, colors = nil, ang = 0, vel = 0.7,
+			dragging = false, lastX = 0, scale = 1, stack = {}, search = "", rarity = "All",
+		}
+		local conns = {}
+		local renderConn = nil
+		local gen = 0
+		local cards = {}
+		local chipBtns = {}
+
+		local function parentGui()
+			local ok, h = pcall(function()
+				return gethui and gethui()
+			end)
+			if ok and typeof(h) == "Instance" then
+				return h
+			end
+			local ok2, cg = pcall(function()
+				return game:GetService("CoreGui")
+			end)
+			if ok2 and cg then
+				return cg
+			end
+			return Players.LocalPlayer:WaitForChild("PlayerGui")
+		end
+
+		local function refreshStats()
+			if not ui or not st.entry then
+				return
+			end
+			local e = st.entry
+			local baseRate = rateFor(e.cat, 1, {})
+			local nowRate = rateFor(e.cat, st.scale, st.stack)
+			local baseW = weightFor(e.cat, 1)
+			local nowW = weightFor(e.cat, st.scale)
+			ui.vBaseRate.Text = baseRate and ("$" .. fmt(baseRate) .. "/s") or "-"
+			ui.vBaseWeight.Text = baseW and (string.format("%.2f kg", baseW)) or "-"
+			ui.vNowRate.Text = nowRate and ("$" .. fmt(nowRate) .. "/s") or "-"
+			ui.vNowWeight.Text = nowW and (string.format("%.2f kg", nowW)) or "-"
+			local refRate = rateFor(e.cat, st.scale, {})
+			if nowRate and refRate and refRate > 0 then
+				ui.vMult.Text = "x" .. string.format("%.2f", nowRate / refRate)
+			else
+				ui.vMult.Text = "-"
+			end
+			ui.scaleVal.Text = string.format("%.1f", st.scale)
+
+			-- stack preview
+			local names = {}
+			for i, id in ipairs(st.stack) do
+				local lbl = id
+				for _, m in ipairs(D.muts) do
+					if m.id == id then
+						lbl = m.label
+					end
+				end
+				names[#names + 1] = i .. ". " .. lbl
+			end
+			ui.stackText.Text = (#names > 0) and table.concat(names, "  >  ") or "No mutation (natural colors)"
+			if #st.stack > 0 then
+				local pts = {}
+				for i, id in ipairs(st.stack) do
+					local alpha = (#st.stack == 1) and 0 or ((i - 1) / (#st.stack - 1))
+					pts[#pts + 1] = ColorSequenceKeypoint.new(alpha, mutColor(id))
+				end
+				if #pts == 1 then
+					pts[2] = ColorSequenceKeypoint.new(1, pts[1].Value)
+				end
+				ui.stackBar.UIGradient.Color = ColorSequence.new(pts)
+				ui.stackBar.BackgroundTransparency = 0
+			else
+				ui.stackBar.UIGradient.Color = ColorSequence.new(T.stroke)
+				ui.stackBar.BackgroundTransparency = 0.4
+			end
+			ui.mutCount.Text = "Mutations (" .. #st.stack .. ")"
+		end
+
+		local function applyColors()
+			if not st.colors then
+				return
+			end
+			local tint = stackTint(st.stack)
+			local strength = math.min(0.8, 0.5 + 0.08 * #st.stack)
+			for _, e in ipairs(st.colors) do
+				if e[1].Parent then
+					if tint then
+						e[1].Color = e[2]:Lerp(tint, strength)
+					else
+						e[1].Color = e[2]
+					end
+				end
+			end
+		end
+
+		local function refreshChips()
+			for id, b in pairs(chipBtns) do
+				local idx
+				for i, v in ipairs(st.stack) do
+					if v == id then
+						idx = i
+					end
+				end
+				local c = mutColor(id)
+				if idx then
+					b.btn.BackgroundColor3 = c:Lerp(T.card, 0.55)
+					b.stroke.Color = c
+					b.stroke.Thickness = 1.5
+					b.badge.Text = tostring(idx)
+					b.badge.Visible = true
+				else
+					b.btn.BackgroundColor3 = T.card
+					b.stroke.Color = T.stroke
+					b.stroke.Thickness = 1
+					b.badge.Visible = false
+				end
+			end
+		end
+
+		local function toggleMut(id)
+			local at
+			for i, v in ipairs(st.stack) do
+				if v == id then
+					at = i
+				end
+			end
+			if at then
+				table.remove(st.stack, at)
+			else
+				st.stack[#st.stack + 1] = id
+			end
+			applyColors()
+			refreshChips()
+			refreshStats()
+		end
+
+		local function setSpotlight(entry, fromCard)
+			if not ui or not entry then
+				return
+			end
+			-- fly a ghost from the card to the center stage
+			if fromCard and fromCard.Parent then
+				pcall(function()
+					local s = ui.uiScale.Scale
+					local rootAbs = ui.root.AbsolutePosition
+					local a, sz = fromCard.AbsolutePosition, fromCard.AbsoluteSize
+					local ta, tsz = ui.stage.AbsolutePosition, ui.stage.AbsoluteSize
+					local ghost = new("Frame", {
+						BackgroundColor3 = entry.color, BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 60,
+						Position = UDim2.fromOffset((a.X - rootAbs.X) / s, (a.Y - rootAbs.Y) / s),
+						Size = UDim2.fromOffset(sz.X / s, sz.Y / s),
+					}, ui.root)
+					corner(ghost, 12)
+					local gs = stroke(ghost, entry.color, 2)
+					local info = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+					local tw = TweenService:Create(ghost, info, {
+						Position = UDim2.fromOffset((ta.X - rootAbs.X) / s, (ta.Y - rootAbs.Y) / s),
+						Size = UDim2.fromOffset(tsz.X / s, tsz.Y / s), BackgroundTransparency = 1,
+					})
+					TweenService:Create(gs, info, {Transparency = 1}):Play()
+					tw.Completed:Connect(function()
+						ghost:Destroy()
+					end)
+					tw:Play()
+				end)
+				-- scroll the grid so the chosen card sits in the middle
+				pcall(function()
+					local g = ui.grid
+					local y = fromCard.AbsolutePosition.Y - g.AbsolutePosition.Y + g.CanvasPosition.Y - (g.AbsoluteSize.Y - fromCard.AbsoluteSize.Y) / 2
+					y = math.clamp(y, 0, math.max(0, g.AbsoluteCanvasSize.Y - g.AbsoluteSize.Y))
+					TweenService:Create(g, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {CanvasPosition = Vector2.new(0, y)}):Play()
+				end)
+			end
+
+			-- swap the stage model
+			if st.model then
+				pcall(function()
+					st.model:Destroy()
+				end)
+				st.model = nil
+			end
+			for _, c in ipairs(ui.stageVP:GetChildren()) do
+				if c:IsA("Camera") then
+					c:Destroy()
+				end
+			end
+			st.entry = entry
+			local m = prep(entry.model)
+			if m then
+				st.base = setupVP(ui.stageVP, m, 38)
+				st.model = m
+				st.colors = collectColors(m)
+				st.ang = 0
+				st.vel = 7
+				applyColors()
+				ui.noModel.Visible = false
+			else
+				st.colors = nil
+				ui.noModel.Visible = true
+			end
+
+			-- header + accents
+			ui.name.Text = entry.name
+			ui.rarityPill.Text = entry.rarity
+			ui.rarityPill.BackgroundColor3 = entry.color
+			ui.stageGlow.BackgroundColor3 = entry.color
+			ui.stageStroke.Color = entry.color
+			ui.stageName.Text = entry.name
+			ui.stageName.TextColor3 = entry.color
+
+			-- pop animation
+			ui.pop.Scale = 0.55
+			TweenService:Create(ui.pop, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+			ui.stageGlow.BackgroundTransparency = 0.35
+			TweenService:Create(ui.stageGlow, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.78}):Play()
+
+			for cat, c in pairs(cards) do
+				local on = (cat == entry.cat)
+				c.stroke.Color = on and T.accent or T.stroke
+				c.stroke.Thickness = on and 2 or 1
+				c.btn.BackgroundColor3 = on and T.cardHover or T.card
+			end
+			refreshStats()
+		end
+
+		-- ---------- grid ----------
+		local function matches(e)
+			if st.rarity ~= "All" and e.rarity ~= st.rarity then
+				return false
+			end
+			if st.search ~= "" and not string.find(string.lower(e.name), st.search, 1, true) then
+				return false
+			end
+			return true
+		end
+
+		local function makeCard(e, order)
+			local btn = new("TextButton", {
+				Text = "", AutoButtonColor = false, BackgroundColor3 = T.card, BorderSizePixel = 0, LayoutOrder = order,
+			}, ui.grid)
+			corner(btn, 10)
+			local sk = stroke(btn, T.stroke, 1)
+			local vp = new("ViewportFrame", {
+				BackgroundColor3 = T.bg, BackgroundTransparency = 0.2, BorderSizePixel = 0,
+				Position = UDim2.fromOffset(5, 5), Size = UDim2.new(1, -10, 0, 82),
+			}, btn)
+			corner(vp, 8)
+			local m = prep(e.model)
+			if m then
+				setupVP(vp, m, 38)
+			end
+			new("Frame", {BackgroundColor3 = e.color, BorderSizePixel = 0, Position = UDim2.fromOffset(5, 5), Size = UDim2.fromOffset(3, 82)}, btn)
+			label(btn, e.name, 12, T.text, FONT_B, 6, 90, 96, 16)
+			label(btn, e.rarity, 11, e.color, FONT_M, 6, 106, 96, 14)
+			cards[e.cat] = {btn = btn, stroke = sk}
+			if st.entry and st.entry.cat == e.cat then
+				sk.Color = T.accent
+				sk.Thickness = 2
+				btn.BackgroundColor3 = T.cardHover
+			end
+			btn.MouseEnter:Connect(function()
+				if not (st.entry and st.entry.cat == e.cat) then
+					btn.BackgroundColor3 = T.cardHover
+				end
+			end)
+			btn.MouseLeave:Connect(function()
+				if not (st.entry and st.entry.cat == e.cat) then
+					btn.BackgroundColor3 = T.card
+				end
+			end)
+			btn.MouseButton1Click:Connect(function()
+				setSpotlight(e, btn)
+			end)
+		end
+
+		local function rebuildGrid()
+			if not ui then
+				return
+			end
+			gen = gen + 1
+			local my = gen
+			for _, c in pairs(cards) do
+				c.btn:Destroy()
+			end
+			cards = {}
+			local list = {}
+			for _, e in ipairs(D.pets) do
+				if matches(e) then
+					list[#list + 1] = e
+				end
+			end
+			ui.count.Text = #list .. " / " .. #D.pets .. " pets"
+			ui.empty.Visible = (#list == 0)
+			task.spawn(function()
+				for i, e in ipairs(list) do
+					if my ~= gen or not ui or not ui.gui.Parent then
+						return
+					end
+					makeCard(e, i)
+					if i % 5 == 0 then
+						task.wait()
+					end
+				end
+			end)
+		end
+
+		-- ---------- build window ----------
+		local function build()
+			local old = parentGui():FindFirstChild(GUI_NAME)
+			if old then
+				old:Destroy()
+			end
+
+			local gui = new("ScreenGui", {
+				Name = GUI_NAME, ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+				DisplayOrder = 99990, IgnoreGuiInset = true, Enabled = false,
+			})
+			gui.Parent = parentGui()
+
+			local root = new("Frame", {
+				Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromOffset(1000, 580), BackgroundColor3 = T.bg, BorderSizePixel = 0, Active = true,
+			}, gui)
+			corner(root, 14)
+			stroke(root, T.stroke, 1.5)
+			local uiScale = new("UIScale", {Scale = 1}, root)
+			ui = {gui = gui, root = root, uiScale = uiScale}
+
+			-- title bar
+			local bar = new("Frame", {BackgroundColor3 = T.panel, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 44), Active = true}, root)
+			corner(bar, 14)
+			new("Frame", {BackgroundColor3 = T.panel, BorderSizePixel = 0, Position = UDim2.new(0, 0, 1, -14), Size = UDim2.new(1, 0, 0, 14)}, bar)
+			label(bar, "Pet Card", 18, T.text, FONT_B, 16, 0, 200, 44)
+			ui.count = label(bar, "", 12, T.dim, FONT_M, 120, 2, 200, 44)
+			local close = new("TextButton", {
+				Text = "X", Font = FONT_B, TextSize = 14, TextColor3 = T.sub, BackgroundColor3 = T.card, AutoButtonColor = false,
+				AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(30, 26),
+			}, bar)
+			corner(close, 8)
+			close.MouseButton1Click:Connect(function()
+				M.close()
+			end)
+
+			-- window drag
+			local dragging, dragStart, startPos = false, nil, nil
+			bar.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = true
+					dragStart = input.Position
+					startPos = root.Position
+				end
+			end)
+			bar.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = false
+				end
+			end)
+			conns[#conns + 1] = UIS.InputChanged:Connect(function(input)
+				if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+					local d = (input.Position - dragStart) / uiScale.Scale
+					root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+				end
+			end)
+
+			-- ===== left: search + rarity + grid =====
+			local left = new("Frame", {BackgroundColor3 = T.panel, BorderSizePixel = 0, Position = UDim2.fromOffset(12, 56), Size = UDim2.fromOffset(352, 512)}, root)
+			corner(left, 12)
+
+			local search = new("TextBox", {
+				Text = "", PlaceholderText = "Search pet...", PlaceholderColor3 = T.dim, TextColor3 = T.text, Font = FONT_M, TextSize = 13,
+				ClearTextOnFocus = false, BackgroundColor3 = T.card, BorderSizePixel = 0, TextXAlignment = Enum.TextXAlignment.Left,
+				Position = UDim2.fromOffset(10, 10), Size = UDim2.new(1, -20, 0, 30),
+			}, left)
+			corner(search, 8)
+			new("UIPadding", {PaddingLeft = UDim.new(0, 10)}, search)
+			local searchToken = 0
+			search:GetPropertyChangedSignal("Text"):Connect(function()
+				searchToken = searchToken + 1
+				local my = searchToken
+				task.delay(0.25, function()
+					if my == searchToken then
+						st.search = string.lower(search.Text)
+						rebuildGrid()
+					end
+				end)
+			end)
+
+			local chips = new("ScrollingFrame", {
+				BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.fromOffset(10, 46), Size = UDim2.new(1, -20, 0, 28),
+				CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.X, ScrollBarThickness = 0,
+				ScrollingDirection = Enum.ScrollingDirection.X,
+			}, left)
+			new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Center}, chips)
+			local rarityBtns = {}
+			local function rarityChip(name, color, order)
+				local w = TextService:GetTextSize(name, 12, FONT_B, Vector2.new(400, 24)).X + 20
+				local b = new("TextButton", {
+					Text = name, Font = FONT_B, TextSize = 12, TextColor3 = T.text, BackgroundColor3 = T.card, AutoButtonColor = false,
+					Size = UDim2.fromOffset(w, 24), LayoutOrder = order,
+				}, chips)
+				corner(b, 12)
+				local s = stroke(b, color, 1)
+				rarityBtns[name] = {b = b, s = s, color = color}
+				b.MouseButton1Click:Connect(function()
+					st.rarity = name
+					for n, r in pairs(rarityBtns) do
+						local on = (n == name)
+						r.b.BackgroundColor3 = on and r.color:Lerp(T.card, 0.6) or T.card
+						r.s.Thickness = on and 2 or 1
+					end
+					rebuildGrid()
+				end)
+			end
+			rarityChip("All", T.accent, 0)
+			for i, r in ipairs(D.rarities) do
+				local col = T.sub
+				for _, e in ipairs(D.pets) do
+					if e.rarity == r.name then
+						col = e.color
+						break
+					end
+				end
+				rarityChip(r.name, col, i)
+			end
+			rarityBtns["All"].b.BackgroundColor3 = T.accent:Lerp(T.card, 0.6)
+			rarityBtns["All"].s.Thickness = 2
+
+			local grid = new("ScrollingFrame", {
+				BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.fromOffset(10, 82), Size = UDim2.new(1, -16, 1, -92),
+				CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 4,
+				ScrollBarImageColor3 = T.accent,
+			}, left)
+			new("UIGridLayout", {CellSize = UDim2.fromOffset(104, 126), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
+			new("UIPadding", {PaddingRight = UDim.new(0, 4), PaddingBottom = UDim.new(0, 6)}, grid)
+			ui.grid = grid
+			ui.empty = label(left, "No pet matches.", 13, T.dim, FONT_M, 0, 200, 352, 20, Enum.TextXAlignment.Center)
+			ui.empty.Visible = false
+
+			-- ===== center: stage (spotlight) =====
+			local stage = new("Frame", {BackgroundColor3 = T.panel, BorderSizePixel = 0, Position = UDim2.fromOffset(376, 56), Size = UDim2.fromOffset(330, 512), ClipsDescendants = true, Active = true}, root)
+			corner(stage, 12)
+			ui.stageStroke = stroke(stage, T.accent, 1.5, 0.35)
+			ui.stage = stage
+			local bgGrad = new("UIGradient", {Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(26, 24, 44), Color3.fromRGB(12, 12, 20))}, stage)
+			ui.stageName = label(stage, "", 20, T.text, FONT_B, 16, 14, 298, 28, Enum.TextXAlignment.Center)
+
+			local glow = new("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, -10), Size = UDim2.fromOffset(300, 300),
+				BackgroundColor3 = T.accent, BackgroundTransparency = 0.78, BorderSizePixel = 0,
+			}, stage)
+			corner(glow, 150)
+			new("UIGradient", {Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1)}), Rotation = 90}, glow)
+			ui.stageGlow = glow
+			local floor = new("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 130), Size = UDim2.fromOffset(190, 26),
+				BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 0.55, BorderSizePixel = 0,
+			}, stage)
+			corner(floor, 13)
+
+			local holder = new("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, -10), Size = UDim2.fromOffset(310, 310),
+				BackgroundTransparency = 1,
+			}, stage)
+			ui.pop = new("UIScale", {Scale = 1}, holder)
+			local stageVP = new("ViewportFrame", {BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Active = true}, holder)
+			ui.stageVP = stageVP
+			ui.noModel = label(holder, "3D model not found", 13, T.dim, FONT_M, 0, 140, 310, 20, Enum.TextXAlignment.Center)
+			ui.noModel.Visible = false
+			label(stage, "drag to rotate", 11, T.dim, FONT_M, 0, 486, 330, 16, Enum.TextXAlignment.Center)
+
+			stageVP.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					st.dragging = true
+					st.lastX = input.Position.X
+				end
+			end)
+			stageVP.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					st.dragging = false
+				end
+			end)
+			conns[#conns + 1] = UIS.InputChanged:Connect(function(input)
+				if st.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+					st.ang = st.ang + (input.Position.X - st.lastX) * 0.012
+					st.lastX = input.Position.X
+				end
+			end)
+			conns[#conns + 1] = UIS.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					st.dragging = false
+				end
+			end)
+
+			-- ===== right: card details =====
+			local right = new("Frame", {BackgroundColor3 = T.panel, BorderSizePixel = 0, Position = UDim2.fromOffset(718, 56), Size = UDim2.fromOffset(270, 512)}, root)
+			corner(right, 12)
+			ui.name = label(right, "", 19, T.text, FONT_B, 14, 12, 242, 26)
+			ui.rarityPill = new("TextLabel", {
+				Text = "", Font = FONT_B, TextSize = 11, TextColor3 = Color3.fromRGB(10, 10, 16), BackgroundColor3 = T.accent,
+				Position = UDim2.fromOffset(14, 42), Size = UDim2.fromOffset(90, 20), AutomaticSize = Enum.AutomaticSize.X,
+			}, right)
+			corner(ui.rarityPill, 10)
+			new("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, ui.rarityPill)
+
+			local stats = new("Frame", {BackgroundColor3 = T.card, BorderSizePixel = 0, Position = UDim2.fromOffset(12, 72), Size = UDim2.fromOffset(246, 142)}, right)
+			corner(stats, 10)
+			local function row(i, text, color)
+				local y = 8 + (i - 1) * 26
+				label(stats, text, 12, T.sub, FONT_M, 12, y, 120, 22)
+				return label(stats, "-", 13, color or T.text, FONT_B, 120, y, 114, 22, Enum.TextXAlignment.Right)
+			end
+			ui.vBaseRate = row(1, "Base money/s", T.good)
+			ui.vBaseWeight = row(2, "Base weight")
+			ui.vNowRate = row(3, "Money/s (current)", T.good)
+			ui.vNowWeight = row(4, "Weight (current)")
+			ui.vMult = row(5, "Mutation boost", T.accent2)
+
+			-- scale slider
+			label(right, "Scale", 12, T.sub, FONT_M, 14, 224, 100, 18)
+			ui.scaleVal = label(right, "1.0", 12, T.text, FONT_B, 158, 224, 98, 18, Enum.TextXAlignment.Right)
+			local track = new("Frame", {BackgroundColor3 = Color3.fromRGB(46, 46, 66), BorderSizePixel = 0, Position = UDim2.fromOffset(16, 250), Size = UDim2.fromOffset(238, 6), Active = true}, right)
+			corner(track, 3)
+			local fill = new("Frame", {BackgroundColor3 = T.accent, BorderSizePixel = 0, Size = UDim2.fromScale(0, 1)}, track)
+			corner(fill, 3)
+			local knob = new("Frame", {BackgroundColor3 = T.text, BorderSizePixel = 0, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.fromOffset(14, 14)}, track)
+			corner(knob, 7)
+			local SMIN, SMAX = 1, 10
+			local sliding = false
+			local function setScaleFromX(x)
+				local a = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+				st.scale = math.floor((SMIN + (SMAX - SMIN) * a) * 10 + 0.5) / 10
+				fill.Size = UDim2.fromScale(a, 1)
+				knob.Position = UDim2.fromScale(a, 0.5)
+				refreshStats()
+			end
+			track.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					sliding = true
+					setScaleFromX(input.Position.X)
+				end
+			end)
+			conns[#conns + 1] = UIS.InputChanged:Connect(function(input)
+				if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+					setScaleFromX(input.Position.X)
+				end
+			end)
+			conns[#conns + 1] = UIS.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					sliding = false
+				end
+			end)
+
+			-- mutations
+			ui.mutCount = label(right, "Mutations (0)", 12, T.sub, FONT_M, 14, 272, 150, 18)
+			local clear = new("TextButton", {
+				Text = "Clear", Font = FONT_B, TextSize = 11, TextColor3 = T.sub, BackgroundColor3 = T.card, AutoButtonColor = false,
+				Position = UDim2.fromOffset(204, 270), Size = UDim2.fromOffset(52, 20),
+			}, right)
+			corner(clear, 6)
+			clear.MouseButton1Click:Connect(function()
+				st.stack = {}
+				applyColors()
+				refreshChips()
+				refreshStats()
+			end)
+
+			local mutScroll = new("ScrollingFrame", {
+				BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.fromOffset(12, 296), Size = UDim2.fromOffset(250, 150),
+				CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 3, ScrollBarImageColor3 = T.accent,
+			}, right)
+			new("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Wraps = true, Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, mutScroll)
+			new("UIPadding", {PaddingRight = UDim.new(0, 4)}, mutScroll)
+			if #D.muts == 0 then
+				label(right, "No mutation data found in this game.", 12, T.dim, FONT_M, 14, 300, 240, 18)
+			end
+			for i, m in ipairs(D.muts) do
+				local w = TextService:GetTextSize(m.label, 12, FONT_M, Vector2.new(400, 24)).X + 34
+				local b = new("TextButton", {
+					Text = "", AutoButtonColor = false, BackgroundColor3 = T.card, BorderSizePixel = 0,
+					Size = UDim2.fromOffset(math.min(w, 236), 26), LayoutOrder = i,
+				}, mutScroll)
+				corner(b, 13)
+				local s = stroke(b, T.stroke, 1)
+				local dot = new("Frame", {BackgroundColor3 = mutColor(m.id), BorderSizePixel = 0, Position = UDim2.fromOffset(8, 8), Size = UDim2.fromOffset(10, 10)}, b)
+				corner(dot, 5)
+				new("TextLabel", {
+					BackgroundTransparency = 1, Text = m.label, Font = FONT_M, TextSize = 12, TextColor3 = T.text,
+					Position = UDim2.fromOffset(24, 0), Size = UDim2.new(1, -26, 1, 0), TextXAlignment = Enum.TextXAlignment.Left,
+					TextTruncate = Enum.TextTruncate.AtEnd,
+				}, b)
+				local badge = new("TextLabel", {
+					Text = "", Font = FONT_B, TextSize = 10, TextColor3 = Color3.fromRGB(10, 10, 16), BackgroundColor3 = T.text,
+					AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 2, 0, -3), Size = UDim2.fromOffset(15, 15), Visible = false, ZIndex = 3,
+				}, b)
+				corner(badge, 8)
+				chipBtns[m.id] = {btn = b, stroke = s, badge = badge}
+				b.MouseButton1Click:Connect(function()
+					toggleMut(m.id)
+				end)
+			end
+
+			-- stack preview
+			label(right, "Stack result", 12, T.sub, FONT_M, 14, 454, 150, 16)
+			local bar2 = new("Frame", {BackgroundColor3 = T.stroke, BorderSizePixel = 0, Position = UDim2.fromOffset(14, 474), Size = UDim2.fromOffset(242, 10)}, right)
+			corner(bar2, 5)
+			new("UIGradient", {}, bar2)
+			ui.stackBar = bar2
+			ui.stackText = label(right, "", 11, T.dim, FONT_M, 14, 488, 242, 16)
+
+			return ui
+		end
+
+		-- ---------- viewport fit ----------
+		local function fit()
+			if not ui then
+				return
+			end
+			local cam = workspace.CurrentCamera
+			local vs = cam and cam.ViewportSize or Vector2.new(1280, 720)
+			ui.uiScale.Scale = math.clamp(math.min(vs.X / 1030, vs.Y / 610), 0.4, 1)
+		end
+
+		local function startRender()
+			if renderConn then
+				return
+			end
+			renderConn = RunService.RenderStepped:Connect(function(dt)
+				if alive and not alive() then
+					M.destroy()
+					return
+				end
+				if st.model and st.model.Parent then
+					if not st.dragging then
+						st.vel = st.vel + (0.7 - st.vel) * math.min(1, dt * 2.2)
+						st.ang = st.ang + st.vel * dt
+					end
+					st.model:PivotTo(CFrame.Angles(0, st.ang, 0) * st.base)
+				end
+			end)
+		end
+
+		local function stopRender()
+			if renderConn then
+				renderConn:Disconnect()
+				renderConn = nil
+			end
+		end
+
+		-- ---------- public ----------
+		function M.open()
+			loadData()
+			if not ui or not ui.gui.Parent then
+				build()
+				rebuildGrid()
+				local cam = workspace.CurrentCamera
+				if cam then
+					conns[#conns + 1] = cam:GetPropertyChangedSignal("ViewportSize"):Connect(fit)
+				end
+			end
+			fit()
+			ui.gui.Enabled = true
+			startRender()
+			if not st.entry and D.pets[1] then
+				task.defer(function()
+					if ui and D.pets[1] then
+						setSpotlight(D.pets[1], nil)
+					end
+				end)
+			end
+		end
+
+		function M.close()
+			stopRender()
+			if ui and ui.gui then
+				ui.gui.Enabled = false
+			end
+		end
+
+		function M.toggle()
+			if ui and ui.gui and ui.gui.Parent and ui.gui.Enabled then
+				M.close()
+			else
+				M.open()
+			end
+		end
+
+		function M.destroy()
+			stopRender()
+			for _, c in ipairs(conns) do
+				pcall(function()
+					c:Disconnect()
+				end)
+			end
+			conns = {}
+			gen = gen + 1
+			if ui and ui.gui then
+				pcall(function()
+					ui.gui:Destroy()
+				end)
+			end
+			ui = nil
+		end
+
+		return M
+	end)(fn2)
+
+	do
+		local petCardSection = tbl24.section(v34, "Pet Card", tbl24.gameIcon("Assets", "Directory", "Unicorn", "Icon"))
+		petCardSection:AddButton({Title = "Pet Card", Content = "Opens the full pet browser: every pet in 3D. Pick one to spotlight it in the middle, stack mutation colors, and see base money/s and base weight.", Callback = fn144(function()
+			local pc = genv.__PilatPetCard
+			if pc and type(pc.toggle) == "function" then
+				local ok, err = pcall(pc.toggle)
+				if not ok then
+					flag6:Notify({Title = "Pet Card", Content = "Failed to open: " .. tostring(err), Duration = 5})
+				end
+			else
+				flag6:Notify({Title = "Pet Card", Content = "Pet Card is not loaded.", Duration = 3})
+			end
+		end)})
+	end
+
 	local v45 = tbl24.section(v34, "Pet Selling", tbl24.gameIcon("Currency", "Directory", "Money", "Icon"))
 	tbl24.autoSell = v45:AddToggle({Title = "Auto Sell Pet", Content = "Sells pets that match a filter below. Favorite, placed and equipped pets are kept.", Default = false, Callback = fn144(fn127)})
 	v45:AddSubSection("Filter")
