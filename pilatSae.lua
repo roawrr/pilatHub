@@ -36325,6 +36325,8 @@ local function fn66()
 			if cfg.HwDimNoclip == nil then cfg.HwDimNoclip = true end
 			if cfg.HwPumpTp == nil then cfg.HwPumpTp = true end
 			if cfg.HwPumpBat == nil then cfg.HwPumpBat = true end
+			if cfg.HwPumpHit == nil then cfg.HwPumpHit = false end
+			if cfg.HwPumpHitTp == nil then cfg.HwPumpHitTp = true end
 			if cfg.HwMonTp == nil then cfg.HwMonTp = true end
 			if cfg.HwEggTp == nil then cfg.HwEggTp = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
@@ -37830,6 +37832,130 @@ local function fn66()
 				noclip = false
 			end
 
+			-- ---------------- Pumpkin Moon: hit the players carrying a pumpkin until it drops, then the loop below grabs it
+			-- Logic ported from Sena v7 PlayerSteal: BatSwing.Trigger(victim, trace) + bat rotation, pointed at pumpkin carriers.
+			-- Every frame: stay on the carrier, take a bat whose cooldown is over (swap the moment the held one is cooling down), swing.
+			local hitSeq, batRemote = 0, nil
+			hw.PumpHitTime = 8
+
+			local function carrierTarget()
+				local root = rootPart()
+				if not root then
+					return nil
+				end
+				local safe = zonePart("SafeZone")
+				local best, bestDist = nil, math.huge
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if plr ~= localPlayer and plr:GetAttribute("HalloweenPumpkinCarrying") == true then
+						local char = plr.Character
+						local hum = char and char:FindFirstChildOfClass("Humanoid")
+						local pr = char and char:FindFirstChild("HumanoidRootPart")
+						if hum and hum.Health > 0 and pr and not (safe and inside(safe, pr.Position)) then
+							local dist = (pr.Position - root.Position).Magnitude
+							if dist < bestDist then
+								best, bestDist = plr, dist
+							end
+						end
+					end
+				end
+				return best
+			end
+
+			-- first bat that is off cooldown (held one first); when all are cooling down returns the one that frees up first
+			local function readyBat()
+				pickWeapon() -- refreshes hw.WeaponList (honours "Use Weapons")
+				local serverNow = Workspace:GetServerTimeNow()
+				local char = localPlayer.Character
+				local held = char and char:FindFirstChildOfClass("Tool")
+				local function cd(tool)
+					return tonumber(tool:GetAttribute("CooldownEndTime")) or 0
+				end
+				local list = {}
+				for _, tool in ipairs(hw.WeaponList or {}) do
+					if tool.Parent and bats[tool:GetAttribute("GearName") or tool.Name] then
+						list[#list + 1] = tool
+					end
+				end
+				if held and table.find(list, held) and cd(held) <= serverNow then
+					return held, true
+				end
+				local soonest, soonestAt
+				for _, tool in ipairs(list) do
+					local at = cd(tool)
+					if at <= serverNow then
+						return tool, true
+					end
+					if not soonestAt or at < soonestAt then
+						soonest, soonestAt = tool, at
+					end
+				end
+				return soonest, false
+			end
+
+			local function batHit(victim)
+				if not batRemote then
+					pcall(function()
+						batRemote = require(ReplicatedStorage.Shared.Remotes).BatSwing.Trigger
+					end)
+				end
+				if not batRemote then
+					return false
+				end
+				hitSeq = hitSeq + 1
+				local trace = string.format("%d:%d:%d", localPlayer.UserId, hitSeq, math.floor(Workspace:GetServerTimeNow() * 1000))
+				return pcall(function()
+					batRemote:FireServer(victim, trace)
+				end)
+			end
+
+			-- returns true when it spent time on a carrier (so the pumpkin loop re-checks for the dropped pumpkin right away)
+			local function hitCarrier(alive)
+				local victim = carrierTarget()
+				if not victim then
+					return false
+				end
+				if not readyBat() then
+					hw.Status = "Pumpkin Moon: get a bat to hit carriers"
+					return false
+				end
+				local hum = humanoid()
+				if hum and hum.Health < hum.MaxHealth * 0.4 then
+					healSafe(alive)
+					return true
+				end
+				hw.Status = "Pumpkin Moon: hitting " .. victim.Name .. " (pumpkin carrier)"
+				local snap = on("HwPumpHitTp", true) and inDim()
+				local untilAt, lastSwing = os.clock() + (tonumber(hw.PumpHitTime) or 8), 0
+				noclip = true
+				while alive() and os.clock() < untilAt and attr("HalloweenPumpkinCarrying") ~= true and victim.Parent and victim:GetAttribute("HalloweenPumpkinCarrying") == true do
+					local vroot = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
+					if not vroot or not rootPart() then
+						break
+					end
+					local pos = vroot.Position
+					local spot = pos - vroot.CFrame.LookVector * 3
+					if snap then
+						tp(CFrame.new(spot))
+					else
+						walkStep(spot, hw.MonsterSpeed)
+					end
+					face(pos)
+					local bat, ready = readyBat()
+					if bat then
+						equip(bat)
+						local now = rootPart()
+						if ready and bat.Parent == localPlayer.Character and now and (pos - now.Position).Magnitude <= 14 and os.clock() - lastSwing >= 0.08 then
+							lastSwing = os.clock()
+							batHit(victim)
+						end
+					end
+					step()
+				end
+				noclip = false
+				walkStop()
+				return true
+			end
+
 			local function pumpkinOnce(alive)
 				local d = dim()
 				if not d then
@@ -37847,6 +37973,9 @@ local function fn66()
 				end
 				local pumpkin = nearestPumpkin(d:FindFirstChild("RunawayPumpkins"))
 				if not pumpkin then
+					if on("HwPumpHit") and hitCarrier(alive) then
+						return true
+					end
 					hw.Status = "Pumpkin Moon: waiting for a free pumpkin"
 					return false
 				end
@@ -40612,6 +40741,19 @@ local function fn66()
 	tbl24.stealPlayers = v63:AddToggle({Title = "Auto Steal From Players", Content = "Chases anyone carrying an egg in the field, bats them until the egg drops, grabs it and banks it. A carrier is only chased when the egg clears the filters below.", Default = false, Callback = fn144(fn145)})
 	tbl24.stealPlayerRarities = v63:AddDropdown({Title = "Rarity Filter", Content = "Only chase eggs of these rarities. Empty = uses the Auto Steal rarity filter.", Options = v26, Multi = true, Default = {}, Callback = fn144(fn146)})
 	tbl24.stealPlayerValue = v63:AddInput({Title = "Minimum Value", Content = "Skip carriers holding less than this per second. Supports k, m and b.", Placeholder = "e.g. 500k, 2m, 1b", Default = "", Callback = fn144(fn148)})
+	local pumpHitSection = tbl24.section(v32, "Hit Pumpkin Carriers (Pumpkin Moon)", tbl24.gameIcon("Gears", "Directory", "Bat", "Icon"))
+	pumpHitSection:AddToggle({Flag = "Steal_HwPumpHit", Title = "Auto Hit Pumpkin Carriers", Content = "During the Pumpkin Moon, when no free pumpkin is left, goes to the player carrying one and bats them (swapping to a bat that is off cooldown every frame) until the pumpkin drops, then grabs it. Needs Auto Pumpkin Moon on in the Events tab.", Default = false, Callback = fn144(function(arg)
+		pilatV4Config.HwPumpHit = arg == true
+	end)})
+	pumpHitSection:AddToggle({Flag = "Steal_HwPumpHitTp", Title = "Teleport To Carriers", Content = "Snaps behind the carrier every frame (inside the Halloween Dimension). Off = runs after them at Monster Walk Speed.", Default = true, Callback = fn144(function(arg)
+		pilatV4Config.HwPumpHitTp = arg == true
+	end)})
+	pumpHitSection:AddSlider({Flag = "Steal_PumpHitTime", Title = "Max Chase Time", Content = "Seconds to stay on one carrier before re-picking the closest one.", Min = 3, Max = 15, Default = 8, Increment = 1, Callback = fn144(function(arg)
+		local tools = genv.__PilatV4HalloweenTools
+		if tools then
+			tools.PumpHitTime = tonumber(arg) or 8
+		end
+	end)})
 	local v64 = v32:AddSection({Title = "Steal From Specific Player", AlwaysOpen = true, Icon = tbl24.gameIcon("Gears", "Directory", "Katana", "Icon")})
 	fn69 = v32:AddSection({Title = "Steal History", AlwaysOpen = true, Icon = tbl24.gameIcon("Gears", "Directory", "Flyswatter", "Icon")})
 	local v65, v66, v67, v68
