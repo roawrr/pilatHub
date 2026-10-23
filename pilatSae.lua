@@ -9982,63 +9982,449 @@ local v8 = (function()
 		arg:_requestCarry(rec, true)
 	end
 
-	-- delivery for Instant V2, called from _instantReturn instead of the relay rounds.
+	-- ===== Instant TP delivery for V2 (ported from yslemEgg Instant TP) =====
+	-- _v2Home (below) uses these: hops to the line (a pull-back repeats the hop with a longer, learned pause),
+	-- lands, drops, takes the egg back and runs the carry plan into the safe zone from above the base.
+	-- Everything hangs on `index` so no new top-level locals are used.
+	index.V2TP = {
+		SpeedCap = 1.15,      -- never above 115% of the walk speed
+		HopRatio = 1.515,     -- hop distance = walk speed * ratio
+		HopMin = 40,
+		HopGap = 0.06,        -- seconds between two hops (learned: grows after a pull-back, shrinks after a clean hop)
+		HopGapMin = 0.06,
+		HopGapMax = 0.2,
+		HopRetries = 6,
+		HopLift = 42,         -- height of the hops above the start
+		LandOffset = 14,      -- landing spot in front of the line
+		LandSettle = 0.08,
+		DropDelay = 0.05,
+		GrabGap = 0.03,
+		Height = 70,          -- the safe-zone run starts above the base and comes down
+		ClimbShare = 0.5,
+		CarryRatio = 0.9,
+		EasyRatio = 1.3,
+		FpsHigh = 60,
+		FpsLow = 30,
+		FpsGap = 0.15,
+		Mult = 1,
+	}
+
+	-- carry speed multiplier + server pull-backs
+	index._tpWatch = function(arg)
+		local tp = index.V2TP
+		if tp.Watching then
+			return
+		end
+		tp.Watching = true
+		pcall(function()
+			if type(EggState2.CarryChanged) == "table" and type(EggState2.CarryChanged.Connect) == "function" then
+				EggState2.CarryChanged:Connect(function(info)
+					if type(info) == "table" and info.IsCarrying == true then
+						local mult = tonumber(info.SpeedMultiplier)
+						if mult and mult > 0 then
+							tp.Mult = mult
+						end
+					end
+				end)
+			end
+		end)
+		pcall(arg._watchRelocates, arg)
+	end
+
+	index._tpWalkSpeed = function(arg)
+		local speed = arg:_legitWalkSpeed()
+		local ok, result = pcall(function()
+			local stat = localPlayer2:FindFirstChild("leaderstats")
+			stat = stat and stat:FindFirstChild("Speed")
+			local util = require(game:GetService("ReplicatedStorage").Shared.Util.TreadmillUtil)
+			return stat and util.SpeedPowerToWalkSpeed(stat.Value) or nil
+		end)
+		if ok and type(result) == "number" and result > 0 then
+			speed = math.min(speed, result)
+		end
+		return speed
+	end
+
+	-- portals / arenas / teleporters are walked around
+	index._tpDangers = function(arg)
+		local tp = index.V2TP
+		if tp.DangerCache and os.clock() - (tp.DangerAt or 0) < 1 then
+			return tp.DangerCache
+		end
+		tp.DangerAt = os.clock()
+		local list = {}
+		local function add(inst)
+			local ok, cf, size = pcall(function()
+				if inst:IsA("Model") then
+					return inst:GetBoundingBox()
+				elseif inst:IsA("BasePart") then
+					return inst.CFrame, inst.Size
+				end
+			end)
+			if ok and cf and size then
+				local half = Vector3.new(math.abs(size.X), 0, math.abs(size.Z)) * 0.5
+				local rot = (cf - cf.Position):VectorToWorldSpace(half)
+				local rx = math.max(math.abs(rot.X), half.X, half.Z)
+				local rz = math.max(math.abs(rot.Z), half.X, half.Z)
+				list[#list + 1] = {MinX = cf.Position.X - rx, MaxX = cf.Position.X + rx, MinZ = cf.Position.Z - rz, MaxZ = cf.Position.Z + rz}
+			end
+		end
+		local function bad(name)
+			if name == "ScrambleLocalVisuals" or name == "DrScrambleEvent" then
+				return false
+			end
+			name = string.lower(name)
+			return string.find(name, "portal", 1, true) or string.find(name, "teleport", 1, true) or string.find(name, "mech", 1, true) or string.find(name, "arena", 1, true) or string.find(name, "scramble", 1, true)
+		end
+		for _, child in ipairs(workspace:GetChildren()) do
+			if (child:IsA("Model") or child:IsA("BasePart") or child:IsA("Folder")) and bad(child.Name) then
+				if child:IsA("Folder") then
+					for _, inner in ipairs(child:GetChildren()) do
+						add(inner)
+					end
+				else
+					add(child)
+				end
+			end
+		end
+		local build = workspace:FindFirstChild("World")
+		build = build and build:FindFirstChild("Build")
+		if build then
+			for _, child in ipairs(build:GetChildren()) do
+				if bad(child.Name) then
+					for _, inner in ipairs(child:GetChildren()) do
+						add(inner)
+					end
+				end
+			end
+		end
+		tp.DangerCache = list
+		return list
+	end
+
+	-- if the straight line crosses a danger zone, aim at the corner of it instead
+	index._tpAvoid = function(arg, from, to)
+		for _, d in ipairs(arg:_tpDangers()) do
+			local x0, x1, z0, z1 = d.MinX - 12, d.MaxX + 12, d.MinZ - 12, d.MaxZ + 12
+			local inside = from.X >= x0 and from.X <= x1 and from.Z >= z0 and from.Z <= z1
+			if not inside then
+				local t0, t1, hit = 0, 1, true
+				for _, axis in ipairs({{from.X, to.X - from.X, x0, x1}, {from.Z, to.Z - from.Z, z0, z1}}) do
+					local pos, delta, lo, hi = axis[1], axis[2], axis[3], axis[4]
+					if math.abs(delta) < 1e-6 then
+						if pos < lo or pos > hi then
+							hit = false
+						end
+					else
+						local ta, tb = (lo - pos) / delta, (hi - pos) / delta
+						if ta > tb then
+							ta, tb = tb, ta
+						end
+						t0, t1 = math.max(t0, ta), math.min(t1, tb)
+						if t0 > t1 then
+							hit = false
+						end
+					end
+				end
+				if hit then
+					local zLow, zHigh = z0 - 2, z1 + 2
+					local z = math.abs(from.Z - zLow) <= math.abs(from.Z - zHigh) and zLow or zHigh
+					if z < -440 or z > -290 then
+						z = z == zLow and zHigh or zLow
+					end
+					local x = math.abs(from.X - x0) <= math.abs(from.X - x1) and x0 or x1
+					if math.abs(from.Z - z) < 3 then
+						x = math.abs(to.X - x0) <= math.abs(to.X - x1) and x0 or x1
+					end
+					return Vector3.new(x, to.Y, z)
+				end
+			end
+		end
+		return to
+	end
+
+	index._tpGroundY = function(arg, position, fallback)
+		local y = fallback
+		pcall(function()
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = {localPlayer2.Character}
+			params.IgnoreWater = true
+			local hit = workspace:Raycast(position + Vector3.new(0, 60, 0), Vector3.new(0, -140, 0), params)
+			if hit and hit.Material ~= Enum.Material.Water and math.abs(hit.Position.Y - fallback) < 40 then
+				y = hit.Position.Y + 3.5
+			end
+		end)
+		return y
+	end
+
+	-- camera stays where it was while the character hops; the returned function gives it back
+	index._tpFreezeCamera = function(arg)
+		local camera = workspace.CurrentCamera
+		if not camera then
+			return function() end
+		end
+		local oldType = camera.CameraType
+		local frame = camera.CFrame
+		pcall(function()
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.CFrame = frame
+		end)
+		return function()
+			pcall(function()
+				camera.CameraType = oldType
+			end)
+		end
+	end
+
+	-- a still copy of the player stays where the egg was taken during the flight
+	index._tpDropClone = function(arg)
+		local copy = arg._tpClone
+		arg._tpClone = nil
+		if copy then
+			pcall(function()
+				copy:Destroy()
+			end)
+		end
+	end
+
+	index._tpPostClone = function(arg)
+		arg:_tpDropClone()
+		local character = localPlayer2.Character
+		if not character then
+			return
+		end
+		local was = character.Archivable
+		character.Archivable = true
+		local copy = character:Clone()
+		character.Archivable = was
+		if copy then
+			for _, d in ipairs(copy:GetDescendants()) do
+				if d:IsA("LuaSourceContainer") or d:IsA("Humanoid") then
+					pcall(function()
+						d:Destroy()
+					end)
+				elseif d:IsA("BasePart") then
+					d.Anchored = true
+					d.CanCollide = false
+					d.CanTouch = false
+					d.CanQuery = false
+				end
+			end
+			copy.Name = "Clone"
+			copy.Parent = workspace
+			arg._tpClone = copy
+		end
+	end
+
+	index._tpFpsOn = function(arg)
+		if typeof(setfpscap) ~= "function" then
+			return
+		end
+		local tp = index.V2TP
+		tp.FpsGen = (tp.FpsGen or 0) + 1
+		local mine = tp.FpsGen
+		task.spawn(function()
+			local high = true
+			local started = os.clock()
+			while tp.FpsGen == mine and os.clock() - started < 60 do
+				pcall(setfpscap, high and tp.FpsHigh or tp.FpsLow)
+				high = not high
+				task.wait(tp.FpsGap)
+			end
+		end)
+	end
+
+	index._tpFpsOff = function(arg)
+		local tp = index.V2TP
+		tp.FpsGen = (tp.FpsGen or 0) + 1
+		if typeof(setfpscap) == "function" then
+			pcall(setfpscap, 240)
+		end
+	end
+
+	-- the egg fell: take it back (the hub grab teleports onto the egg and fires the carry requests)
+	index._tpRegrab = function(arg, uid, stop)
+		if v2Carried(uid) then
+			return true
+		end
+		arg:_setStatus("Instant TP: the egg fell, taking it back")
+		return arg:_v2Grab(uid, 3, stop, {stand = true, gap = index.V2TP.GrabGap}) == true
+	end
+
+	index._tpCarrySpeed = function(arg, distance)
+		local tp = index.V2TP
+		local ws = arg:_tpWalkSpeed()
+		local base = ws * math.min(tp.CarryRatio, tp.SpeedCap) * (tp.Mult or 1)
+		local fast = base * 1.5
+		local excess = 5.5 * base
+		local limit = fast
+		if distance and distance > excess then
+			limit = math.min(fast, base * distance / (distance - excess))
+		end
+		return math.min(math.max(math.min(base * tp.EasyRatio, limit), base), math.max(ws * tp.SpeedCap, base))
+	end
+
+	-- safe zone: checkpoint 7 studs past the line, then the base. The run starts above the base and comes down.
+	-- true = still carrying the egg and standing at the base
+	index._tpRunHome = function(arg, uid, alive, lineX, laneZ)
+		local tp = index.V2TP
+		local root, humanoid = v2Root()
+		if not root then
+			return false
+		end
+		local safeCF = arg:_resolveSafeCFrame(root)
+		local home = safeCF and safeCF.Position or Vector3.new(528.7, 70.57, -364.11)
+		local checkpoint = lineX - 7
+		local height = tp.Height
+		local share = math.clamp(tp.ClimbShare, 0.1, 0.9)
+		local descent = height * math.sqrt(1 - share * share) / share
+		local character = localPlayer2.Character
+		if humanoid then
+			humanoid.PlatformStand = false
+		end
+
+		-- rise above the base first (no horizontal move)
+		if character and height > 0.5 and home.Y + height - 2 > root.Position.Y then
+			pcall(function()
+				character:PivotTo(CFrame.new(Vector3.new(root.Position.X, home.Y + height, root.Position.Z)) * root.CFrame.Rotation)
+				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end)
+		end
+
+		-- the speed is planned once, from the distance still to go
+		local start = v2Root()
+		local speed = arg:_tpCarrySpeed(start and (Vector3.new(start.Position.X - home.X, 0, start.Position.Z - home.Z).Magnitude + math.max(0, height) * 2) or nil)
+
+		arg:_setStatus("Instant TP: running into the safe zone")
+		local last = os.clock()
+		local timeout = 0
+		while v2Carried(uid) and alive() and timeout < 25 do
+			local r = v2Root()
+			if not r then
+				return false
+			end
+			local now = os.clock()
+			local dt = math.max(now - last, 1 / 240)
+			last = now
+			timeout = timeout + dt
+
+			local toHome = r.Position.X <= checkpoint + 2
+			local target = toHome and home or Vector3.new(checkpoint, home.Y, laneZ)
+			if toHome and Vector3.new(home.X - r.Position.X, 0, home.Z - r.Position.Z).Magnitude < 2 then
+				break
+			end
+			local aim = arg:_tpAvoid(r.Position, target)
+			local flat = Vector3.new(aim.X - r.Position.X, 0, aim.Z - r.Position.Z)
+			local remaining = toHome and 0 or math.max(0, r.Position.X - checkpoint)
+			local wantY = home.Y + height
+			if toHome or remaining <= descent then
+				wantY = home.Y + height * math.clamp(remaining / math.max(descent, 1), 0, 1)
+			end
+			local vy = math.clamp((wantY - r.Position.Y) / 0.12, -speed * share, speed * share)
+			local horizontal = math.sqrt(math.max(speed * speed - vy * vy, 0))
+			local v = flat.Magnitude > 0.01 and flat.Unit * math.min(horizontal, flat.Magnitude / 0.05) or Vector3.new(0, 0, 0)
+			pcall(function()
+				r.AssemblyLinearVelocity = Vector3.new(v.X, vy, v.Z)
+			end)
+			RunService2.Heartbeat:Wait()
+		end
+
+		local final = v2Root()
+		if final then
+			pcall(function()
+				final.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			end)
+		end
+		local hum = select(2, v2Root())
+		if hum then
+			pcall(function()
+				hum:Move(Vector3.new(0, 0, 0), false)
+			end)
+		end
+		return v2Carried(uid) and alive()
+	end
+
+	-- delivery for Instant V2, called from _instantReturn instead of the relay rounds. It is now the Instant TP logic.
 	-- true = the egg is in hand again and has been put in the safe zone, false = something failed
 	index._v2Home = function(arg, uid, alive)
 		local V2 = index.V2
+		local tp = index.V2TP
 
 		local function stop()
 			return not alive()
 		end
 
 		local root, humanoid = v2Root()
-
 		if not root or not humanoid then
 			return false
 		end
 
+		arg:_tpWatch()
+
 		local lineX, lineY = v2Line()
 		local zMin, zMax = v2ZRange()
-		local z = math.clamp(root.Position.Z, zMin, zMax)
+		local laneZ = math.clamp(root.Position.Z, zMin, zMax)
 		local face = CFrame.Angles(0, math.pi / 2, 0)
-		local lineCF = CFrame.new(lineX + V2.LineGap, lineY + 3.35, z) * face
-		local hopY = lineCF.Position.Y + V2.CarryHeight
-		local falls = 0
+		local landing = Vector3.new(lineX + tp.LandOffset, lineY + 3.35, laneZ)
 
-		-- step the egg to the line in WalkSpeed-scaled hops, pinned at the hop height
-		while true do
-			arg:_setStatus("Instant Steal Tes: stepping the egg to the line")
-			root, humanoid = v2Root()
+		local hopStep = math.max(arg:_tpWalkSpeed() * tp.HopRatio, tp.HopMin)
+		local hopY = root.Position.Y + tp.HopLift
+		local releaseCamera = arg:_tpFreezeCamera()
+		pcall(arg._tpPostClone, arg)
+		arg:_tpFpsOn()
 
-			if not root or not humanoid or not alive() then
-				return false
-			end
+		local function run()
+			local x = root.Position.X
+			local retries, falls = 0, 0
 
-			local curX = root.Position.X
-			local step = math.max(arg:_legitWalkSpeed() * V2.HopRatio, V2.MinStep)
-			v2Set(root, CFrame.new(curX, hopY, z) * face)
-
-			while v2Carried(uid) and alive() and curX - step > lineCF.Position.X do
-				curX = curX - step
-				arg:_setStatus(string.format("Instant Steal Tes: stepping home, X %d", math.floor(curX)))
-				local held = 0
-
-				while held < V2.HopGap and v2Carried(uid) and alive() do
-					local pin = v2Root()
-
-					if pin then
-						v2Set(pin, CFrame.new(curX, hopY, z) * face)
+			-- hops towards the line; a pull-back repeats the same hop with a longer pause (the pause is learned)
+			while x - hopStep > landing.X and alive() do
+				if not v2Carried(uid) then
+					-- the server let go of the egg on the way: take it back right away
+					falls = falls + 1
+					if falls > (V2.FallTries or 3) or not arg:_tpRegrab(uid, stop) then
+						break
+					end
+					local current = v2Root()
+					if current then
+						x = math.min(x, current.Position.X)
+					end
+				else
+					local nextX = x - hopStep
+					arg:_setStatus(string.format("Instant TP: hopping home, X %d", math.floor(nextX)))
+					local pulledBefore = arg._relocateAt or 0
+					local held = 0
+					while held < tp.HopGap and alive() do
+						local pin = v2Root()
+						if pin then
+							v2Set(pin, CFrame.new(nextX, hopY, laneZ) * face)
+						end
+						held = held + RunService2.Heartbeat:Wait()
 					end
 
-					held = held + RunService2.Heartbeat:Wait()
-				end
-			end
-
-			if v2Carried(uid) and alive() then
-				local pin = v2Root()
-
-				if pin then
-					v2Set(pin, lineCF)
+					local check = v2Root()
+					local pulled = (arg._relocateAt or 0) > pulledBefore or (check ~= nil and (check.Position.X - nextX > 10 or check.AssemblyLinearVelocity.Magnitude > 150))
+					if pulled and v2Carried(uid) and alive() then
+						retries = retries + 1
+						tp.HopGap = math.min(tp.HopGapMax, tp.HopGap + 0.02)
+						if retries > tp.HopRetries then
+							break
+						end
+						arg:_setStatus(string.format("Instant TP: pulled back, retry %d/%d", retries, tp.HopRetries))
+						local settle = 0
+						while settle < 0.12 and alive() do
+							local pin = v2Root()
+							if pin then
+								v2Set(pin, CFrame.new(x, hopY, laneZ) * face)
+							end
+							settle = settle + RunService2.Heartbeat:Wait()
+						end
+					else
+						x = nextX
+						tp.HopGap = math.max(tp.HopGapMin, tp.HopGap - 0.01)
+					end
 				end
 			end
 
@@ -10046,86 +10432,90 @@ local v8 = (function()
 				return false
 			end
 
-			local now = v2Root()
-
-			if v2Carried(uid) or not now or (now.Position - lineCF.Position).Magnitude < 60 then
-				break
+			-- landing in front of the line
+			arg:_setStatus("Instant TP: landing next to the line")
+			landing = Vector3.new(landing.X, arg:_tpGroundY(landing, landing.Y), landing.Z)
+			local function land()
+				local current = v2Root()
+				-- never jump backwards: if we are already closer to the line than the landing spot, stay
+				if current and current.Position.X <= landing.X + 1 and current.Position.Y > landing.Y - 25 then
+					pcall(function()
+						current.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+					end)
+					return
+				end
+				if current then
+					v2Set(current, CFrame.new(landing) * face)
+				end
 			end
-
-			-- the egg fell on the way, go straight back for it
-			falls = falls + 1
-
-			if falls > V2.FallTries then
-				arg:_setStatus("Instant Steal Tes: the egg kept falling, giving up on it")
-				return false
+			land()
+			for attempt = 1, 3 do
+				local settle = 0
+				while settle < tp.LandSettle and alive() do
+					settle = settle + RunService2.Heartbeat:Wait()
+				end
+				local landed = v2Root()
+				if v2Carried(uid) and landed and (landed.Position.X - landing.X > 12 or landed.Position.Y < landing.Y - 25) then
+					arg:_setStatus("Instant TP: landing retry " .. attempt)
+					land()
+				else
+					break
+				end
 			end
+			arg:_tpDropClone()
 
-			arg:_setStatus("Instant Steal Tes: the egg fell, going straight back for it")
-
-			if not arg:_v2Grab(uid, 10, stop, {stand = true}) then
-				return false
+			-- drop at the line, take it back
+			if v2Carried(uid) and alive() then
+				local delay = 0
+				while delay < tp.DropDelay and alive() do
+					delay = delay + RunService2.Heartbeat:Wait()
+				end
+				arg:_setStatus("Instant TP: dropping the egg")
+				pcall(EggState2.DropFieldEgg, "PlayerRequest")
+				local waited = 0
+				while v2Carried(uid) and waited < 1 and alive() do
+					waited = waited + RunService2.Heartbeat:Wait()
+				end
+				local current = v2Root()
+				if current then
+					pcall(function()
+						current.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						current.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+					end)
+				end
+				-- egg is down: let go of the camera and the copy, then take it back
+				releaseCamera()
+				arg:_tpDropClone()
+				if not alive() then
+					return false
+				end
+				arg:_setStatus("Instant TP: taking the egg back")
+				if not arg:_v2Grab(uid, 3, stop, {stand = true, gap = tp.GrabGap}) and not arg:_tpRegrab(uid, stop) then
+					arg:_setStatus("Instant TP: could not take the egg back")
+					return false
+				end
+				arg:_tpDropClone()
 			end
-		end
+			releaseCamera()
 
-		-- drop it on the line
-		local waited = 0
-
-		while waited < V2.DropWait and v2Carried(uid) and alive() do
-			waited = waited + RunService2.Heartbeat:Wait()
-		end
-
-		if not alive() then
+			-- straight to the safe zone
+			if v2Carried(uid) and alive() then
+				return arg:_tpRunHome(uid, alive, lineX, laneZ)
+			end
 			return false
 		end
 
-		if v2Carried(uid) then
-			arg:_setStatus("Instant Steal Tes: dropping the egg at the line")
-			pcall(EggState2.DropFieldEgg, "PlayerRequest")
-			local dropWait = 0
+		local ok, result = pcall(run)
+		arg:_tpFpsOff()
+		arg:_tpDropClone()
+		pcall(releaseCamera)
 
-			while v2Carried(uid) and dropWait < 1.5 and alive() do
-				dropWait = dropWait + RunService2.Heartbeat:Wait()
-			end
-		end
-
-		if not alive() then
+		if not ok then
+			warn("[Pilat Steal] Instant TP delivery error: " .. tostring(result))
 			return false
 		end
 
-		-- reset on the treadmill (wear still, then doff)
-		arg:_setStatus("Instant Steal Tes: resetting on the treadmill")
-		arg:_treadmillReset(stop)
-
-		if not alive() then
-			return false
-		end
-
-		-- take the egg back from where it lies
-		arg:_setStatus("Instant Steal Tes: grabbing the egg back")
-		local got, reason = arg:_v2Grab(uid, V2.RegrabTime, stop, {stand = true, nestFail = true, gap = V2.RegrabGap})
-
-		if not alive() then
-			return false
-		end
-
-		if not got then
-			arg:_setStatus(reason == "nest" and "Instant Steal Tes: the egg went back to its nest" or "Instant Steal Tes: could not grab the egg back")
-			return false
-		end
-
-		-- straight into the safe zone
-		arg:_setStatus("Instant Steal Tes: stepping into the safe zone")
-		root, humanoid = v2Root()
-
-		if root and humanoid then
-			local safeCF = arg:_resolveSafeCFrame(root)
-
-			if safeCF then
-				arg:_teleportRoot(root, humanoid, safeCF)
-			end
-		end
-
-		return true
+		return result == true
 	end
 
 	index._needsHiddenRecall = function(arg)
