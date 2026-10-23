@@ -2404,8 +2404,9 @@ function Chloex:Window(guiconfig)
 	guiconfig.Color = guiconfig.Color or theme.Accent
 	guiconfig["Tab Width"] = guiconfig["Tab Width"] or 120
 	-- On phones the sidebar is icon-only (44 px) so the page gets that width back.
-	local compactsidebar = isMobile and guiconfig.CompactSidebar ~= false
-	local tabwidth = compactsidebar and 44 or guiconfig["Tab Width"]
+	-- Sidebar shows icon + tab name (gear icon  Settings). Icon-only is opt-in now.
+	local compactsidebar = guiconfig.CompactSidebar == true
+	local tabwidth = compactsidebar and 44 or (isMobile and math.min(guiconfig["Tab Width"], 112) or guiconfig["Tab Width"])
 	guiconfig.Version = guiconfig.Version or 1
 	local userPassedImage = guiconfig.Image
 	local userPassedToggle = guiconfig.ToggleImage or guiconfig.ToggleIcon or guiconfig.ButtonImage
@@ -2465,6 +2466,7 @@ function Chloex:Window(guiconfig)
 	dropshadow.Position = UDim2.new(0.5, 0, 0.5, 0)
 	dropshadow.Size = UDim2.new(1, 47, 1, 47)
 	dropshadow.ZIndex = 0
+	dropshadow.Visible = not isMobile -- (perf)
 
 	-- Any Image other than the default Pilat logo is the window background; the
 	-- floating button logo comes from ToggleImage / ToggleIcon / ButtonImage.
@@ -2851,17 +2853,8 @@ function Chloex:Window(guiconfig)
 	sidebarbg.Size = UDim2.new(0, tabwidth + 6, 1, -76)
 
 	-- liveliness: border gradient rotates, header line drifts (only while visible)
-	trackConnection(
-		game:GetService("RunService").RenderStepped:Connect(function()
-			if not dropshadowholder.Visible then
-				return
-			end
-			local t = os.clock()
-			strokegrad.Rotation = (t * 35) % 360
-			shimmer.Offset = Vector2.new(math.sin(t * 0.8) * 0.45, 0)
-		end),
-		"window.liveaccents"
-	)
+	-- (perf) static accents: the old RenderStepped rotation was removed to stop lag
+	strokegrad.Rotation = 35
 
 	-- pop-in whenever the window is shown (F3, floating button, first open)
 	do
@@ -3148,10 +3141,10 @@ function Chloex:Window(guiconfig)
 	do
 		local frames, elapsed = 0, 0
 		trackConnection(
-			game:GetService("RunService").RenderStepped:Connect(function(dt)
+			game:GetService("RunService").Heartbeat:Connect(function(dt)
 				frames = frames + 1
 				elapsed = elapsed + dt
-				if elapsed >= 1 then
+				if elapsed >= 2 then
 					fpslabel.Text = tostring(math.floor(frames / elapsed + 0.5)) .. " FPS"
 					frames, elapsed = 0, 0
 				end
@@ -3407,12 +3400,7 @@ function Chloex:Window(guiconfig)
 		ringgrad.Parent = ringstroke
 		local ringscale = Instance.new("UIScale")
 		ringscale.Parent = mainbutton
-		task.spawn(function()
-			while mainbutton.Parent do
-				ringgrad.Rotation = (os.clock() * 60) % 360
-				task.wait(1 / 30)
-			end
-		end)
+		ringgrad.Rotation = 45 -- (perf) static ring, no spin loop
 
 		local button = instance.textbutton(mainbutton)
 		button.Size = UDim2.new(1, 0, 1, 0)
