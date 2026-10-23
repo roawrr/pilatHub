@@ -2316,281 +2316,204 @@ end
 if type(genv.__PilatV4DecomBoostCleanup) == "function" then
 	pcall(genv.__PilatV4DecomBoostCleanup)
 end
-
-local tbl7 = {}
-local flag2 = false
-
+local decomBoostConnections = {}
+local decomBoostListening = false
 genv.__PilatV4DecomBoostCleanup = function()
-	for i, v5 in ipairs(tbl7) do
-		pcall(function()
-			v5:Disconnect()
-		end)
+	for _, connection in ipairs(decomBoostConnections) do
+		pcall(function() connection:Disconnect() end)
 	end
-
-	table.clear(tbl7)
-	flag2 = false
+	table.clear(decomBoostConnections)
+	decomBoostListening = false
 end
-
-local function fn39()
-	local clientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
-	if not clientRenderedAssets then
-		return
-	end
-
-	for i, child in ipairs(clientRenderedAssets:GetChildren()) do
-		pcall(function()
-			child.Parent = nil
-		end)
+local function purgeDecomRenderedAssets()
+	local renderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
+	if not renderedAssets then return end
+	for _, model in ipairs(renderedAssets:GetChildren()) do
+		pcall(function() model.Parent = nil end)
 	end
 end
-
-local function fn40(arg)
-	return string.sub(arg.Name, 1, #tostring(localPlayer.UserId) + 1) == tostring(localPlayer.UserId) .. "_"
+local function isOwnPlacedEgg(model)
+	return string.sub(model.Name, 1, #tostring(localPlayer.UserId) + 1) == tostring(localPlayer.UserId) .. "_"
 end
-
-local function fn41()
-	for i, child in ipairs(workspace:GetChildren()) do
-		if child.Name == "PlacedEggRenders" then
-			for i2, child2 in ipairs(child:GetChildren()) do
+local function purgeDecomPlacedEggs()
+	for _, folder in ipairs(workspace:GetChildren()) do
+		if folder.Name == "PlacedEggRenders" then
+			for _, model in ipairs(folder:GetChildren()) do
 				pcall(function()
-					if not child2:FindFirstChildOfClass("ProximityPrompt") and not fn40(child2) then
-						child2.Parent = nil
+					if not model:FindFirstChildOfClass("ProximityPrompt") and not isOwnPlacedEgg(model) then
+						model.Parent = nil
 					end
-				end)
+					end)
 			end
 		end
 	end
 end
-
-local function fn42()
-	for i, v5 in ipairs({"Transient", "__DEBRIS"}) do
-		local v6 = workspace:FindFirstChild(v5)
-
-		if v6 then
-			for i2, child in ipairs(v6:GetChildren()) do
+local function purgeDecomPlayerTraps()
+	for _, fName in ipairs({ "Transient", "__DEBRIS" }) do
+		local folder = workspace:FindFirstChild(fName)
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
 				if child.Name == "PlayerTrap" or child.Name:lower():find("trap") then
-					pcall(function()
-						child:Destroy()
-					end)
+					pcall(function() child:Destroy() end)
 				end
 			end
 		end
 	end
 end
-
-local function fn43(arg)
-	if arg:FindFirstAncestor("PilatVisualBack") then
-		return true
-	elseif arg:FindFirstAncestor("PilatVisualRemote") then
-		return true
-	end
-
-	local tool = arg:FindFirstAncestorWhichIsA("Tool")
+local function isPilatVisualItem(instance)
+	if instance:FindFirstAncestor("PilatVisualBack") or instance:FindFirstAncestor("PilatVisualRemote") then return true end
+	local tool = instance:FindFirstAncestorWhichIsA("Tool")
 	return tool ~= nil and tool:GetAttribute("PilatVisual") ~= nil
 end
-
-local pilatV4DecomBoostUndo = {effects = {}, parts = {}, decals = {}, snapshot = nil}
-local tbl8 = {PlusOne = true, SpeedGainPopup = true, SellPayout = true, SyncedIncomeCash = true}
-local tbl9 = {PlayerPlotSign = true, CanUpgrade = true, AlertGui = true, OfflineMoneyClaimBillboard = true}
-
-local function fn44(descendant)
+local pilatV4DecomBoostUndo = { effects = {}, parts = {}, decals = {}, snapshot = nil }
+local GAIN_POPUP_NAMES = { PlusOne = true, SpeedGainPopup = true, SellPayout = true, SyncedIncomeCash = true }
+local CLUTTER_BILLBOARD_NAMES = { PlayerPlotSign = true, CanUpgrade = true, AlertGui = true, OfflineMoneyClaimBillboard = true }
+local function suppressDecomVisual(instance)
 	pcall(function()
-		if fn43(descendant) then
+		if isPilatVisualItem(instance) then return end
+		if GAIN_POPUP_NAMES[instance.Name] then
+			instance:Destroy()
 			return
 		end
-
-		if tbl8[descendant.Name] then
-			descendant:Destroy()
+		if instance:IsA("BillboardGui") and CLUTTER_BILLBOARD_NAMES[instance.Name] then
+			if instance.Enabled then pilatV4DecomBoostUndo.effects[instance] = true end
+			instance.Enabled = false
 			return
 		end
-
-		if descendant:IsA("BillboardGui") and tbl9[descendant.Name] then
-			if descendant.Enabled then
-				pilatV4DecomBoostUndo.effects[descendant] = true
-			end
-
-			descendant.Enabled = false
-			return
+		if instance:IsA("ParticleEmitter") or instance:IsA("Trail")
+		or instance:IsA("Beam") or instance:IsA("Sparkles")
+		or instance:IsA("Fire") or instance:IsA("Smoke")
+		or instance:IsA("PostEffect")
+		then
+			if instance.Enabled then pilatV4DecomBoostUndo.effects[instance] = true end
+			instance.Enabled = false
 		end
-
-		if descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") or descendant:IsA("Beam") or descendant:IsA("Sparkles") or descendant:IsA("Fire") or descendant:IsA("Smoke") or descendant:IsA("PostEffect") then
-			if descendant.Enabled then
-				pilatV4DecomBoostUndo.effects[descendant] = true
-			end
-
-			descendant.Enabled = false
-		end
-	end)
-end
-
-local function fn45()
-	if flag2 then
-		return
-	end
-	flag2 = true
-	table.insert(tbl7, game.DescendantAdded:Connect(fn44))
-
-	table.insert(tbl7, workspace.ChildAdded:Connect(function(child)
-		if child.Name == "ClientRenderedAssets" then
-			fn39()
-
-			table.insert(tbl7, child.ChildAdded:Connect(function(child2)
-				pcall(function()
-					child2.Parent = nil
-				end)
-			end))
-		elseif child.Name == "PlacedEggRenders" then
-			fn41()
-
-			table.insert(tbl7, child.ChildAdded:Connect(function(child2)
-				pcall(function()
-					if not child2:FindFirstChildOfClass("ProximityPrompt") and not fn40(child2) then
-						child2.Parent = nil
-					end
-				end)
-			end))
-		elseif child.Name == "__DEBRIS" or child.Name == "Transient" then
-			table.insert(tbl7, child.ChildAdded:Connect(function(child2)
-				if child2.Name == "PlayerTrap" or child2.Name:lower():find("trap") then
-					pcall(function()
-						child2:Destroy()
-					end)
-				end
-			end))
-		end
-	end))
-
-	local clientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
-
-	if clientRenderedAssets then
-		table.insert(tbl7, clientRenderedAssets.ChildAdded:Connect(function(child)
-			pcall(function()
-				child.Parent = nil
-			end)
-		end))
-	end
-
-	for i, child in ipairs(workspace:GetChildren()) do
-		if child.Name == "PlacedEggRenders" then
-			table.insert(tbl7, child.ChildAdded:Connect(function(child2)
-				pcall(function()
-					if not child2:FindFirstChildOfClass("ProximityPrompt") and not fn40(child2) then
-						child2.Parent = nil
-					end
-				end)
-			end))
-		end
-	end
-end
-
-local flag3 = false
-
-local function fn46()
-	if flag3 then
-		return
-	end
-	flag3 = true
-	local Lighting = game:GetService("Lighting")
-
-	if not pilatV4DecomBoostUndo.snapshot then
-		local tbl10 = {}
-
-		pcall(function()
-			tbl10.quality = settings().Rendering.QualityLevel
-			tbl10.throttle = settings().Physics.PhysicsEnvironmentalThrottle
-			tbl10.technology = Lighting.Technology
-			tbl10.shadows = Lighting.GlobalShadows
-			tbl10.fogEnd = Lighting.FogEnd
-			tbl10.brightness = Lighting.Brightness
-			tbl10.ambient = Lighting.Ambient
-			tbl10.outdoorAmbient = Lighting.OutdoorAmbient
 		end)
-
+end
+local function installDecomBoostListeners()
+	if decomBoostListening then return end
+	decomBoostListening = true
+	table.insert(decomBoostConnections, game.DescendantAdded:Connect(suppressDecomVisual))
+	table.insert(decomBoostConnections, workspace.ChildAdded:Connect(function(instance)
+		if instance.Name == "ClientRenderedAssets" then
+			purgeDecomRenderedAssets()
+			table.insert(decomBoostConnections, instance.ChildAdded:Connect(function(model)
+				pcall(function() model.Parent = nil end)
+				end))
+		elseif instance.Name == "PlacedEggRenders" then
+			purgeDecomPlacedEggs()
+			table.insert(decomBoostConnections, instance.ChildAdded:Connect(function(model)
+				pcall(function()
+					if not model:FindFirstChildOfClass("ProximityPrompt") and not isOwnPlacedEgg(model) then model.Parent = nil end
+					end)
+				end))
+		elseif instance.Name == "__DEBRIS" or instance.Name == "Transient" then
+			table.insert(decomBoostConnections, instance.ChildAdded:Connect(function(child)
+				if child.Name == "PlayerTrap" or child.Name:lower():find("trap") then pcall(function() child:Destroy() end) end
+				end))
+		end
+		end))
+	local renderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
+	if renderedAssets then
+		table.insert(decomBoostConnections, renderedAssets.ChildAdded:Connect(function(model)
+			pcall(function() model.Parent = nil end)
+			end))
+	end
+	for _, folder in ipairs(workspace:GetChildren()) do
+		if folder.Name == "PlacedEggRenders" then
+			table.insert(decomBoostConnections, folder.ChildAdded:Connect(function(model)
+				pcall(function()
+					if not model:FindFirstChildOfClass("ProximityPrompt") and not isOwnPlacedEgg(model) then model.Parent = nil end
+					end)
+				end))
+		end
+	end
+end
+local startupBoostBusy = false
+local function ApplyDecomStartupBoost()
+	if startupBoostBusy then return end
+	startupBoostBusy = true
+	local Lighting = game:GetService("Lighting")
+	if not pilatV4DecomBoostUndo.snapshot then
+		local snap = {}
+		pcall(function()
+			snap.quality = settings().Rendering.QualityLevel
+			snap.throttle = settings().Physics.PhysicsEnvironmentalThrottle
+			snap.technology = Lighting.Technology
+			snap.shadows = Lighting.GlobalShadows
+			snap.fogEnd = Lighting.FogEnd
+			snap.brightness = Lighting.Brightness
+			snap.ambient = Lighting.Ambient
+			snap.outdoorAmbient = Lighting.OutdoorAmbient
+			end)
 		local terrain = workspace:FindFirstChildOfClass("Terrain")
-
 		if terrain then
 			pcall(function()
-				tbl10.terrain = {WaterWaveSize = terrain.WaterWaveSize, WaterWaveSpeed = terrain.WaterWaveSpeed, WaterReflectance = terrain.WaterReflectance, WaterTransparency = terrain.WaterTransparency, Decoration = terrain.Decoration}
-			end)
-
+				snap.terrain = {
+					WaterWaveSize = terrain.WaterWaveSize,
+					WaterWaveSpeed = terrain.WaterWaveSpeed,
+					WaterReflectance = terrain.WaterReflectance,
+					WaterTransparency = terrain.WaterTransparency,
+					Decoration = terrain.Decoration,
+				}
+				end)
 			pcall(function()
 				local clouds = terrain:FindFirstChildOfClass("Clouds")
-
-				if clouds then
-					tbl10.cloudsEnabled = clouds.Enabled
-				end
-			end)
+				if clouds then snap.cloudsEnabled = clouds.Enabled end
+				end)
 		end
-
 		pcall(function()
-			local preferences = ReplicatedStorage.Shared:FindFirstChild("Preferences")
-
-			if preferences then
-				local module = require(preferences)
-				tbl10.prefs = {HideOtherPets = module.IsOn("HideOtherPets"), DisableVideos = module.IsOn("DisableVideos")}
+			local Prefs = ReplicatedStorage.Shared:FindFirstChild("Preferences")
+			if Prefs then
+				Prefs = require(Prefs)
+				snap.prefs = { HideOtherPets = Prefs.IsOn("HideOtherPets"), DisableVideos = Prefs.IsOn("DisableVideos") }
 			end
-		end)
-
-		if tbl10.quality == Enum.QualityLevel.Level01 then
-			tbl10.quality = Enum.QualityLevel.Automatic
-		end
-
-		pilatV4DecomBoostUndo.snapshot = genv.__PilatV4DecomSnapshot or tbl10
+			end)
+		if snap.quality == Enum.QualityLevel.Level01 then snap.quality = Enum.QualityLevel.Automatic end
+		pilatV4DecomBoostUndo.snapshot = genv.__PilatV4DecomSnapshot or snap
 		genv.__PilatV4DecomSnapshot = pilatV4DecomBoostUndo.snapshot
 	end
-
 	pcall(function()
 		settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
 		settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Always
 		Lighting.Technology = Enum.Technology.Compatibility
 		Lighting.GlobalShadows = false
-		Lighting.FogEnd = 9000000000
+		Lighting.FogEnd = 9e9
 		Lighting.Brightness = 2
 		Lighting.Ambient = Color3.new(1, 1, 1)
 		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-	end)
-
-	local tbl10 = {workspace, Lighting}
-	local now = os.clock()
-
-	for i, v5 in ipairs(tbl10) do
-		for i2, descendant in ipairs(v5:GetDescendants()) do
-			if fn43(descendant) then
+		end)
+	local sliceStart = os.clock()
+	for _, container in ipairs({ workspace, Lighting }) do
+		for _, instance in ipairs(container:GetDescendants()) do
+			if isPilatVisualItem(instance) then
 				continue
-			elseif descendant:IsA("BasePart") then
+			elseif instance:IsA("BasePart") then
 				pcall(function()
-					if not pilatV4DecomBoostUndo.parts[descendant] then
-						pilatV4DecomBoostUndo.parts[descendant] = {descendant.Material, descendant.CastShadow, descendant:IsA("MeshPart") and descendant.RenderFidelity or nil}
+					if not pilatV4DecomBoostUndo.parts[instance] then
+						pilatV4DecomBoostUndo.parts[instance] = { instance.Material, instance.CastShadow, instance:IsA("MeshPart") and instance.RenderFidelity or nil }
 					end
-
-					descendant.Material = Enum.Material.SmoothPlastic
-					descendant.CastShadow = false
-
-					if descendant:IsA("MeshPart") then
-						descendant.RenderFidelity = Enum.RenderFidelity.Performance
-					end
-				end)
-			elseif descendant:IsA("Decal") or descendant:IsA("Texture") then
+					instance.Material = Enum.Material.SmoothPlastic
+					instance.CastShadow = false
+					if instance:IsA("MeshPart") then instance.RenderFidelity = Enum.RenderFidelity.Performance end
+					end)
+			elseif instance:IsA("Decal") or instance:IsA("Texture") then
 				pcall(function()
-					if descendant.Texture ~= "" and not pilatV4DecomBoostUndo.decals[descendant] then
-						pilatV4DecomBoostUndo.decals[descendant] = descendant.Texture
+					if instance.Texture ~= "" and not pilatV4DecomBoostUndo.decals[instance] then
+						pilatV4DecomBoostUndo.decals[instance] = instance.Texture
 					end
-
-					descendant.Texture = ""
-				end)
+					instance.Texture = ""
+					end)
 			else
-				fn44(descendant)
+				suppressDecomVisual(instance)
 			end
-
-			if os.clock() - now > 0.004 then
+			if os.clock() - sliceStart > 0.004 then
 				task.wait()
-				now = os.clock()
+				sliceStart = os.clock()
 			end
 		end
 	end
-
 	local terrain = workspace:FindFirstChildOfClass("Terrain")
-
 	if terrain then
 		pcall(function()
 			terrain.WaterWaveSize = 0
@@ -2599,755 +2522,491 @@ local function fn46()
 			terrain.WaterTransparency = 1
 			terrain.Decoration = false
 			local clouds = terrain:FindFirstChildOfClass("Clouds")
-
-			if clouds then
-				clouds.Enabled = false
-			end
-		end)
+			if clouds then clouds.Enabled = false end
+			end)
 	end
-
 	pcall(function()
-		local shared = ReplicatedStorage.Shared
-		local preferences = shared:FindFirstChild("Preferences")
-
-		if preferences then
-			local module = require(preferences)
-			module.Set("HideOtherPets", true)
-			module.Set("DisableVideos", true)
+		local Shared = ReplicatedStorage.Shared
+		local Prefs = Shared:FindFirstChild("Preferences")
+		if Prefs then
+			Prefs = require(Prefs)
+			Prefs.Set("HideOtherPets", true)
+			Prefs.Set("DisableVideos", true)
 		else
-			local SettingsCmds = require(shared.SettingsCmds)
+			local SettingsCmds = require(Shared.SettingsCmds)
 			SettingsCmds.Write("HideOtherPets", true)
 			SettingsCmds.Write("DisableVideos", true)
 		end
-	end)
-
-	fn39()
-	fn41()
-	fn42()
-	fn45()
-	flag3 = false
+		end)
+	purgeDecomRenderedAssets()
+	purgeDecomPlacedEggs()
+	purgeDecomPlayerTraps()
+	installDecomBoostListeners()
+	startupBoostBusy = false
 end
-
 pilatV4DecomBoostUndo.revert = function()
-	for i, v5 in ipairs(tbl7) do
-		pcall(function()
-			v5:Disconnect()
-		end)
+	for _, connection in ipairs(decomBoostConnections) do
+		pcall(function() connection:Disconnect() end)
 	end
-
-	table.clear(tbl7)
-	flag2 = false
-	local snapshot = pilatV4DecomBoostUndo.snapshot
+	table.clear(decomBoostConnections)
+	decomBoostListening = false
+	local snap = pilatV4DecomBoostUndo.snapshot
 	local Lighting = game:GetService("Lighting")
-
-	if snapshot then
+	if snap then
+		pcall(function() settings().Rendering.QualityLevel = snap.quality or Enum.QualityLevel.Automatic end)
+		pcall(function() settings().Physics.PhysicsEnvironmentalThrottle = snap.throttle end)
 		pcall(function()
-			settings().Rendering.QualityLevel = snapshot.quality or Enum.QualityLevel.Automatic
-		end)
-
-		pcall(function()
-			settings().Physics.PhysicsEnvironmentalThrottle = snapshot.throttle
-		end)
-
-		pcall(function()
-			Lighting.Technology = snapshot.technology
-			Lighting.GlobalShadows = snapshot.shadows
-			Lighting.FogEnd = snapshot.fogEnd
-			Lighting.Brightness = snapshot.brightness
-			Lighting.Ambient = snapshot.ambient
-			Lighting.OutdoorAmbient = snapshot.outdoorAmbient
-		end)
-
+			Lighting.Technology = snap.technology
+			Lighting.GlobalShadows = snap.shadows
+			Lighting.FogEnd = snap.fogEnd
+			Lighting.Brightness = snap.brightness
+			Lighting.Ambient = snap.ambient
+			Lighting.OutdoorAmbient = snap.outdoorAmbient
+			end)
 		local terrain = workspace:FindFirstChildOfClass("Terrain")
-
-		if terrain and snapshot.terrain then
-			for k, v5 in pairs(snapshot.terrain) do
-				pcall(function()
-					terrain[k] = v5
-				end)
+		if terrain and snap.terrain then
+			for prop, value in pairs(snap.terrain) do
+				pcall(function() terrain[prop] = value end)
 			end
-
-			if snapshot.cloudsEnabled ~= nil then
+			if snap.cloudsEnabled ~= nil then
 				pcall(function()
 					local clouds = terrain:FindFirstChildOfClass("Clouds")
-
-					if clouds then
-						clouds.Enabled = snapshot.cloudsEnabled
-					end
-				end)
+					if clouds then clouds.Enabled = snap.cloudsEnabled end
+					end)
 			end
 		end
-
-		if snapshot.prefs then
+		if snap.prefs then
 			pcall(function()
-				local Preferences = require(ReplicatedStorage.Shared.Preferences)
-
-				for k, pref in pairs(snapshot.prefs) do
-					Preferences.Set(k, pref)
-				end
-			end)
+				local Prefs = require(ReplicatedStorage.Shared.Preferences)
+				for key, value in pairs(snap.prefs) do Prefs.Set(key, value) end
+				end)
 		end
 	end
-
-	local n8 = 0
-
-	for k, part in pairs(pilatV4DecomBoostUndo.parts) do
-		if k.Parent then
+	local restored = 0
+	for part, old in pairs(pilatV4DecomBoostUndo.parts) do
+		if part.Parent then
 			pcall(function()
-				k.Material = part[1]
-				k.CastShadow = part[2]
-
-				if part[3] ~= nil and k:IsA("MeshPart") then
-					k.RenderFidelity = part[3]
-				end
-			end)
+				part.Material = old[1]
+				part.CastShadow = old[2]
+				if old[3] ~= nil and part:IsA("MeshPart") then part.RenderFidelity = old[3] end
+				end)
 		end
-
-		n8 += 1
-
-		if n8 % 400 == 0 then
-			task.wait()
-		end
+		restored += 1
+		if restored % 400 == 0 then task.wait() end
 	end
-
-	for k, decal in pairs(pilatV4DecomBoostUndo.decals) do
-		if k.Parent then
-			pcall(function()
-				k.Texture = decal
-			end)
-		end
+	for decal, texture in pairs(pilatV4DecomBoostUndo.decals) do
+		if decal.Parent then pcall(function() decal.Texture = texture end) end
 	end
-
-	for k in pairs(pilatV4DecomBoostUndo.effects) do
-		if k.Parent then
-			pcall(function()
-				k.Enabled = true
-			end)
-		end
+	for effect in pairs(pilatV4DecomBoostUndo.effects) do
+		if effect.Parent then pcall(function() effect.Enabled = true end) end
 	end
-
-	pilatV4DecomBoostUndo.parts = {}
-	pilatV4DecomBoostUndo.decals = {}
-	pilatV4DecomBoostUndo.effects = {}
+	pilatV4DecomBoostUndo.parts, pilatV4DecomBoostUndo.decals, pilatV4DecomBoostUndo.effects = {}, {}, {}
 	pilatV4DecomBoostUndo.snapshot = nil
 end
-
 genv.__PilatV4DecomBoostUndo = pilatV4DecomBoostUndo
-local flag4 = false
-
-local function fn47(arg)
-	if arg then
-		if not arg:IsA("Model") then
-			return
-		end
-	else
-		return
-	end
-
-	local match = arg.Name:match("^(%d+)_")
-	local num = match and tonumber(match)
-
-	if num then
-		if num == localPlayer.UserId then
-			return
-		end
-	else
-		return
-	end
-
-	for i, descendant in ipairs(arg:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Transparency = 1
-			descendant.CanCollide = false
-		elseif descendant:IsA("Decal") then
-			descendant.Transparency = 1
-		elseif descendant:IsA("Texture") then
-			descendant.Transparency = 1
-		elseif descendant:IsA("ParticleEmitter") then
-			descendant.Enabled = false
-		elseif descendant:IsA("Trail") then
-			descendant.Enabled = false
-		elseif descendant:IsA("Beam") then
-			descendant.Enabled = false
-		elseif descendant:IsA("BillboardGui") then
-			descendant.Enabled = false
-		elseif descendant:IsA("SurfaceGui") then
-			descendant.Enabled = false
+local fpsBoostApplied = false
+local function hideModelIfNotMine(model)
+	if not model or not model:IsA("Model") then return end
+	local ownerIdStr = model.Name:match("^(%d+)_")
+	local ownerId = ownerIdStr and tonumber(ownerIdStr)
+	if not ownerId or ownerId == localPlayer.UserId then return end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Transparency = 1
+			part.CanCollide = false
+		elseif part:IsA("Decal") or part:IsA("Texture") then
+			part.Transparency = 1
+		elseif part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") then
+			part.Enabled = false
+		elseif part:IsA("BillboardGui") or part:IsA("SurfaceGui") then
+			part.Enabled = false
 		end
 	end
 end
-
-local function fn48()
-	if pilatV4Config._fpsEggsReady then
-		return true
-	end
-	local flag5 = false
-
-	local ok, result = pcall(function()
-		local v5 = require(game:GetService("ReplicatedStorage").Shared.Eggs.PlacedEggRenderer).GetRenderFolder()
-		if not v5 then
-			return
+local function hideOtherPlayersEggs()
+	if pilatV4Config._fpsEggsReady then return true end
+	local ready = false
+	local ok, err = pcall(function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local PlacedEggRenderer = require(ReplicatedStorage.Shared.Eggs.PlacedEggRenderer)
+		local renderFolder = PlacedEggRenderer.GetRenderFolder()
+		if not renderFolder then return end
+		local children = renderFolder:GetChildren()
+		for _, model in ipairs(children) do
+			hideModelIfNotMine(model)
 		end
-
-		for i, v6 in ipairs((v5:GetChildren())) do
-			fn47(v6)
-		end
-
-		local function fn49(child)
-			task.defer(fn47, child)
-		end
-
-		v5.ChildAdded:Connect(fn49)
-		flag5 = true
-	end)
-
+		renderFolder.ChildAdded:Connect(function(model)
+			task.defer(hideModelIfNotMine, model)
+			end)
+		ready = true
+		end)
 	if not ok then
-		warn("[FPSBoost] Gagal hide egg pemain lain:", result)
+		warn("[FPSBoost] Gagal hide egg pemain lain:", err)
 		return false
 	end
-	return flag5
+	return ready
 end
-
-local function fn49(arg)
-	if not arg then
-		return
-	end
-
-	pcall(function()
-		arg.Parent = nil
-	end)
+local function purgeRenderedPet(model)
+	if not model then return end
+	pcall(function() model.Parent = nil end)
 end
-
-local function fn50()
-	if pilatV4Config._fpsPetsReady then
-		return true
-	end
-	local isOn
-
-	local ok, result = pcall(function()
-		local shared = game:GetService("ReplicatedStorage").Shared
-		local preferences = shared:FindFirstChild("Preferences")
-
-		if preferences then
-			local module = require(preferences)
-			module.Set("HideOtherPets", true)
-			isOn = module.IsOn
+local function hideOtherPlayersPets()
+	if pilatV4Config._fpsPetsReady then return true end
+	local readPref
+	local ok, err = pcall(function()
+		local Shared = game:GetService("ReplicatedStorage").Shared
+		local Prefs = Shared:FindFirstChild("Preferences")
+		if Prefs then
+			Prefs = require(Prefs)
+			Prefs.Set("HideOtherPets", true)
+			readPref = Prefs.IsOn
 		else
-			local SettingsCmds = require(shared.SettingsCmds)
+			local SettingsCmds = require(Shared.SettingsCmds)
 			SettingsCmds.Write("HideOtherPets", true)
-			isOn = SettingsCmds.Allows
+			readPref = SettingsCmds.Allows
 		end
-	end)
-
-	local flag5 = false
-
-	if ok and isOn then
-		local ok2, result2 = pcall(isOn, "HideOtherPets")
-		flag5 = ok2 and result2 == true
+		end)
+	local settingReady = false
+	if ok and readPref then
+		local readOk, enabled = pcall(readPref, "HideOtherPets")
+		settingReady = readOk and enabled == true
 	end
-
-	if if ok then not flag5 else not ok then
-		warn("[FPSBoost] Gagal set HideOtherPets bawaan game:", result or "setting belum aktif")
+	if not ok or not settingReady then
+		warn("[FPSBoost] Gagal set HideOtherPets bawaan game:", err or "setting belum aktif")
 		return false
 	end
-	local flag6 = false
-
-	result, ok = pcall(function()
-		local clientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets") or workspace:WaitForChild("ClientRenderedAssets", 10)
-		if not clientRenderedAssets then
-			return
+	local ready = false
+	local ok2, err2 = pcall(function()
+		local renderFolder = workspace:FindFirstChild("ClientRenderedAssets")
+		or workspace:WaitForChild("ClientRenderedAssets", 10)
+		if not renderFolder then return end
+		local children = renderFolder:GetChildren()
+		for _, model in ipairs(children) do
+			purgeRenderedPet(model)
 		end
-
-		for i, v5 in ipairs((clientRenderedAssets:GetChildren())) do
-			fn49(v5)
-		end
-
-		local function fn51(child)
-			task.defer(fn49, child)
-		end
-
-		clientRenderedAssets.ChildAdded:Connect(fn51)
-		flag6 = true
-	end)
-
-	if not result then
-		warn("[FPSBoost] Gagal hide pet (manual):", ok)
+		renderFolder.ChildAdded:Connect(function(model)
+			task.defer(purgeRenderedPet, model)
+			end)
+		ready = true
+		end)
+	if not ok2 then
+		warn("[FPSBoost] Gagal hide pet (manual):", err2)
 		return false
 	end
-	return flag6
+	return ready
 end
-
-local function fn51()
+local function reduceGraphicsQuality()
 	if type(genv.__PilatV4SetCapFps) == "function" then
 		pcall(genv.__PilatV4SetCapFps, 1000)
 	end
-
-	pcall(function()
-		settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-	end)
-
+	pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
 	pcall(function()
 		UserSettings():GetService("UserGameSettings").SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
-	end)
-
+		end)
 	pcall(function()
-		local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
-		local v5 = require
-		local lightingsController = ReplicatedStorage2.Client.LightingsController
-
-		local function fn52(arg)
-			local v6 = table.clone(arg)
-			v6.Bloom = nil
-			v6.ColorCorrection = nil
-			v6.SunRays = nil
-			v6.DepthOfField = nil
-			v6.Blur = nil
-			v6.Clouds = nil
-			v6.Atmosphere = nil
-			v6.ShadowSoftness = 1
-			return v6
-		end
-
-		v5(lightingsController):SetModifier("FPSBoost", fn52, 100, 0)
-	end)
-
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local LightingsController = require(ReplicatedStorage.Client.LightingsController)
+		LightingsController:SetModifier("FPSBoost", function(cfg)
+			local boosted = table.clone(cfg)
+			boosted.Bloom = nil
+			boosted.ColorCorrection = nil
+			boosted.SunRays = nil
+			boosted.DepthOfField = nil
+			boosted.Blur = nil
+			boosted.Clouds = nil
+			boosted.Atmosphere = nil
+			boosted.ShadowSoftness = 1
+			return boosted
+			end, 100, 0)
+		end)
 	pcall(function()
 		local Lighting = game:GetService("Lighting")
 		Lighting.GlobalShadows = false
 		Lighting.Technology = Enum.Technology.Compatibility
-		Lighting.FogEnd = 9000000000
+		Lighting.FogEnd = 9e9
 		Lighting.Brightness = 2
-	end)
-
+		end)
 	pcall(function()
-		local terrain = workspace:FindFirstChildOfClass("Terrain")
-
-		if terrain then
-			terrain.WaterWaveSize = 0
-			terrain.WaterWaveSpeed = 0
-			terrain.WaterReflectance = 0
-			terrain.WaterTransparency = 1
-			terrain.Decoration = false
+		local terr = workspace:FindFirstChildOfClass("Terrain")
+		if terr then
+			terr.WaterWaveSize = 0
+			terr.WaterWaveSpeed = 0
+			terr.WaterReflectance = 0
+			terr.WaterTransparency = 1
+			terr.Decoration = false
 		end
-	end)
-
+		end)
 	pcall(function()
 		local debris = workspace:FindFirstChild("__DEBRIS")
-
 		if debris then
-			for i, child in ipairs(debris:GetChildren()) do
-				if child.Name == "PlayerTrap" then
-					pcall(function()
-						child:Destroy()
-					end)
-				end
+			for _, child in ipairs(debris:GetChildren()) do
+				if child.Name == "PlayerTrap" then pcall(function() child:Destroy() end) end
 			end
 		end
-	end)
-end
-
-local color = Color3.fromRGB(120, 120, 120)
-
-local function fn52(arg)
-	if arg then
-		if not arg:IsA("BasePart") then
-			return
-		end
-	else
-		return
-	end
-
-	arg.Material = Enum.Material.SmoothPlastic
-	arg.Color = color
-	arg.CastShadow = false
-end
-
-local function fn53(arg)
-	if arg:IsA("ParticleEmitter") then
-		arg.Enabled = false
-		arg.Rate = 0
-
-		pcall(function()
-			arg:Clear()
 		end)
-	elseif arg:IsA("Trail") then
-		arg.Enabled = false
-	elseif arg:IsA("Beam") then
-		arg.Enabled = false
-	elseif arg:IsA("Smoke") then
-		arg.Enabled = false
-	elseif arg:IsA("Fire") then
-		arg.Enabled = false
-	elseif arg:IsA("Sparkles") then
-		arg.Enabled = false
-	elseif arg:IsA("PostEffect") then
-		arg.Enabled = false
-	elseif arg:IsA("Light") then
-		arg.Enabled = false
-	elseif arg:IsA("Highlight") then
-		arg.Enabled = false
-	elseif arg:IsA("Clouds") then
-		arg.Enabled = false
-	elseif arg:IsA("Atmosphere") then
-		arg.Density = 0
-		arg.Haze = 0
-		arg.Glare = 0
-	elseif arg:IsA("Explosion") then
-		pcall(function()
-			arg.Visible = false
-		end)
+end
+local GRAY_MATERIAL_COLOR = Color3.fromRGB(120, 120, 120)
+local function flattenPart(part)
+	if not part or not part:IsA("BasePart") then return end
+	part.Material = Enum.Material.SmoothPlastic
+	part.Color = GRAY_MATERIAL_COLOR
+	part.CastShadow = false
+end
+local function suppressVisualEffect(instance)
+	if instance:IsA("ParticleEmitter") then
+		instance.Enabled = false
+		instance.Rate = 0
+		pcall(function() instance:Clear() end)
+	elseif instance:IsA("Trail") or instance:IsA("Beam")
+	or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")
+	or instance:IsA("PostEffect") or instance:IsA("Light")
+	or instance:IsA("Highlight") or instance:IsA("Clouds")
+	then
+		instance.Enabled = false
+	elseif instance:IsA("Atmosphere") then
+		instance.Density = 0
+		instance.Haze = 0
+		instance.Glare = 0
+	elseif instance:IsA("Explosion") then
+		pcall(function() instance.Visible = false end)
 	end
 end
-
-local function fn54()
-	if pilatV4Config._fpsWorldReady then
-		return true
-	end
-	local flag5 = false
-	local tbl10 = {}
-
-	local ok, result = pcall(function()
-		local function fn55(arg)
-			if fn43(arg) then
-				return
-			end
-			fn52(arg)
-			fn53(arg)
+local function flattenWorldMaterials()
+	if pilatV4Config._fpsWorldReady then return true end
+	local ready = false
+	local listeners = {}
+	local ok, err = pcall(function()
+		local function flattenInstance(inst)
+			if isPilatVisualItem(inst) then return end
+			flattenPart(inst)
+			suppressVisualEffect(inst)
 		end
-
-		local tbl11 = {workspace, game:GetService("Lighting")}
-
-		for i, v5 in ipairs(tbl11) do
-			table.insert(tbl10, v5.DescendantAdded:Connect(function(descendant)
-				task.defer(fn55, descendant)
-			end))
+		local roots = {workspace, game:GetService("Lighting")}
+		for _, root in ipairs(roots) do
+			table.insert(listeners, root.DescendantAdded:Connect(function(inst)
+				task.defer(flattenInstance, inst)
+				end))
 		end
-
-		local tbl12 = {}
-
-		for i, v5 in ipairs(tbl11) do
-			for i2, child in ipairs(v5:GetChildren()) do
-				table.insert(tbl12, child)
+		local stack = {}
+		for _, root in ipairs(roots) do
+			for _, child in ipairs(root:GetChildren()) do
+				table.insert(stack, child)
 			end
 		end
-
-		tbl11 = 0
-
-		while #tbl12 > 0 do
-			local v5 = table.remove(tbl12)
-			fn55(v5)
-
-			for i, child in ipairs(v5:GetChildren()) do
-				table.insert(tbl12, child)
+		local processed = 0
+		while #stack > 0 do
+			local inst = table.remove(stack)
+			flattenInstance(inst)
+			for _, child in ipairs(inst:GetChildren()) do
+				table.insert(stack, child)
 			end
-
-			tbl11 += 1
-
-			if tbl11 >= 250 and #tbl12 > 0 then
+			processed = processed + 1
+			if processed >= 250 and #stack > 0 then
+				processed = 0
 				RunService.Heartbeat:Wait()
-				tbl11 = 0
 			end
 		end
-
-		flag5 = true
-	end)
-
+		ready = true
+		end)
 	if not ok then
-		for i, v5 in ipairs(tbl10) do
-			v5:Disconnect()
-		end
-
-		warn("[FPSBoost] Gagal flatten material workspace:", result)
+		for _, listener in ipairs(listeners) do listener:Disconnect() end
+		warn("[FPSBoost] Gagal flatten material workspace:", err)
 		return false
 	end
-
-	return flag5
+	return ready
 end
-
-local function fn55()
-	if pilatV4Config._fpsAreasReady then
-		return true
-	end
-	local n8 = fn()
-	local areas = n8 and n8:FindFirstChild("Areas")
+local function pruneAreaDecorations()
+	if pilatV4Config._fpsAreasReady then return true end
+	local objects = fn()
+	local areas = objects and objects:FindFirstChild("Areas")
 	local guardAreas = areas and areas:FindFirstChild("GuardAreas")
-	local build = n8 and n8:FindFirstChild("Build")
-
-	if guardAreas then
-		if not build then
-			return false
-		end
-	else
-		return false
+	local build = objects and objects:FindFirstChild("Build")
+	if not guardAreas or not build then return false end
+	for _, area in ipairs(guardAreas:GetChildren()) do
+		local sign = area:FindFirstChild("RequiredSpeedSign")
+		if sign then pcall(function() sign:Destroy() end) end
 	end
-
-	for i, child in ipairs(guardAreas:GetChildren()) do
-		local requiredSpeedSign = child:FindFirstChild("RequiredSpeedSign")
-
-		if requiredSpeedSign then
-			pcall(function()
-				requiredSpeedSign:Destroy()
-			end)
-		end
-	end
-
 	local mainMap = build:FindFirstChild("MainMap")
-	local bases = mainMap and mainMap:FindFirstChild("Bases")
-
-	local function fn56(arg)
-		if bases and arg:IsDescendantOf(bases) then
-			return arg.Size.Y <= 5 and not string.find(string.upper(arg.Name), "WALL", 1, true)
+	local lobbyBases = mainMap and mainMap:FindFirstChild("Bases")
+	local function isFloor(part)
+		if lobbyBases and part:IsDescendantOf(lobbyBases) then
+			return part.Size.Y <= 5 and not string.find(string.upper(part.Name), "WALL", 1, true)
 		end
-		local parent = arg
-
-		while parent and parent ~= build do
-			local v5 = string.upper(parent.Name)
-			if string.find(v5, "BOTTOM", 1, true) then
+		local ancestor = part
+		while ancestor and ancestor ~= build do
+			local name = string.upper(ancestor.Name)
+			if string.find(name, "BOTTOM", 1, true) then
 				return true
 			end
-			parent = parent.Parent
+			ancestor = ancestor.Parent
 		end
-
 		return false
 	end
-
-	local tbl10 = {"ENCHANTED", "FUSEBIOME", "WISP", "BUTTERFLY", "MARKERS", "PORTAL", "TRIGGER"}
-
-	local function fn57(arg)
-		if arg:FindFirstChildOfClass("TouchTransmitter") then
-			return true
-		elseif arg:FindFirstChildWhichIsA("ProximityPrompt", true) then
+	local protectedTokens = { "ENCHANTED", "FUSEBIOME", "WISP", "BUTTERFLY", "MARKERS", "PORTAL", "TRIGGER" }
+	local function isProtected(part)
+		if part:FindFirstChildOfClass("TouchTransmitter") or part:FindFirstChildWhichIsA("ProximityPrompt", true) then
 			return true
 		end
-
-		local parent = arg
-
-		while parent and parent ~= build do
-			local v5 = string.upper(parent.Name)
-
-			for i, v6 in ipairs(tbl10) do
-				if string.find(v5, v6, 1, true) then
-					return true
-				end
+		local ancestor = part
+		while ancestor and ancestor ~= build do
+			local name = string.upper(ancestor.Name)
+			for _, token in ipairs(protectedTokens) do
+				if string.find(name, token, 1, true) then return true end
 			end
-
-			parent = parent.Parent
+			ancestor = ancestor.Parent
 		end
-
 		return false
 	end
-
-	local function fn58(arg)
-		if not arg:IsA("BasePart") then
-			return
-		end
-
-		if fn57(arg) then
-			return
-		end
-
-		if fn56(arg) then
-			fn52(arg)
+	local function prune(instance)
+		if not instance:IsA("BasePart") then return end
+		if isProtected(instance) then return end
+		if isFloor(instance) then
+			flattenPart(instance)
 		else
-			pcall(function()
-				arg:Destroy()
-			end)
+			pcall(function() instance:Destroy() end)
 		end
 	end
-
-	local function fn59(descendant)
-		task.defer(fn58, descendant)
-	end
-
-	local connection6 = build.DescendantAdded:Connect(fn59)
-	areas = 0
-	n8 = 0
-
-	for i, descendant in ipairs(build:GetDescendants()) do
-		local flag5 = descendant.Parent ~= nil
-		fn58(descendant)
-		areas = if flag5 then if descendant.Parent == nil then areas + 1 else areas else areas
-		n8 += 1
-
-		if n8 >= 250 then
+	local listener = build.DescendantAdded:Connect(function(instance)
+		task.defer(prune, instance)
+		end)
+	local processed = 0
+	local deleted = 0
+	for _, instance in ipairs(build:GetDescendants()) do
+		local existed = instance.Parent ~= nil
+		prune(instance)
+		if existed and instance.Parent == nil then deleted = deleted + 1 end
+		processed = processed + 1
+		if processed >= 250 then
+			processed = 0
 			RunService.Heartbeat:Wait()
-			n8 = 0
 		end
 	end
-
-	pilatV4Config._fpsAreaListener = connection6
-	pilatV4Config._fpsAreaDeleted = areas
+	pilatV4Config._fpsAreaListener = listener
+	pilatV4Config._fpsAreaDeleted = deleted
 	pilatV4Config._fpsAreasReady = true
 	return true
 end
-
-local function fn56()
-	if pilatV4Config._fpsPlotsReady then
-		return true
-	end
-	local flag5 = false
-
-	local ok, result = pcall(function()
-		local PlotState2 = require(game:GetService("ReplicatedStorage").Client.PlotState)
-		if PlotState2.GetMySlot() == nil then
+local function deleteOtherPlayersPlots()
+	if pilatV4Config._fpsPlotsReady then return true end
+	local ready = false
+	local ok, err = pcall(function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local PlotCmds = require(ReplicatedStorage.Client.PlotState)
+		local mySlot = PlotCmds.GetMySlot()
+		if mySlot == nil then
 			warn("[FPSBoost] Slot plot kita belum ke-resolve, skip delete plot dulu (biar aman).")
 			return
 		end
-
-		local function fn57(arg)
-			local v5 = PlotState2.GetMySlot()
-			return v5 ~= nil and arg.Name == tostring(v5)
+		local function isMyPlot(plot)
+			local currentSlot = PlotCmds.GetMySlot()
+			return currentSlot ~= nil and plot.Name == tostring(currentSlot)
 		end
-
-		local plots = PlotState2.GetPlotsFolder() or workspace:WaitForChild("Plots", 10)
-		if not plots then
+		local plotsFolder = PlotCmds.GetPlotsFolder() or workspace:WaitForChild("Plots", 10)
+		if not plotsFolder then
 			warn("[FPSBoost] workspace.Plots gak ketemu sama sekali.")
 			return
 		end
-		local n8 = 0
-
-		for i, v5 in ipairs((plots:GetChildren())) do
-			n8 = if fn57(v5) then n8 else if pcall(function()
-				v5:Destroy()
-			end) then n8 + 1 else n8
+		local children = plotsFolder:GetChildren()
+		local deleted = 0
+		for _, plot in ipairs(children) do
+			if not isMyPlot(plot) then
+				local dOk = pcall(function() plot:Destroy() end)
+				if dOk then deleted = deleted + 1 end
+			end
 		end
-
-		local function fn58(child)
+		plotsFolder.ChildAdded:Connect(function(plot)
 			task.defer(function()
-				if child.Parent and not fn57(child) then
-					pcall(function()
-						child:Destroy()
-					end)
+				if plot.Parent and not isMyPlot(plot) then
+					pcall(function() plot:Destroy() end)
 				end
+				end)
 			end)
-		end
-
-		plots.ChildAdded:Connect(fn58)
-		flag5 = true
-	end)
-
+		ready = true
+		end)
 	if not ok then
-		warn("[FPSBoost] Gagal delete plot pemain lain:", result)
+		warn("[FPSBoost] Gagal delete plot pemain lain:", err)
 		return false
 	end
-	return flag5
+	return ready
 end
-
-local function fn57()
-	if pilatV4Config._fpsTreadmillsReady then
-		return true
-	end
-	local flag5 = false
-
-	local ok, result = pcall(function()
-		local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
-		local PlotState2 = require(ReplicatedStorage2.Client.PlotState)
-		local v5
-		local modules = ReplicatedStorage2.Client:FindFirstChild("Modules") or ReplicatedStorage2.Client:WaitForChild("Modules", 10)
-		local runtimeInstanceRegistry, v6 = modules and (modules:FindFirstChild("RuntimeInstanceRegistry") or modules:WaitForChild("RuntimeInstanceRegistry", 10))
-
-		if runtimeInstanceRegistry then
-			ReplicatedStorage2, modules = pcall(require, runtimeInstanceRegistry)
-			v6 = if ReplicatedStorage2 then modules else v5
-		else
-			v6 = v5
+local function deleteOtherPlayersTreadmills()
+	if pilatV4Config._fpsTreadmillsReady then return true end
+	local ready = false
+	local ok, err = pcall(function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local PlotCmds = require(ReplicatedStorage.Client.PlotState)
+		local RuntimeInstanceRegistry
+		local modules = ReplicatedStorage.Client:FindFirstChild("Modules") or ReplicatedStorage.Client:WaitForChild("Modules", 10)
+		local registryModule = modules and (modules:FindFirstChild("RuntimeInstanceRegistry") or modules:WaitForChild("RuntimeInstanceRegistry", 10))
+		if registryModule then
+			local okReq, mod = pcall(require, registryModule)
+			if okReq then RuntimeInstanceRegistry = mod end
 		end
-
-		local clientTreadmillRenders = workspace:FindFirstChild("__ClientTreadmillRenders") or workspace:WaitForChild("__ClientTreadmillRenders", 10)
-		if not clientTreadmillRenders then
-			return
-		end
-
-		local function fn58()
-			local v7 = PlotState2.GetMySlot()
-			if v7 == nil then
-				return nil
-			end
-			local v8 = clientTreadmillRenders:FindFirstChild("TreadmillRender_" .. tostring(v7))
-			if v8 then
-				return v8
-			end
-			local peek = v6 and (v6.Peek or v6.Get)
-			if not peek then
-				return nil
-			end
-			local ok, result = pcall(peek, "TreadmillPlotRender", tostring(v7))
-			if ok then
-				return result
-			end
+		local folder = workspace:FindFirstChild("__ClientTreadmillRenders")
+		or workspace:WaitForChild("__ClientTreadmillRenders", 10)
+		if not folder then return end
+		local function getMyTreadmillModel()
+			local mySlot = PlotCmds.GetMySlot()
+			if mySlot == nil then return nil end
+			local byName = folder:FindFirstChild("TreadmillRender_" .. tostring(mySlot))
+			if byName then return byName end
+			local lookup = RuntimeInstanceRegistry and (RuntimeInstanceRegistry.Peek or RuntimeInstanceRegistry.Get)
+			if not lookup then return nil end
+			local okReg, result = pcall(lookup, "TreadmillPlotRender", tostring(mySlot))
+			if okReg then return result end
 			return nil
 		end
-
-		local function fn59(arg)
-			local result = fn58()
-			if result and arg == result then
+		local function isMyTreadmill(model)
+			local myTreadmillModel = getMyTreadmillModel()
+			if myTreadmillModel and model == myTreadmillModel then
 				return true
 			end
-
-			local ok, result2 = pcall(function()
-				return arg:GetPivot().Position
-			end)
-
-			if not ok then
-				return true
+			local okPos, pos = pcall(function() return model:GetPivot().Position end)
+			if not okPos then return true end
+			local okBounds, within = pcall(PlotCmds.IsWorldPositionWithinLocalPlotBounds, pos)
+			return okBounds and within
+		end
+		local children = folder:GetChildren()
+		local deleted = 0
+		for _, model in ipairs(children) do
+			if model:IsA("Model") and not isMyTreadmill(model) then
+				local dOk = pcall(function() model:Destroy() end)
+				if dOk then deleted = deleted + 1 end
 			end
-			ok, result = pcall(PlotState2.IsWorldPositionWithinLocalPlotBounds, result2)
-			return ok and result
 		end
-
-		ReplicatedStorage2 = 0
-
-		for i, v7 in ipairs((clientTreadmillRenders:GetChildren())) do
-			ReplicatedStorage2 = if v7:IsA("Model") then if fn59(v7) then ReplicatedStorage2 else if pcall(function()
-				v7:Destroy()
-			end) then ReplicatedStorage2 + 1 else ReplicatedStorage2 else ReplicatedStorage2
-		end
-
-		local function fn60(child)
+		folder.ChildAdded:Connect(function(model)
 			task.defer(function()
-				if child.Parent and (child:IsA("Model") and not fn59(child)) then
-					pcall(function()
-						child:Destroy()
-					end)
+				if model.Parent and model:IsA("Model") and not isMyTreadmill(model) then
+					pcall(function() model:Destroy() end)
 				end
+				end)
 			end)
-		end
-
-		clientTreadmillRenders.ChildAdded:Connect(fn60)
-		flag5 = true
-	end)
-
+		ready = true
+		end)
 	if not ok then
-		warn("[FPSBoost] Gagal delete treadmill pemain lain:", result)
+		warn("[FPSBoost] Gagal delete treadmill pemain lain:", err)
 		return false
 	end
-	return flag5
+	return ready
 end
-
-local function fn58()
-	if flag4 then
-		return
-	elseif pilatV4Config._fpsBoostApplying then
-		return
-	end
-
+local function ApplyFPSBoost()
+	if fpsBoostApplied or pilatV4Config._fpsBoostApplying then return end
 	pilatV4Config._fpsBoostApplying = true
-
-	local ok, result = pcall(function()
-		fn51()
-		pilatV4Config._fpsPlotsReady = fn56() == true
-		pilatV4Config._fpsTreadmillsReady = fn57() == true
-		pilatV4Config._fpsAreasReady = fn55() == true
-		pilatV4Config._fpsWorldReady = fn54() == true
-		pilatV4Config._fpsPetsReady = fn50() == true
-		pilatV4Config._fpsEggsReady = fn48() == true
-		flag4 = pilatV4Config._fpsEggsReady and pilatV4Config._fpsPetsReady and pilatV4Config._fpsWorldReady and pilatV4Config._fpsPlotsReady and pilatV4Config._fpsTreadmillsReady and pilatV4Config._fpsAreasReady
-	end)
-
+	local ok, err = pcall(function()
+		reduceGraphicsQuality()
+		pilatV4Config._fpsPlotsReady = deleteOtherPlayersPlots() == true
+		pilatV4Config._fpsTreadmillsReady = deleteOtherPlayersTreadmills() == true
+		pilatV4Config._fpsAreasReady = pruneAreaDecorations() == true
+		pilatV4Config._fpsWorldReady = flattenWorldMaterials() == true
+		pilatV4Config._fpsPetsReady = hideOtherPlayersPets() == true
+		pilatV4Config._fpsEggsReady = hideOtherPlayersEggs() == true
+		fpsBoostApplied = pilatV4Config._fpsEggsReady and pilatV4Config._fpsPetsReady
+		and pilatV4Config._fpsWorldReady and pilatV4Config._fpsPlotsReady and pilatV4Config._fpsTreadmillsReady
+		and pilatV4Config._fpsAreasReady
+		end)
 	pilatV4Config._fpsBoostApplying = nil
-
 	if not ok then
-		warn("[FPSBoost] Gagal menerapkan FPS Boost:", result)
+		warn("[FPSBoost] Gagal menerapkan FPS Boost:", err)
 	end
 end
 
@@ -34058,13 +33717,13 @@ local function fn66()
 				task.wait(1.5)
 
 				if fn2() and pilatV4Config.StartupBoost then
-					fn46()
+					ApplyDecomStartupBoost()
 				end
 
 				task.wait(4)
 
 				if fn2() and pilatV4Config.StartupBoost then
-					fn46()
+					ApplyDecomStartupBoost()
 				end
 			end)
 		end
@@ -34072,7 +33731,7 @@ local function fn66()
 
 	local function fn132(arg)
 		if arg == true then
-			task.spawn(fn58)
+			task.spawn(ApplyFPSBoost)
 		end
 	end
 
@@ -40812,7 +40471,7 @@ local function fn66()
 	tbl24.autoTreadmill = v57:AddToggle({Title = "Auto Treadmill", Content = "Walks to your treadmill and farms speed whenever nothing else is running.", Default = false, Callback = fn144(fn82)})
 	tbl24.treadmillUpgrade = v57:AddToggle({Title = "Auto Upgrade Treadmill", Content = "Buys the next treadmill tier with cash as soon as you can afford it.", Default = false, Callback = fn144(fn88)})
 	local Performance = v38:AddSection("Performance")
-	tbl24.startupBoost = Performance:AddToggle({Title = "Startup Boost", Content = "Lowers graphics when the script starts. Turn it off to get the graphics back; hidden pets and eggs return after a rejoin.", Default = false, Callback = fn144(fn131)})
+	tbl24.startupBoost = Performance:AddToggle({Title = "Startup Boost", Content = "Lowers graphics when the script starts. Turn it off to get the graphics back; hidden pets and eggs return after a rejoin.", Default = true, Callback = fn144(fn131)})
 	tbl24.boostFps = Performance:AddToggle({Title = "Boost FPS", Content = "Removes extra map details and other players' plots for more FPS.", Default = false, Callback = fn144(fn132)})
 	tbl24.uncapFps = Performance:AddToggle({Title = "Uncap FPS", Content = "Raises the FPS cap to 1000.", Default = true, Callback = fn144(fn133)})
 	local Guard = v38:AddSection("Guard")
