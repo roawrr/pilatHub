@@ -23,7 +23,7 @@ end
 local runtimeEnv = getgenv and getgenv() or _G
 -- [raw-github] base URL of the folder that holds senav7_notelemetry.lua and libsenak3_notelemetry.lua.
 -- Set getgenv().SenaRawBase before running (loader.lua does), or edit the default below.
-runtimeEnv.SenaRawBase = runtimeEnv.SenaRawBase or "https://raw.githubusercontent.com/roawrr/pilatHub/refs/heads/main/"
+runtimeEnv.SenaRawBase = runtimeEnv.SenaRawBase or "https://raw.githubusercontent.com/roawrr/pilatHub/main/"
 if type(runtimeEnv.__SenaV4HubShutdown) == "function" then
 	pcall(runtimeEnv.__SenaV4HubShutdown)
 end
