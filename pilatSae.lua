@@ -34451,7 +34451,7 @@ local function fn66()
 
 	v27()
 	local flag13 = type(flag6.ApplyIcon) == "function"
-	local v28 = flag6:Window({Title = "Pilat Hun |", Footer = "Steal An Egg", Folder = "PilatSae", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
+	local v28 = flag6:Window({Title = "Pilat Hub |", Footer = "Steal An Egg", Folder = "PilatSae", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
 	fn155(v28)
 	local tbl24 = {}
 	local tbl25 = {"Respawn Point"}
