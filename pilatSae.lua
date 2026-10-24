@@ -2368,27 +2368,23 @@ end
 local pilatV4DecomBoostUndo = { effects = {}, parts = {}, decals = {}, snapshot = nil }
 local GAIN_POPUP_NAMES = { PlusOne = true, SpeedGainPopup = true, SellPayout = true, SyncedIncomeCash = true }
 local CLUTTER_BILLBOARD_NAMES = { PlayerPlotSign = true, CanUpgrade = true, AlertGui = true, OfflineMoneyClaimBillboard = true }
+local DECOM_EFFECT_CLASSES = { ParticleEmitter = true, Trail = true, Beam = true, Sparkles = true, Fire = true, Smoke = true, BloomEffect = true, BlurEffect = true, ColorCorrectionEffect = true, DepthOfFieldEffect = true, SunRaysEffect = true }
+local function suppressDecomVisualInner(instance)
+	local name, class = instance.Name, instance.ClassName
+	local popup = GAIN_POPUP_NAMES[name] == true
+	local clutter = not popup and CLUTTER_BILLBOARD_NAMES[name] == true and class == "BillboardGui"
+	local effect = not popup and not clutter and (DECOM_EFFECT_CLASSES[class] == true or (class:sub(-6) == "Effect" and instance:IsA("PostEffect")))
+	if not (popup or clutter or effect) then return end
+	if isPilatVisualItem(instance) then return end
+	if popup then
+		instance:Destroy()
+		return
+	end
+	if instance.Enabled then pilatV4DecomBoostUndo.effects[instance] = true end
+	instance.Enabled = false
+end
 local function suppressDecomVisual(instance)
-	pcall(function()
-		if isPilatVisualItem(instance) then return end
-		if GAIN_POPUP_NAMES[instance.Name] then
-			instance:Destroy()
-			return
-		end
-		if instance:IsA("BillboardGui") and CLUTTER_BILLBOARD_NAMES[instance.Name] then
-			if instance.Enabled then pilatV4DecomBoostUndo.effects[instance] = true end
-			instance.Enabled = false
-			return
-		end
-		if instance:IsA("ParticleEmitter") or instance:IsA("Trail")
-		or instance:IsA("Beam") or instance:IsA("Sparkles")
-		or instance:IsA("Fire") or instance:IsA("Smoke")
-		or instance:IsA("PostEffect")
-		then
-			if instance.Enabled then pilatV4DecomBoostUndo.effects[instance] = true end
-			instance.Enabled = false
-		end
-		end)
+	pcall(suppressDecomVisualInner, instance)
 end
 local function installDecomBoostListeners()
 	if decomBoostListening then return end
@@ -2430,10 +2426,63 @@ local function installDecomBoostListeners()
 	end
 end
 local startupBoostBusy = false
+local DECOM_PART_CLASSES = { Part = true, MeshPart = true, UnionOperation = true, WedgePart = true }
+local DECOM_SLICE = 0.002 -- seconds of work per frame; backs off by itself while frames are slow (game still loading)
+
+local function decomAncestorVisual(node, memo)
+	if not node then return false end
+	local known = memo[node]
+	if known ~= nil then return known end
+	local name, result = node.Name, false
+	if name == "PilatVisualBack" or name == "PilatVisualRemote" then
+		result = true
+	else
+		result = decomAncestorVisual(node.Parent, memo)
+	end
+	memo[node] = result
+	return result
+end
+
+local function decomToolVisual(node, memo)
+	if not node then return false end
+	local known = memo[node]
+	if known ~= nil then return known end
+	local result
+	if node:IsA("Tool") then
+		result = node:GetAttribute("PilatVisual") ~= nil
+	else
+		result = decomToolVisual(node.Parent, memo)
+	end
+	memo[node] = result
+	return result
+end
+
+local function decomBoostPart(instance)
+	local parts = pilatV4DecomBoostUndo.parts
+	local mesh = instance:IsA("MeshPart")
+	if not parts[instance] then
+		parts[instance] = { instance.Material, instance.CastShadow, mesh and instance.RenderFidelity or nil }
+	end
+	instance.Material = Enum.Material.SmoothPlastic
+	instance.CastShadow = false
+	if mesh then instance.RenderFidelity = Enum.RenderFidelity.Performance end
+end
+
+local function decomBoostDecal(instance)
+	local decals = pilatV4DecomBoostUndo.decals
+	local texture = instance.Texture
+	if texture ~= "" and not decals[instance] then
+		decals[instance] = texture
+	end
+	if texture ~= "" then instance.Texture = "" end
+end
+
 local function ApplyDecomStartupBoost()
 	if startupBoostBusy then return end
 	startupBoostBusy = true
 	local Lighting = game:GetService("Lighting")
+	-- listeners first: anything that streams in while the scan below is running is handled by them, no need for a second full scan
+	installDecomBoostListeners()
 	if not pilatV4DecomBoostUndo.snapshot then
 		local snap = {}
 		pcall(function()
@@ -2483,34 +2532,45 @@ local function ApplyDecomStartupBoost()
 		Lighting.Ambient = Color3.new(1, 1, 1)
 		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
 		end)
-	local sliceStart = os.clock()
+
+	-- spread the scan over many frames: small slices, extra waiting while the frame time is bad, and the descendants are
+	-- fetched one top-level child at a time instead of one giant GetDescendants() table for the whole workspace
+	local visualMemoA, visualMemoB = {}, {}
+	local sliceStart, counter = os.clock(), 0
+	local undo = pilatV4DecomBoostUndo
+	local function handle(instance)
+		counter = counter + 1
+		if counter % 48 == 0 and os.clock() - sliceStart > DECOM_SLICE then
+			local dt = RunService.Heartbeat:Wait()
+			local extra = 0
+			while dt > 0.034 and extra < 8 do
+				dt = RunService.Heartbeat:Wait()
+				extra = extra + 1
+			end
+			sliceStart = os.clock()
+		end
+		local class = instance.ClassName
+		if DECOM_PART_CLASSES[class] or instance:IsA("BasePart") then
+			if undo.parts[instance] then return end
+			local parent = instance.Parent
+			if decomAncestorVisual(parent, visualMemoA) or decomToolVisual(parent, visualMemoB) then return end
+			pcall(decomBoostPart, instance)
+		elseif class == "Decal" or class == "Texture" then
+			local parent = instance.Parent
+			if decomAncestorVisual(parent, visualMemoA) or decomToolVisual(parent, visualMemoB) then return end
+			pcall(decomBoostDecal, instance)
+		else
+			suppressDecomVisual(instance)
+		end
+	end
 	for _, container in ipairs({ workspace, Lighting }) do
-		for _, instance in ipairs(container:GetDescendants()) do
-			if isPilatVisualItem(instance) then
-				continue
-			elseif instance:IsA("BasePart") then
-				pcall(function()
-					if not pilatV4DecomBoostUndo.parts[instance] then
-						pilatV4DecomBoostUndo.parts[instance] = { instance.Material, instance.CastShadow, instance:IsA("MeshPart") and instance.RenderFidelity or nil }
-					end
-					instance.Material = Enum.Material.SmoothPlastic
-					instance.CastShadow = false
-					if instance:IsA("MeshPart") then instance.RenderFidelity = Enum.RenderFidelity.Performance end
-					end)
-			elseif instance:IsA("Decal") or instance:IsA("Texture") then
-				pcall(function()
-					if instance.Texture ~= "" and not pilatV4DecomBoostUndo.decals[instance] then
-						pilatV4DecomBoostUndo.decals[instance] = instance.Texture
-					end
-					instance.Texture = ""
-					end)
-			else
-				suppressDecomVisual(instance)
+		for _, child in ipairs(container:GetChildren()) do
+			handle(child)
+			for _, instance in ipairs(child:GetDescendants()) do
+				handle(instance)
 			end
-			if os.clock() - sliceStart > 0.004 then
-				task.wait()
-				sliceStart = os.clock()
-			end
+			table.clear(visualMemoA)
+			table.clear(visualMemoB)
 		end
 	end
 	local terrain = workspace:FindFirstChildOfClass("Terrain")
@@ -2541,7 +2601,6 @@ local function ApplyDecomStartupBoost()
 	purgeDecomRenderedAssets()
 	purgeDecomPlacedEggs()
 	purgeDecomPlayerTraps()
-	installDecomBoostListeners()
 	startupBoostBusy = false
 end
 pilatV4DecomBoostUndo.revert = function()
@@ -34329,13 +34388,16 @@ local function fn66()
 			flag11 = true
 
 			task.spawn(function()
+				if not game:IsLoaded() then
+					game.Loaded:Wait()
+				end
 				task.wait(1.5)
 
 				if fn2() and pilatV4Config.StartupBoost then
 					ApplyDecomStartupBoost()
 				end
 
-				task.wait(4)
+				task.wait(10)
 
 				if fn2() and pilatV4Config.StartupBoost then
 					ApplyDecomStartupBoost()
