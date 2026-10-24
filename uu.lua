@@ -21,37 +21,37 @@ local sv = {
 }
 
 local theme = {
-	Accent = Color3.fromRGB(139, 108, 255),
-	Accent2 = Color3.fromRGB(86, 196, 255),
-	AccentSoft = Color3.fromRGB(186, 168, 255),
-	AccentText = Color3.fromRGB(255, 255, 255),
-	Backdrop = Color3.fromRGB(10, 10, 16),
-	Sidebar = Color3.fromRGB(14, 14, 22),
-	Card = Color3.fromRGB(18, 18, 27),
-	Element = Color3.fromRGB(27, 27, 40),
-	ElementHover = Color3.fromRGB(38, 36, 58),
-	Track = Color3.fromRGB(46, 46, 66),
-	Stroke = Color3.fromRGB(46, 44, 68),
-	StrokeSoft = Color3.fromRGB(32, 31, 48),
-	Text = Color3.fromRGB(240, 240, 249),
-	SubText = Color3.fromRGB(165, 164, 188),
-	Dim = Color3.fromRGB(114, 113, 140),
-	Good = Color3.fromRGB(74, 222, 128),
-	Bad = Color3.fromRGB(248, 113, 113),
-	Gold = Color3.fromRGB(245, 196, 81),
-	Blue = Color3.fromRGB(96, 165, 250),
-	Row = Color3.fromRGB(21, 21, 32),
-	Inner = Color3.fromRGB(35, 35, 50),
-	InnerHover = Color3.fromRGB(48, 46, 68),
-	Field = Color3.fromRGB(38, 37, 55),
-	Bar = Color3.fromRGB(60, 59, 84),
-	Pill = Color3.fromRGB(18, 18, 27),
-	TabActive = Color3.fromRGB(34, 29, 62),
-	Option = Color3.fromRGB(32, 31, 47),
-	ChatBg = Color3.fromRGB(14, 14, 22),
-	Mine = Color3.fromRGB(34, 29, 62),
-	Mention = Color3.fromRGB(40, 34, 24),
-	Box = Color3.fromRGB(15, 15, 23),
+	Accent = Color3.fromRGB(212, 175, 110),
+	Accent2 = Color3.fromRGB(150, 118, 68),
+	AccentSoft = Color3.fromRGB(232, 208, 160),
+	AccentText = Color3.fromRGB(22, 18, 12),
+	Backdrop = Color3.fromRGB(9, 9, 10),
+	Sidebar = Color3.fromRGB(13, 13, 14),
+	Card = Color3.fromRGB(17, 17, 18),
+	Element = Color3.fromRGB(24, 24, 26),
+	ElementHover = Color3.fromRGB(34, 33, 35),
+	Track = Color3.fromRGB(44, 43, 46),
+	Stroke = Color3.fromRGB(44, 42, 39),
+	StrokeSoft = Color3.fromRGB(30, 29, 28),
+	Text = Color3.fromRGB(238, 235, 228),
+	SubText = Color3.fromRGB(160, 156, 148),
+	Dim = Color3.fromRGB(110, 107, 101),
+	Good = Color3.fromRGB(122, 201, 142),
+	Bad = Color3.fromRGB(226, 112, 106),
+	Gold = Color3.fromRGB(226, 190, 110),
+	Blue = Color3.fromRGB(120, 164, 220),
+	Row = Color3.fromRGB(17, 17, 19),
+	Inner = Color3.fromRGB(28, 28, 30),
+	InnerHover = Color3.fromRGB(40, 39, 40),
+	Field = Color3.fromRGB(31, 31, 33),
+	Bar = Color3.fromRGB(70, 67, 62),
+	Pill = Color3.fromRGB(17, 17, 19),
+	TabActive = Color3.fromRGB(38, 33, 24),
+	Option = Color3.fromRGB(26, 26, 28),
+	ChatBg = Color3.fromRGB(12, 12, 13),
+	Mine = Color3.fromRGB(38, 33, 24),
+	Mention = Color3.fromRGB(42, 35, 22),
+	Box = Color3.fromRGB(13, 13, 14),
 }
 
 local function elevate()
@@ -2453,6 +2453,13 @@ function Chloex:Window(guiconfig)
 
 	dropshadowholder.Position = UDim2.new(0.5, 0, 0.5, 0)
 
+	-- open animation: the window eases in from slightly smaller instead of popping
+	local openscale = instance.uiscale(dropshadowholder)
+	openscale.Scale = 0.94
+	task.defer(function()
+		sv.ts:Create(openscale, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	end)
+
 	local dropshadow = instance.imagelabel(dropshadowholder)
 	dropshadow.Name = "DropShadow"
 	dropshadow.Image = "rbxassetid://6015897843"
@@ -2584,7 +2591,7 @@ function Chloex:Window(guiconfig)
 	textlabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	textlabel.BorderSizePixel = 0
 	textlabel.Size = UDim2.new(1, -100, 1, 0)
-	textlabel.Position = UDim2.new(0, 14, 0, 0)
+	textlabel.Position = UDim2.new(0, 74, 0, 0)
 	do
 		local titlegrad = Instance.new("UIGradient")
 		titlegrad.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), theme.AccentSoft)
@@ -2628,13 +2635,13 @@ function Chloex:Window(guiconfig)
 	headerchiplayout.Padding = UDim.new(0, 4)
 	local function layoutheader()
 		local reserve = headerreserve + math.floor(headerchips.holder.AbsoluteSize.X) + (headerchips.holder.AbsoluteSize.X > 0 and 6 or 0)
-		local avail = math.max(60, top.AbsoluteSize.X - 14 - reserve)
+		local avail = math.max(60, top.AbsoluteSize.X - 74 - reserve)
 		if top.AbsoluteSize.X <= 1 then
 			avail = draggable.defx - 10 - reserve
 		end
 		local titlew = math.min(textwidth(textlabel.Text, 14, FONT_BOLD) + 2, math.floor(avail * 0.65))
 		textlabel.Size = UDim2.new(0, titlew, 1, 0)
-		local footerx = 14 + titlew + 8
+		local footerx = 74 + titlew + 8
 		textlabel1.Position = UDim2.new(0, footerx, 0, 0)
 		textlabel1.Size = UDim2.new(0, math.max(0, avail - titlew - 6), 1, 0)
 	end
@@ -2680,6 +2687,65 @@ function Chloex:Window(guiconfig)
 		row = { frame = chip, img = img, label = label }
 		headerchips.rows[i] = row
 		return row
+	end
+
+	-- terminal-style window dots (close / minimise / reset size); the old X and - buttons are hidden
+	local headeractions = {}
+	do
+		local dotholder = instance.frame(top)
+		dotholder.Name = "WindowDots"
+		dotholder.AnchorPoint = Vector2.new(0, 0.5)
+		dotholder.BackgroundTransparency = 1
+		dotholder.Position = UDim2.new(0, 14, 0.5, 0)
+		dotholder.Size = UDim2.new(0, 48, 0, 18)
+		dotholder.ZIndex = 6
+		local dotlist = instance.uilistlayout(dotholder)
+		dotlist.FillDirection = Enum.FillDirection.Horizontal
+		dotlist.VerticalAlignment = Enum.VerticalAlignment.Center
+		dotlist.Padding = UDim.new(0, 6)
+		dotlist.SortOrder = Enum.SortOrder.LayoutOrder
+		local dots = {
+			{ name = "Close", color = theme.Bad, glyph = "×", act = "close" },
+			{ name = "Minimize", color = theme.Gold, glyph = "–", act = "min" },
+			{ name = "Reset", color = theme.Good, glyph = "+", act = "reset" },
+		}
+		for i, d in ipairs(dots) do
+			local dot = instance.textbutton(dotholder)
+			dot.Name = "Dot" .. d.name
+			dot.LayoutOrder = i
+			dot.AutoButtonColor = false
+			dot.Text = d.glyph
+			dot.Font = FONT_BOLD
+			dot.TextSize = 12
+			dot.TextColor3 = Color3.fromRGB(30, 22, 18)
+			dot.TextTransparency = 1
+			dot.BackgroundColor3 = d.color
+			dot.BorderSizePixel = 0
+			dot.Size = UDim2.new(0, 12, 0, 12)
+			dot.ZIndex = 6
+			instance.uicorner(dot).CornerRadius = UDim.new(1, 0)
+			local ring = instance.uistroke(dot)
+			ring.Color = Color3.fromRGB(0, 0, 0)
+			ring.Transparency = 0.7
+			ring.Thickness = 1
+			ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			dot.MouseEnter:Connect(function()
+				sv.ts:Create(dot, FAST, { TextTransparency = 0.1 }):Play()
+			end)
+			dot.MouseLeave:Connect(function()
+				sv.ts:Create(dot, FAST, { TextTransparency = 1 }):Play()
+			end)
+			dot.Activated:Connect(function()
+				local fn = headeractions[d.act]
+				if fn then
+					fn()
+				end
+			end)
+		end
+		headeractions.reset = function()
+			dropshadowholder.Size = UDim2.new(0, draggable.defx, 0, draggable.defy)
+			dropshadowholder.Position = UDim2.new(0.5, 0, 0.5, 0)
+		end
 	end
 
 	local close = instance.textbutton(top)
@@ -3241,11 +3307,13 @@ function Chloex:Window(guiconfig)
 		getgenv().ChloeX_ReopenPrompt = nil
 	end
 
-	min.Activated:Connect(function()
+	headeractions.min = function()
 		dropshadowholder.Visible = false
-	end)
+	end
+	min.Activated:Connect(headeractions.min)
+	min.Visible = false
 
-	close.Activated:Connect(function()
+	headeractions.close = function()
 		local overlay = instance.frame(dropshadowholder)
 		overlay.Size = UDim2.new(1, 0, 1, 0)
 		overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -3336,7 +3404,9 @@ function Chloex:Window(guiconfig)
 		cancel.MouseButton1Click:Connect(function()
 			overlay:Destroy()
 		end)
-	end)
+	end
+	close.Activated:Connect(headeractions.close)
+	close.Visible = false
 
 	local togglekey = Enum.KeyCode.F3
 	trackConnection(
@@ -3524,8 +3594,8 @@ function Chloex:Window(guiconfig)
 		tfeature.BackgroundColor3 = theme.Field
 		tfeature.BackgroundTransparency = 0
 		tfeature.BorderSizePixel = 0
-		tfeature.Position = UDim2.new(1, -15, 0.5, 0)
-		tfeature.Size = UDim2.new(0, 38, 0, 19)
+		tfeature.Position = UDim2.new(1, -10, 0.5, 0)
+		tfeature.Size = UDim2.new(0, 40, 0, 22)
 		instance.uicorner(tfeature)
 
 		local tstroke = instance.uistroke(tfeature)
@@ -3538,7 +3608,7 @@ function Chloex:Window(guiconfig)
 		tcircle.BackgroundColor3 = theme.Text
 		tcircle.BorderSizePixel = 0
 		tcircle.Position = UDim2.new(0, 2, 0, 2)
-		tcircle.Size = UDim2.new(0, 15, 0, 15)
+		tcircle.Size = UDim2.new(0, 18, 0, 18)
 		instance.uicorner(tcircle).CornerRadius = UDim.new(0, 15)
 
 		templates.Toggle = t
@@ -4309,11 +4379,31 @@ function Chloex:Window(guiconfig)
 		scrollayers.Size = UDim2.new(1, 0, 1, 0)
 
 		local uilistlayout1 = instance.uilistlayout(scrollayers)
-		uilistlayout1.Padding = UDim.new(0, 3)
+		uilistlayout1.Padding = UDim.new(0, 8)
 		uilistlayout1.SortOrder = Enum.SortOrder.LayoutOrder
 
+		-- page gutters: a little air above/below the content and between cards and the scrollbar
+		local pagepad = instance.uipadding(scrollayers)
+		pagepad.PaddingTop = UDim.new(0, 4)
+		pagepad.PaddingBottom = UDim.new(0, 10)
+		pagepad.PaddingLeft = UDim.new(0, 1)
+		pagepad.PaddingRight = UDim.new(0, 5)
+
+		local pagetitle = instance.textlabel(scrollayers)
+		pagetitle.Name = "PageTitle"
+		pagetitle.LayoutOrder = -1000
+		pagetitle.BackgroundTransparency = 1
+		pagetitle.Font = FONT_BOLD
+		pagetitle.Text = tostring(tabconfig.Name)
+		pagetitle.TextColor3 = theme.Text
+		pagetitle.TextSize = 22
+		pagetitle.TextXAlignment = Enum.TextXAlignment.Left
+		pagetitle.Size = UDim2.new(1, 0, 0, 30)
+		local pagetitlepad = instance.uipadding(pagetitle)
+		pagetitlepad.PaddingLeft = UDim.new(0, 4)
+
 		local function updatesizescroll()
-			scrollayers.CanvasSize = UDim2.new(0, 0, 0, uilistlayout1.AbsoluteContentSize.Y)
+			scrollayers.CanvasSize = UDim2.new(0, 0, 0, uilistlayout1.AbsoluteContentSize.Y + 14)
 		end
 
 		uilistlayout1:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatesizescroll)
@@ -4369,20 +4459,34 @@ function Chloex:Window(guiconfig)
 
 		local hasicon = tabconfig.Icon ~= nil and tabconfig.Icon ~= ""
 		local tabicon
+		local tabtile
 		if hasicon then
+			tabtile = instance.frame(tab)
+			tabtile.Name = "TabTile"
+			tabtile.AnchorPoint = Vector2.new(0, 0.5)
+			tabtile.Position = UDim2.new(0, 8, 0.5, 0)
+			tabtile.Size = UDim2.new(0, 22, 0, 22)
+			tabtile.BorderSizePixel = 0
+			tabtile.BackgroundColor3 = isFirstTab and Color3.fromRGB(255, 255, 255) or theme.Element
+			instance.uicorner(tabtile).CornerRadius = UDim.new(0, 7)
+			local tilegrad = instance.uigradient(tabtile)
+			tilegrad.Rotation = 135
+			tilegrad.Enabled = isFirstTab and true or false
+			tilegrad.Color = ColorSequence.new(theme.Accent, theme.Accent2)
+			tabtile.Visible = not compactsidebar
 			tabicon = instance.imagelabel(tab)
 			tabicon.Name = "TabIcon"
-			tabicon.AnchorPoint = Vector2.new(0, 0.5)
-			tabicon.Position = UDim2.new(0, 10, 0.5, 0)
-			tabicon.Size = UDim2.new(0, 14, 0, 14)
+			tabicon.AnchorPoint = Vector2.new(0.5, 0.5)
+			tabicon.Position = UDim2.new(0, 19, 0.5, 0)
+			tabicon.Size = UDim2.new(0, 13, 0, 13)
 			tabicon.BackgroundTransparency = 1
-			tabicon.ImageColor3 = isFirstTab and theme.AccentSoft or theme.SubText
+			tabicon.ImageColor3 = isFirstTab and theme.AccentText or theme.SubText
 			applyicon(tabicon, tabconfig.Icon, 48)
 		end
 
 		tabname.TextColor3 = isFirstTab and theme.Text or theme.SubText
-		tabname.Size = UDim2.new(1, -(hasicon and 36 or 16), 1, 0)
-		tabname.Position = UDim2.new(0, hasicon and 30 or 10, 0, 0)
+		tabname.Size = UDim2.new(1, -(hasicon and 44 or 16), 1, 0)
+		tabname.Position = UDim2.new(0, hasicon and 38 or 10, 0, 0)
 
 		-- Icon-only sidebar: centre the icon; a tab without an icon shows its
 		-- first letters instead.
@@ -4482,6 +4586,14 @@ function Chloex:Window(guiconfig)
 					if ti then
 						ti.ImageColor3 = theme.SubText
 					end
+					local tt = tabframe:FindFirstChild("TabTile")
+					if tt then
+						tt.BackgroundColor3 = theme.Element
+						local tg = tt:FindFirstChildOfClass("UIGradient")
+						if tg then
+							tg.Enabled = false
+						end
+					end
 				end
 			end
 
@@ -4492,7 +4604,14 @@ function Chloex:Window(guiconfig)
 			tabbg.ImageTransparency = 0
 			tabname.TextColor3 = theme.Text
 			if tabicon then
-				tabicon.ImageColor3 = theme.AccentSoft
+				tabicon.ImageColor3 = theme.AccentText
+			end
+			if tabtile then
+				tabtile.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				local tg = tabtile:FindFirstChildOfClass("UIGradient")
+				if tg then
+					tg.Enabled = true
+				end
 			end
 
 			framechoose.Parent = tab
@@ -4551,7 +4670,7 @@ function Chloex:Window(guiconfig)
 			if noheader then
 				alwaysopen = true
 			end
-			local headerheight = noheader and 0 or 30
+			local headerheight = noheader and 0 or 36
 
 			local section = instance.frame(scrollayers)
 			section.Name = "Section"
@@ -4568,7 +4687,7 @@ function Chloex:Window(guiconfig)
 			sectionreal.BackgroundTransparency = 1
 			sectionreal.BorderSizePixel = 0
 			sectionreal.Position = UDim2.new(0.5, 0, 0, 0)
-			sectionreal.Size = UDim2.new(1, 1, 0, 30)
+			sectionreal.Size = UDim2.new(1, -2, 0, 34)
 			sectionreal.Visible = not noheader
 
 			local uicorner = instance.uicorner(sectionreal)
@@ -4595,7 +4714,7 @@ function Chloex:Window(guiconfig)
 			local featureframe = instance.frame(sectionreal)
 			featureframe.AnchorPoint = Vector2.new(1, 0.5)
 			featureframe.BackgroundTransparency = 1
-			featureframe.Position = UDim2.new(1, -8, 0.5, 0)
+			featureframe.Position = UDim2.new(1, -10, 0.5, 0)
 			featureframe.Size = UDim2.new(0, 16, 0, 16)
 			featureframe.Visible = not alwaysopen
 
@@ -4612,13 +4731,51 @@ function Chloex:Window(guiconfig)
 			sectiontitle.Font = FONT_BOLD
 			sectiontitle.Text = sectiontitletext
 			sectiontitle.TextColor3 = theme.Text
-			sectiontitle.TextSize = 13
+			sectiontitle.TextSize = 14
 			sectiontitle.TextTruncate = Enum.TextTruncate.AtEnd
 			sectiontitle.TextXAlignment = Enum.TextXAlignment.Left
 			sectiontitle.AnchorPoint = Vector2.new(0, 0.5)
 			sectiontitle.BackgroundTransparency = 1
-			sectiontitle.Position = UDim2.new(0, 10, 0.5, 0)
-			sectiontitle.Size = UDim2.new(1, -40, 0, 14)
+			sectiontitle.Position = UDim2.new(0, 24, 0.5, 0)
+			sectiontitle.Size = UDim2.new(1, -92, 0, 16)
+
+			-- accent pip: gives every header a clear anchor so sections read as groups
+			local sectionpip = instance.frame(sectionreal)
+			sectionpip.Name = "SectionPip"
+			sectionpip.AnchorPoint = Vector2.new(0, 0.5)
+			sectionpip.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			sectionpip.BorderSizePixel = 0
+			sectionpip.Position = UDim2.new(0, 11, 0.5, 0)
+			sectionpip.Size = UDim2.new(0, 3, 0, 14)
+			instance.uicorner(sectionpip).CornerRadius = UDim.new(1, 0)
+			local sectionpipgrad = instance.uigradient(sectionpip)
+			sectionpipgrad.Rotation = 90
+			sectionpipgrad.Color = ColorSequence.new(theme.Accent, theme.Accent2)
+
+			-- item-count pill (hidden while the section is empty)
+			local countpill = instance.frame(sectionreal)
+			countpill.Name = "CountPill"
+			countpill.AnchorPoint = Vector2.new(1, 0.5)
+			countpill.AutomaticSize = Enum.AutomaticSize.X
+			countpill.BackgroundColor3 = theme.Inner
+			countpill.BackgroundTransparency = 0.25
+			countpill.BorderSizePixel = 0
+			countpill.Position = UDim2.new(1, alwaysopen and -12 or -34, 0.5, 0)
+			countpill.Size = UDim2.new(0, 0, 0, 18)
+			countpill.Visible = false
+			instance.uicorner(countpill).CornerRadius = UDim.new(1, 0)
+			local countpad = instance.uipadding(countpill)
+			countpad.PaddingLeft = UDim.new(0, 7)
+			countpad.PaddingRight = UDim.new(0, 7)
+			local counttext = instance.textlabel(countpill)
+			counttext.Name = "CountText"
+			counttext.AutomaticSize = Enum.AutomaticSize.X
+			counttext.BackgroundTransparency = 1
+			counttext.Font = FONT_BOLD
+			counttext.Size = UDim2.new(0, 0, 1, 0)
+			counttext.Text = ""
+			counttext.TextColor3 = theme.SubText
+			counttext.TextSize = 11
 
 			if sectionicon and tostring(sectionicon) ~= "" then
 				local sectioniconimg = instance.imagelabel(sectionreal)
@@ -4630,7 +4787,8 @@ function Chloex:Window(guiconfig)
 				sectioniconimg.Size = UDim2.new(0, 20, 0, 20)
 				applyicon(sectioniconimg, sectionicon, 48)
 				sectiontitle.Position = UDim2.new(0, 34, 0.5, 0)
-				sectiontitle.Size = UDim2.new(1, -64, 0, 14)
+				sectiontitle.Size = UDim2.new(1, -102, 0, 16)
+				sectionpip.Visible = false
 			end
 
 			local sectionadd = instance.frame(section)
@@ -4645,8 +4803,14 @@ function Chloex:Window(guiconfig)
 			uicorner8.CornerRadius = UDim.new(0, 2)
 
 			local uilistlayout2 = instance.uilistlayout(sectionadd)
-			uilistlayout2.Padding = UDim.new(0, 3)
+			uilistlayout2.Padding = UDim.new(0, 5)
 			uilistlayout2.SortOrder = Enum.SortOrder.LayoutOrder
+
+			local bodypad = instance.uipadding(sectionadd)
+			bodypad.PaddingTop = UDim.new(0, 6)
+			bodypad.PaddingBottom = UDim.new(0, 2)
+			bodypad.PaddingLeft = UDim.new(0, 1)
+			bodypad.PaddingRight = UDim.new(0, 1)
 
 			local color_normal = theme.Text
 			local color_open = theme.Text
@@ -4659,7 +4823,7 @@ function Chloex:Window(guiconfig)
 					return
 				end
 
-				local contentHeight = math.max(0, uilistlayout2.AbsoluteContentSize.Y)
+				local contentHeight = math.max(0, uilistlayout2.AbsoluteContentSize.Y) + 8
 				local sectionsizey = headerheight + contentHeight
 				sectiontitle.TextColor3 = color_open
 
@@ -4686,6 +4850,14 @@ function Chloex:Window(guiconfig)
 				sectionResizeQueued = true
 				task.defer(function()
 					sectionResizeQueued = false
+					local n = 0
+					for _, child in ipairs(sectionadd:GetChildren()) do
+						if child:IsA("GuiObject") then
+							n = n + 1
+						end
+					end
+					counttext.Text = tostring(n)
+					countpill.Visible = n > 0 and not noheader
 					updatesizesection(false)
 				end)
 			end
@@ -6063,8 +6235,8 @@ function Chloex:Window(guiconfig)
 				button.LayoutOrder = countitem
 				roundbg(button, 4, theme.Row)
 
-				local padding = 3
-				local gap = 4
+				local padding = 10
+				local gap = 8
 				local buttonfunc = {}
 				local lock = nil
 				local basey = 40
@@ -6326,7 +6498,7 @@ function Chloex:Window(guiconfig)
 					elevate()
 					local titleColor = theme.Text
 					local circleColor = value and theme.AccentText or theme.Text
-					local circlePosition = value and UDim2.new(0, 21, 0, 2) or UDim2.new(0, 2, 0, 2)
+					local circlePosition = value and UDim2.new(0, 20, 0, 2) or UDim2.new(0, 2, 0, 2)
 					local strokeColor = value and guiconfig.Color or Color3.fromRGB(255, 255, 255)
 					local strokeTransparency = value and 0 or 0.9
 					local backgroundColor = value and guiconfig.Color or theme.Field
@@ -7062,7 +7234,7 @@ function Chloex:Window(guiconfig)
 				local selectoptionsframe = instance.frame(dropdown)
 				selectoptionsframe.Name = "SelectOptionsFrame"
 				selectoptionsframe.AnchorPoint = Vector2.new(1, 0.5)
-				selectoptionsframe.Position = UDim2.new(1, -7, 0.5, 0)
+				selectoptionsframe.Position = UDim2.new(1, -10, 0.5, 0)
 				selectoptionsframe.Size = UDim2.new(0.45, 0, 0, 30)
 				selectoptionsframe.LayoutOrder = countdropdown
 				roundbg(selectoptionsframe, 4, theme.Inner)
