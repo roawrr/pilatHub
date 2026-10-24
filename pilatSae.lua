@@ -37035,6 +37035,7 @@ local function fn66()
 			if cfg.HwPumpHitTp == nil then cfg.HwPumpHitTp = true end
 			if cfg.HwMonTp == nil then cfg.HwMonTp = true end
 			if cfg.HwEggTp == nil then cfg.HwEggTp = true end
+			if cfg.HwThief == nil then cfg.HwThief = true end
 			if cfg.TrainBoss == nil then cfg.TrainBoss = true end
 
 			-- ---------------------------------------------------------------- basics
@@ -37853,232 +37854,343 @@ local function fn66()
 			end
 
 			-- ---------------------------------------------------------------- eggs
-			local nameCache = {}
+			-- Halloween egg steal: logic ported from Chilli Hub / StealAnEggg ("38_halloween#1"):
+			--   * candidate list = free eggs (HalloweenEggCanPickUp) + eggs another player is carrying (Take Eggs From Holders)
+			--   * Steal Missing Halloween Index (index eggs first, they bypass the name / rarity / value filters)
+			--   * Instant Steal: teleport onto the egg, teleport to the safe zone edge (+10 studs, pulled-back check x4),
+			--     drop + regrab there, then walk into the zone; non-instant = fly to the egg, walk to the zone centre area
+			--   * egg dropped on the way -> go back for it first ("again"), an egg that keeps dropping is skipped for 60s
+			local pickEgg, deliver, stealOne
+			do
+				local eggBad, eggMeshSig = hw.Bad, nil
+				local eggState = {again = nil, againAt = 0, qd = 0, carriedAt = nil, cur = nil, ixAt = 0, ix = {}, listAt = 0, list = nil}
+				hw.EggState = eggState
 
-			local function eggName(model)
-				local uid, source = model:GetAttribute("HalloweenEggUid"), model:GetAttribute("PreparedSourceName")
-				if uid and source then
-					hw.Known[uid] = source
-				end
-				local raw = source or (uid and hw.Known[uid]) or ("Mystery Egg (Zone " .. tostring(model:GetAttribute("Zone") or "?") .. ")")
-				if nameCache[raw] then
-					return nameCache[raw]
-				end
-				local resolved = raw
-				local specs = pets and pets.Specs
-				if type(specs) == "table" and not specs[raw] then
-					for key, spec in next, specs do
-						if type(spec) == "table" and (spec.EggSource == raw or spec.EggModel == raw) then
-							resolved = spec.Id or key
-							break
+				local function meshOf(model)
+					local ids = {}
+					for _, d in ipairs(model:GetDescendants()) do
+						if d:IsA("MeshPart") then
+							ids[#ids + 1] = d.MeshId:match("%d+") or ""
 						end
 					end
+					table.sort(ids)
+					return table.concat(ids, ",")
 				end
-				nameCache[raw] = resolved
-				return resolved
-			end
 
-			local function eggEntry(name)
-				local entry = assetDirectory()[name]
-				return type(entry) == "table" and entry or nil
-			end
-
-			local function eggValue(model)
-				local entry = eggEntry(eggName(model))
-				local scale = model:IsA("Model") and model:GetScale() or 1
-				local mult = scale > 5 and (scale / 5) ^ 1.2 * 19.637875755794113 or scale ^ 1.85
-				return (entry and tonumber(entry.EarningRate) or 0) * mult
-			end
-
-			local function eggPasses(model)
-				local name = eggName(model)
-				if next(hw.Names) ~= nil and not hw.Names[name] then
-					return false
-				end
-				if hw.MinValue > 0 and eggValue(model) < hw.MinValue then
-					return false
-				end
-				if next(hw.Rarities) ~= nil then
-					local entry = eggEntry(name)
-					local rarity = entry and type(entry.Rarity) == "table" and entry.Rarity._id
-					return rarity ~= nil and hw.Rarities[rarity] == true
-				end
-				return true
-			end
-
-			-- record for the Steal Webhook, same shape the normal steal path sends
-			local function webhookRecord(model)
-				local name = eggName(model)
-				local entry = eggEntry(name)
-				local rarity = entry and type(entry.Rarity) == "table" and entry.Rarity or nil
-				return {
-					Uid = model:GetAttribute("HalloweenEggUid"),
-					AssetCategory = name,
-					AssetScale = model:IsA("Model") and model:GetScale() or 1,
-					Mutations = {},
-					Info = {name = entry and (entry.DisplayName or entry._id) or tostring(name), category = name, rarity = rarity and (rarity.DisplayName or rarity._id) or "Unknown", rarityColor = rarity and rarity.Color or nil},
-				}
-			end
-
-			local function eggFolder()
-				local d = dim()
-				return d and d:FindFirstChild("WorldEggs")
-			end
-
-			-- script_yanz logic: an egg is free when HalloweenEggCanPickUp is true and it is picked up through the AskCarryEgg remote.
-			-- The old StealPrompt route is only a fallback for eggs that do not carry the attribute.
-			local function canTake(egg)
-				local flag = egg:GetAttribute("HalloweenEggCanPickUp")
-				if flag ~= nil then
-					return flag == true
-				end
-				local prompt = egg:FindFirstChild("StealPrompt", true)
-				return prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.Enabled
-			end
-
-			local function takeEgg(egg)
-				local uid = egg:GetAttribute("HalloweenEggUid")
-				if uid then
-					task.spawn(invoke, "RF/HalloweenDimension/AskCarryEgg", uid)
-				end
-				local prompt = egg:FindFirstChild("StealPrompt", true)
-				if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
-					press(prompt)
-				end
-			end
-			local function pickEgg()
-				local folder, root = eggFolder(), rootPart()
-				if not folder or not root then
-					return nil
-				end
-				local best, bestValue, bestDist, bestZone
-				for _, egg in ipairs(folder:GetChildren()) do
-					if canTake(egg) and (hw.Bad[egg] or 0) < os.clock() and eggPasses(egg) then
-						local pos = posOf(egg)
-						local zone = pos and zoneOf(pos)
-						if pos and zone == 0 then
-							-- zone parts may be missing / not streamed in: anything outside the safe zone is still a normal egg
-							local safeZone = zonePart("SafeZone")
-							if not (safeZone and inside(safeZone, pos)) then
-								zone = 1
+				-- eggs without PreparedSourceName: identify them by the mesh signature of the egg models (+ zone)
+				local function guessEgg(model)
+					if not eggMeshSig then
+						eggMeshSig = {}
+						pcall(function()
+							local folder = ReplicatedStorage.Assets.Models.Eggs
+							for key, spec in next, (pets and pets.Specs or {}) do
+								local eggModel = type(spec) == "table" and spec.EggModel and folder:FindFirstChild(spec.EggModel)
+								if eggModel then
+									local sig = meshOf(eggModel)
+									eggMeshSig[sig] = eggMeshSig[sig] or {}
+									table.insert(eggMeshSig[sig], {id = spec.Id or key, z = tonumber(spec.Zone)})
+								end
 							end
+						end)
+					end
+					local matches, zone = eggMeshSig[meshOf(model)], tonumber(model:GetAttribute("Zone"))
+					if not matches then
+						return nil
+					end
+					for _, match in ipairs(matches) do
+						if match.z == zone then
+							return match.id
 						end
-						if zone and zone >= 1 then
-							local dist, value = (pos - root.Position).Magnitude, eggValue(egg)
-							if not best or value > bestValue or (value == bestValue and dist < bestDist) then
-								best, bestValue, bestDist, bestZone = egg, value, dist, zone
+					end
+					return #matches == 1 and matches[1].id or nil
+				end
+
+				local nameCache = {}
+
+				local function eggName(model)
+					local uid = model:GetAttribute("HalloweenEggUid")
+					local source = model:GetAttribute("PreparedSourceName") or (uid and not hw.Known[uid] and guessEgg(model))
+					if uid and source then
+						hw.Known[uid] = source
+					end
+					local raw = source or (uid and hw.Known[uid]) or ("Mystery Egg (Zone " .. tostring(model:GetAttribute("Zone") or "?") .. ")")
+					if nameCache[raw] then
+						return nameCache[raw]
+					end
+					local resolved = raw
+					local specs = pets and pets.Specs
+					if type(specs) == "table" and not specs[raw] then
+						for key, spec in next, specs do
+							if type(spec) == "table" and (spec.EggSource == raw or spec.EggModel == raw) then
+								resolved = spec.Id or key
+								break
 							end
 						end
 					end
+					nameCache[raw] = resolved
+					return resolved
 				end
-				return best, bestZone
-			end
 
-			-- standing point on the floor at x/z (never hovers); ignores monsters, ghosts, zone volumes and eggs
-			local function floorAt(x, z, refY)
-				local params = RaycastParams.new()
-				params.FilterType = Enum.RaycastFilterType.Exclude
-				local ignore = {localPlayer.Character}
-				local d = dim()
-				for _, name in ipairs({"Monsters", "Ghosts", "Zones", "WorldEggs"}) do
-					local folder = d and d:FindFirstChild(name)
-					if folder then
-						ignore[#ignore + 1] = folder
-					end
+				local function eggEntry(name)
+					local entry = assetDirectory()[name]
+					return type(entry) == "table" and entry or nil
 				end
-				params.FilterDescendantsInstances = ignore
-				local hit = Workspace:Raycast(Vector3.new(x, refY + 15, z), Vector3.new(0, -150, 0), params)
-				return Vector3.new(x, hit and hit.Position.Y + 3 or refY, z)
-			end
 
-			-- drop-regrab point (from the jjj build): nearest point of the safe zone grown by 10 studs, on the floor
-			local function edgeFloor(zone, root)
-				local lp = zone.CFrame:PointToObjectSpace(root.Position)
-				local hx, hz = zone.Size.X / 2 + 10, zone.Size.Z / 2 + 10
-				local w = zone.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -hx, hx), 0, math.clamp(lp.Z, -hz, hz)))
-				return floorAt(w.X, w.Z, zone.Position.Y)
-			end
-
-			-- drop the egg and grab it again so the server counts it from where we stand.
-			-- floorY (optional): stand on the floor next to the egg instead of hovering above it
-			local function regrab(uid, alive, floorY)
-				task.spawn(invoke, "RF/HalloweenDimension/AskDropEgg")
-				local startedAt, dropped = os.clock(), false
-				while alive() and os.clock() - startedAt < 3 do
-					if not carried() then
-						dropped = true
-					elseif dropped then
-						return true
-					end
-					local model
-					local folder = eggFolder()
-					for _, egg in ipairs(folder and folder:GetChildren() or {}) do
-						if egg:GetAttribute("HalloweenEggUid") == uid then
-							model = egg
-						end
-					end
-					if dropped and model and canTake(model) then
-						local p = posOf(model)
-						if floorY then
-							tp(CFrame.new(p.X, floorY, p.Z))
-						else
-							tp(CFrame.new(p + Vector3.new(0, 3, 0)))
-						end
-						if true then -- no regrab delay: take every frame as soon as the egg is dropped
-							hw.TakeAt = os.clock()
-							takeEgg(model)
-						end
-					end
-					step()
+				local function eggValue(model)
+					local entry = eggEntry(eggName(model))
+					local scale = model:IsA("Model") and model:GetScale() or 1
+					local mult = scale > 5 and (scale / 5) ^ 1.2 * 19.637875755794113 or scale ^ 1.85
+					return (entry and tonumber(entry.EarningRate) or 0) * mult
 				end
-				return false
-			end
 
-			-- straight 3D line to the target (hw.Step studs per frame), no noclip, no hover
-			local function carryTo(target, alive, deadlineSeconds)
-				local deadline = os.clock() + (deadlineSeconds or 20)
-				while alive() and carried() and os.clock() < deadline do
-					local root = rootPart()
-					if not root then
+				-- Halloween Eggs To Steal / Halloween Egg Rarities / Min Value
+				local function eggPasses(model)
+					local name = eggName(model)
+					if next(hw.Names) ~= nil and not hw.Names[name] then
 						return false
 					end
-					local delta = target - root.Position
-					if delta.Magnitude < 2 then
-						tp(CFrame.new(target))
+					if hw.MinValue > 0 and eggValue(model) < hw.MinValue then
+						return false
+					end
+					if next(hw.Rarities) ~= nil then
+						local entry = eggEntry(name)
+						local rarity = entry and type(entry.Rarity) == "table" and entry.Rarity
+						if not rarity then
+							return false
+						end
+						return hw.Rarities[rarity.DisplayName or rarity._id] == true or hw.Rarities[rarity._id] == true
+					end
+					return true
+				end
+
+				-- Halloween Index eggs that are not in the index yet and not sitting in the inventory (cached 5s)
+				local function missingFromIndex(name)
+					if os.clock() >= eggState.ixAt then
+						eggState.ixAt = os.clock() + 5
+						eggState.ix = {}
+						local data = saveData() or {}
+						local index = type(data.Index) == "table" and data.Index or {}
+						local owned = {}
+						for _, key in ipairs({"Inventory", "EggInventory"}) do
+							for _, item in next, (type(data[key]) == "table" and data[key] or {}) do
+								if type(item) == "table" then
+									owned[item.Category or item.AssetCategory or ""] = true
+								end
+							end
+						end
+						pcall(function()
+							local hwIndex = dataModule("HalloweenIndex")
+							for _, section in ipairs(hwIndex.GetSections()) do
+								if section.Category == "HalloweenWorldEggs" then
+									for _, entry in ipairs(section.Entries) do
+										if index[entry.AssetId] ~= true and not owned[entry.AssetId] then
+											eggState.ix[entry.AssetId] = true
+										end
+									end
+								end
+							end
+						end)
+					end
+					return eggState.ix[name] == true
+				end
+
+				-- record for the Steal Webhook, same shape the normal steal path sends
+				local function webhookRecord(model)
+					local name = eggName(model)
+					local entry = eggEntry(name)
+					local rarity = entry and type(entry.Rarity) == "table" and entry.Rarity or nil
+					return {
+						Uid = model:GetAttribute("HalloweenEggUid"),
+						AssetCategory = name,
+						AssetScale = model:IsA("Model") and model:GetScale() or 1,
+						Mutations = {},
+						Info = {name = entry and (entry.DisplayName or entry._id) or tostring(name), category = name, rarity = rarity and (rarity.DisplayName or rarity._id) or "Unknown", rarityColor = rarity and rarity.Color or nil},
+					}
+				end
+
+				local function eggFolder()
+					local d = dim()
+					return d and d:FindFirstChild("WorldEggs")
+				end
+
+				-- an egg is free when HalloweenEggCanPickUp is true; it is taken through the AskCarryEgg remote
+				local function canPickUp(egg)
+					return egg:GetAttribute("HalloweenEggCanPickUp") == true
+				end
+
+				local function takeEgg(egg)
+					local uid = egg:GetAttribute("HalloweenEggUid")
+					if uid then
+						task.spawn(invoke, "RF/HalloweenDimension/AskCarryEgg", uid)
+					end
+				end
+
+				-- the player carrying an egg within 25 studs of this spot (that is the holder of the egg model standing there)
+				local function holderNear(pos)
+					local best, bestDist = nil, 25
+					for _, plr in ipairs(Players:GetPlayers()) do
+						local root = plr:GetAttribute("HalloweenCarrying") == true and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+						if root then
+							local dist = (root.Position - pos).Magnitude
+							if dist < bestDist then
+								best, bestDist = plr, dist
+							end
+						end
+					end
+					return best
+				end
+
+				-- Take Halloween Eggs From Holders needs a bat (hw.HuntHolder / hw.HasBat are set in the pumpkin section below)
+				local function canHunt()
+					return on("HwThief", true) and type(hw.HuntHolder) == "function" and type(hw.HasBat) == "function" and hw.HasBat() == true
+				end
+
+				-- candidates, cached 0.3s. rank: 3 = egg we just dropped, 2 = missing from the Halloween Index, 1 = passes the filters
+				local function eggList()
+					if eggState.list and os.clock() - eggState.listAt < 0.3 then
+						return eggState.list
+					end
+					if eggState.again and os.clock() > eggState.againAt then
+						eggState.again = nil
+					end
+					local out = {}
+					local folder, root = eggFolder(), rootPart()
+					if folder and on("HwEggs") then
+						local safe = zonePart("SafeZone")
+						for _, egg in ipairs(folder:GetChildren()) do
+							local uid = egg:GetAttribute("HalloweenEggUid")
+							local pos = uid and posOf(egg)
+							if pos then
+								local free = canPickUp(egg)
+								local holder = (not free) and holderNear(pos) or nil
+								local zone = 0
+								if free then
+									zone = zoneOf(pos)
+									if zone == 0 and not (safe and inside(safe, pos)) then
+										-- zone parts may be missing / not streamed in: anything outside the safe zone is still a normal egg
+										zone = 1
+									end
+								elseif holder then
+									zone = tonumber(holder:GetAttribute("HalloweenCarryZone")) or zoneOf(pos)
+								end
+								if zone >= 1 and holder ~= localPlayer then
+									local kind
+									if eggState.again == uid then
+										kind = "again"
+									elseif (eggBad[uid] or 0) < os.clock() and (not holder or canHunt()) then
+										if on("HwIndex") and missingFromIndex(eggName(egg)) then
+											kind = "index"
+										elseif eggPasses(egg) then
+											kind = "filter"
+										end
+									end
+									if kind then
+										local name = eggName(egg)
+										out[#out + 1] = {
+											Uid = uid, Name = name, cat = name, e = egg, Pos = pos, zone = zone, by = holder, kind = kind,
+											v = eggValue(egg),
+											rank = kind == "again" and 3 or (kind == "index" and 2 or 1),
+											dist = root and flat(pos - root.Position).Magnitude or 0,
+										}
+									end
+								end
+							end
+						end
+						table.sort(out, function(a, b)
+							if a.rank ~= b.rank then
+								return a.rank > b.rank
+							end
+							if a.v ~= b.v then
+								return a.v > b.v
+							end
+							return a.dist < b.dist
+						end)
+					end
+					eggState.list, eggState.listAt = out, os.clock()
+					return out
+				end
+
+				-- returns egg model, zone, candidate record
+				function pickEgg()
+					local best = eggList()[1]
+					if best then
+						return best.e, best.zone, best
+					end
+					return nil
+				end
+
+				local function walkSpeedNow()
+					local hum = humanoid()
+					return math.max(hum and hum.WalkSpeed or 16, 16)
+				end
+
+				-- teleport sideways to a point, keeping the current height
+				local function tpFlat(target)
+					local root = rootPart()
+					if root then
+						tp(CFrame.new(target.X, root.Position.Y, target.Z))
+						step()
+					end
+				end
+
+				-- drop the egg and take it again right away so the server counts it from where we stand (instant steal)
+				local function regrab(uid, alive)
+					task.spawn(invoke, "RF/HalloweenDimension/AskDropEgg")
+					local untilAt, dropped, lastTake = os.clock() + 3, false, 0
+					while alive() and os.clock() < untilAt do
+						if carried() then
+							if dropped then
+								return true
+							end
+						else
+							dropped = true
+						end
+						local model
+						local folder = eggFolder()
+						for _, egg in ipairs(folder and folder:GetChildren() or {}) do
+							if egg:GetAttribute("HalloweenEggUid") == uid then
+								model = egg
+							end
+						end
+						if dropped and model and canPickUp(model) and os.clock() - lastTake > 0.1 then
+							local p = posOf(model)
+							if p then
+								lastTake = os.clock()
+								tp(CFrame.new(p + Vector3.new(0, 3, 0)))
+								takeEgg(model)
+							end
+						end
+						step()
+					end
+					return false
+				end
+
+				function deliver(alive)
+					alive = alive or function()
 						return true
 					end
-					tp(CFrame.new(root.Position + delta.Unit * math.min(delta.Magnitude, hw.Step)))
-					step()
-				end
-				return false
-			end
+					local before = attr("HalloweenDelivered")
+					local deadline = os.clock() + 60
+					local instant = on("HwInstant", true)
+					local uid, safe, root = hw.CarryUid, zonePart("SafeZone"), rootPart()
+					hw.Status = "Halloween: carrying the egg to safety"
+					noclip = false
 
-			local function deliver(alive)
-				local before = attr("HalloweenDelivered")
-				local deadline = os.clock() + 60
-				local instant = on("HwInstant", true)
-				local uid, zone, root = hw.CarryUid, zonePart("SafeZone"), rootPart()
-				hw.Status = "Carrying the Halloween egg to safety"
-				noclip = false
+					local function holding()
+						return alive() and carried()
+					end
 
-				local function holding()
-					return alive() and carried()
-				end
-
-				-- 1) egg in hand: straight to the safe zone edge, then drop + regrab there (standing, not flying)
-				if zone and root and carried() then
-					local edge = edgeFloor(zone, root)
-					hw.Status = "Carrying the Halloween egg to the safe zone"
-					if on("HwEggTp", true) and inDim() then
-						-- instant teleport to the safe zone edge; if the server pulls us back (100+ studs away) teleport again, up to 4 times
-						noclip = true
-						tp(CFrame.new(edge))
-						step()
+					-- Instant Steal: safe zone edge (grown by 10 studs) -> pulled-back check (x4) -> drop + regrab there
+					if instant and uid and safe and root and carried() and (tonumber(attr("HalloweenCarryZone")) or zoneOf(root.Position)) > 1 then
+						local lp = safe.CFrame:PointToObjectSpace(root.Position)
+						local hx, hz = safe.Size.X / 2 + 10, safe.Size.Z / 2 + 10
+						local edge = safe.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -hx, hx), 0, math.clamp(lp.Z, -hz, hz)))
+						tpFlat(edge)
 						for _ = 1, 4 do
 							local untilAt, pulled = os.clock() + 0.4, false
 							while holding() and os.clock() < untilAt do
 								local now = rootPart()
-								if now and (now.Position - edge).Magnitude >= 100 then
+								if now and flat(now.Position - edge).Magnitude >= 100 then
 									pulled = true
 									break
 								end
@@ -38087,208 +38199,257 @@ local function fn66()
 							if not pulled then
 								break
 							end
-							hw.Status = "Pulled back, teleporting to the safe zone edge again"
-							tp(CFrame.new(edge))
-							step()
+							hw.Status = "Halloween: pulled back, teleporting to the safe zone edge again"
+							tpFlat(edge)
 						end
-						noclip = false
-					else
-						carryTo(edge, alive, 15)
-					end
-					if instant and uid and carried() then
-						hw.Status = "Carrying: instant steal"
-						if hw.RegrabSettle > 0 then
-							sleep(hw.RegrabSettle, alive)
-						end
-						regrab(uid, alive, edge.Y)
-					end
-				end
-
-				-- 2) walk (no fly) to the centre of the safe zone; stop the moment the egg is banked
-				local safe = zonePart("SafeZone")
-				if safe and carried() then
-					local c = safe.CFrame.Position
-					local center = floorAt(c.X, c.Z, c.Y)
-					hw.Status = "Walking the Halloween egg into the safe zone"
-					walkTo(center, holding, 300)
-				end
-
-				if carried() and os.clock() >= deadline then
-					invoke("RF/HalloweenDimension/AskDropEgg")
-				end
-				-- returns the instant the server confirms, no fixed wait
-				waitFor(function()
-					return attr("HalloweenDelivered") ~= before
-				end, 0.6)
-				if attr("HalloweenDelivered") ~= before then
-					hw.Eggs = hw.Eggs + 1
-					hw.Status = "Halloween egg secured"
-					-- Steal Webhook also covers Halloween eggs (seconds = target picked -> banked)
-					local record, startedAt = hw.StealRecord, hw.StealStart
-					hw.StealRecord, hw.StealStart, hw.StealPickAt = nil, nil, nil
-					if type(record) == "table" then
-						local hook = genv.__PilatV4Webhook
-						if type(hook) == "table" and type(hook.stolen) == "function" then
-							local seconds = startedAt and os.clock() - startedAt or nil
-							if seconds and seconds > 600 then
-								seconds = nil
-							end
-							pcall(hook.stolen, record, record.Info, "Halloween Dimension", seconds)
+						if alive() and regrab(uid, alive) then
+							sleep(0.5, alive)
 						end
 					end
-				end
-			end
 
-			-- why no egg qualifies (shown while waiting, so a filter / streaming problem is visible)
-			local function eggDiag()
-				local folder = eggFolder()
-				if not folder then
-					return "dimension eggs not loaded"
-				end
-				local total, prompts, enabled, passing = 0, 0, 0, 0
-				for _, egg in ipairs(folder:GetChildren()) do
-					total = total + 1
-					if egg:FindFirstChild("StealPrompt", true) then
-						prompts = prompts + 1
-					end
-					if canTake(egg) then
-						enabled = enabled + 1
-						if eggPasses(egg) then
-							passing = passing + 1
+					-- walk into the safe zone (velocity driven, keeps the starting height); stops the moment the egg is banked
+					local startY
+					while holding() and os.clock() < deadline do
+						root, safe = rootPart(), zonePart("SafeZone")
+						if not root or not safe or not localPlayer.Character then
+							break
 						end
-					end
-				end
-				return string.format("eggs %d / prompts %d / can pick up %d / pass filter %d", total, prompts, enabled, passing)
-			end
-
-			-- far eggs are not streamed in until the client is told to load around them
-			local function scoutEggs(alive)
-				if os.clock() - (hw.ScoutAt or 0) < 3 then
-					return pickEgg() ~= nil
-				end
-				hw.ScoutAt = os.clock()
-				hw.Status = "Looking for Halloween eggs"
-				if pickEgg() then
-					return true
-				end
-				local spots = {}
-				for _, name in ipairs({"Zone1", "Zone2", "Zone3", "SafeZone"}) do
-					local part = zonePart(name)
-					if part then
-						spots[#spots + 1] = part.Position
-					end
-				end
-				if #spots == 0 and dim() then
-					local center = posOf(dim())
-					if center then
-						spots[1] = center
-					end
-				end
-				for _, spot in ipairs(spots) do
-					if not alive() then
-						return false
-					end
-					pcall(function()
-						localPlayer:RequestStreamAroundAsync(spot, 1.5)
-					end)
-					if pickEgg() then
-						return true
-					end
-				end
-				return pickEgg() ~= nil
-			end
-
-			local function stealOne(alive)
-				local egg, zone = pickEgg()
-				if not egg and inDim() and scoutEggs(alive) then
-					egg, zone = pickEgg()
-				end
-				if not egg then
-					if inDim() then
-						hw.EggDiag = eggDiag()
-						hw.EggEmpty = (hw.EggEmpty or 0) + 1
-						hw.EggRetryAt = os.clock() + math.min(30 * 2 ^ (hw.EggEmpty - 1), 600)
-					end
-					return false
-				end
-				hw.EggEmpty = 0
-				local uid = egg:GetAttribute("HalloweenEggUid")
-				-- Steal Webhook record: made when the egg is picked; the TIMER (hw.StealStart) only starts once the egg is carried
-				if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealPickAt and os.clock() - hw.StealPickAt < 120) then
-					pcall(function()
-						hw.StealRecord, hw.StealPickAt = webhookRecord(egg), os.clock()
-						hw.StealStart = nil
-					end)
-				end
-				hw.Status = "Going to a zone " .. tostring(zone) .. " Halloween egg"
-				local function live()
-					return alive() and egg.Parent ~= nil and canTake(egg) and not carried()
-				end
-				hw.Stealing = true
-				for _ = 1, 3 do
-					local pos = posOf(egg)
-					if not pos or not live() then
-						break
-					end
-					if on("HwEggTp", true) and inDim() then
-						-- Steal An Egg / Chilli: one instant teleport onto the egg, then keep snapping to it while grabbing
+						startY = startY or root.Position.Y
 						noclip = true
-						tp(CFrame.new(pos + Vector3.new(0, 3, 0)))
+						local lp = safe.CFrame:PointToObjectSpace(root.Position)
+						local margin = instant and 6 or 40
+						local cx, cz = math.max(safe.Size.X / 2 - margin, 0), math.max(safe.Size.Z / 2 - margin, 0)
+						local target = safe.CFrame:PointToWorldSpace(Vector3.new(math.clamp(lp.X, -cx, cx), lp.Y, math.clamp(lp.Z, -cz, cz)))
+						local delta = flat(target - root.Position)
+						local vel = Vector3.zero
+						if delta.Magnitude > 3 then
+							vel = delta.Unit * math.min(walkSpeedNow() * (instant and 1 or 1.5), delta.Magnitude / 0.05)
+						end
+						root.AssemblyLinearVelocity = vel + Vector3.new(0, (startY - root.Position.Y) * 8, 0)
 						step()
-						noclip = false
-					elseif on("HwInstant", true) then
-						local untilAt = os.clock() + 3
-						noclip = true
-						while live() and os.clock() < untilAt do
-							local root, eggPos = rootPart(), posOf(egg)
-							if not root or not eggPos then
-								break
+					end
+					noclip = false
+					local rootEnd = rootPart()
+					if rootEnd then
+						rootEnd.AssemblyLinearVelocity = Vector3.zero
+					end
+
+					if carried() and os.clock() >= deadline then
+						invoke("RF/HalloweenDimension/AskDropEgg")
+					end
+					-- returns the instant the server confirms, no fixed wait
+					waitFor(function()
+						return attr("HalloweenDelivered") ~= before
+					end, 0.6)
+					local delivered = attr("HalloweenDelivered") ~= before
+					if delivered then
+						hw.Eggs = hw.Eggs + 1
+						hw.Status = "Halloween egg secured"
+						-- Steal Webhook also covers Halloween eggs (seconds = target picked -> banked)
+						local record, startedAt = hw.StealRecord, hw.StealStart
+						hw.StealRecord, hw.StealStart, hw.StealPickAt = nil, nil, nil
+						if type(record) == "table" then
+							local hook = genv.__PilatV4Webhook
+							if type(hook) == "table" and type(hook.stolen) == "function" then
+								local seconds = startedAt and os.clock() - startedAt or nil
+								if seconds and seconds > 600 then
+									seconds = nil
+								end
+								pcall(hook.stolen, record, record.Info, "Halloween Dimension", seconds)
 							end
-							local delta = eggPos + Vector3.new(0, 3, 0) - root.Position
-							if delta.Magnitude < 3 then
-								break
-							end
-							tp(CFrame.new(root.Position + delta.Unit * math.min(delta.Magnitude, hw.Step)))
+						end
+					end
+					return delivered
+				end
+
+				-- quick-drop counter: a carry that ends within 0.6s counts as a drop; two in a row and the egg is skipped
+				local carryConn = localPlayer:GetAttributeChangedSignal("HalloweenCarrying"):Connect(function()
+					if carried() then
+						eggState.carriedAt = os.clock()
+					elseif eggState.carriedAt then
+						eggState.qd = (os.clock() - eggState.carriedAt < 0.6) and (eggState.qd + 1) or 0
+						eggState.carriedAt = nil
+					end
+				end)
+				task.spawn(function()
+					while fn2() do
+						task.wait(1)
+					end
+					carryConn:Disconnect()
+				end)
+
+				-- go to a free egg: instant = teleport onto it first, far away = fly, then keep snapping to it while taking (up to 3 tries)
+				local function goToEgg(rec, alive)
+					local egg = rec.e
+					hw.Status = "Halloween: going to a zone " .. tostring(rec.zone) .. " egg"
+					local function live()
+						return alive() and egg.Parent ~= nil and canPickUp(egg) and not carried()
+					end
+					for _ = 1, 3 do
+						local pos = posOf(egg)
+						if not pos or not live() then
+							break
+						end
+						if on("HwInstant", true) then
+							tp(CFrame.new(pos + Vector3.new(0, 3, 0)))
 							step()
 						end
-						noclip = false
-					end
-					local root = rootPart()
-					if not root or (root.Position - pos).Magnitude > 20 then
-						if not flyTo(pos + Vector3.new(0, 3, 0), live, 150) then
+						local root = rootPart()
+						if not root or (root.Position - pos).Magnitude > 20 then
+							if not flyTo(pos + Vector3.new(0, 3, 0), live, 150) then
+								break
+							end
+						end
+						local untilAt, lastTake = os.clock() + 4, 0
+						while live() and os.clock() < untilAt do
+							local now = posOf(egg)
+							if now then
+								tp(CFrame.new(now + Vector3.new(0, 3, 0)))
+							end
+							if os.clock() - lastTake > 0.1 then
+								lastTake = os.clock()
+								takeEgg(egg)
+							end
+							step()
+						end
+						if carried() then
 							break
 						end
 					end
-					local untilAt, lastPress = os.clock() + 4, 0
-					while live() and os.clock() < untilAt do
-						local eggPos = posOf(egg)
-						if eggPos then
-							tp(CFrame.new(eggPos + Vector3.new(0, 3, 0)))
-						end
-						if os.clock() - lastPress > (on("HwEggTp", true) and 0.1 or 0.5) then
-							lastPress = os.clock()
-							takeEgg(egg)
-						end
-						step()
-					end
-					if carried() then
-						break
-					end
+					return carried()
 				end
-				if carried() then
+
+				-- one full steal of a candidate: (hunt the holder) -> take -> deliver, with the again / quick-drop bookkeeping
+				local function hwSteal(rec, alive)
+					local uid, egg = rec.Uid, rec.e
+					if not (egg and egg.Parent) then
+						return false
+					end
+					if rec.by then
+						local okHunt, hunted = pcall(hw.HuntHolder, rec, alive)
+						if not (okHunt and hunted == true) then
+							if rec.by:GetAttribute("HalloweenCarrying") == true then
+								eggBad[uid] = os.clock() + 15
+								hw.Status = "Halloween: " .. tostring(rec.by.DisplayName) .. " kept the egg"
+							end
+							return true
+						end
+					end
+					if not goToEgg(rec, alive) then
+						if egg.Parent and eggState.again ~= uid then
+							eggBad[uid] = os.clock() + 30
+						end
+						return true
+					end
+					hw.CarryUid = uid
 					-- steal time counts from the moment the egg is in hand (first carry only, kept across drop/regrab)
 					if not hw.StealStart then
 						hw.StealStart = os.clock()
 					end
-					-- egg in hand: go straight to the safe zone, no landing step, no delay
-					hw.CarryUid = uid
-					noclip = false
-					deliver(alive)
-				elseif egg.Parent then
-					hw.Bad[egg] = os.clock() + 30
+					eggState.cur = rec
+					local delivered = deliver(alive)
+					eggState.cur = nil
+					if delivered then
+						eggState.again = nil
+						hw.Status = "Halloween egg secured: " .. tostring(rec.Name or "egg")
+					elseif eggState.qd >= 2 then
+						eggBad[uid] = os.clock() + 60
+						eggState.qd, eggState.again = 0, nil
+						hw.Status = "Halloween: that egg keeps dropping, skipping it"
+					elseif egg.Parent then
+						eggState.again, eggState.againAt = uid, os.clock() + 60
+						hw.Status = "Halloween: dropped the egg, going back for it"
+					end
+					return true
 				end
-				hw.Stealing = false
-				return true
+
+				-- why no egg qualifies (shown while waiting, so a filter / streaming problem is visible)
+				local function eggDiag()
+					local folder = eggFolder()
+					if not folder then
+						return "dimension eggs not loaded"
+					end
+					local total, free, held, passing = 0, 0, 0, 0
+					for _, egg in ipairs(folder:GetChildren()) do
+						total = total + 1
+						if canPickUp(egg) then
+							free = free + 1
+							if eggPasses(egg) then
+								passing = passing + 1
+							end
+						elseif holderNear(posOf(egg) or Vector3.zero) then
+							held = held + 1
+						end
+					end
+					return string.format("eggs %d / free %d / held %d / pass filter %d", total, free, held, passing)
+				end
+
+				-- far eggs are not streamed in until the client is told to load around them
+				local function scoutEggs(alive)
+					if os.clock() - (hw.ScoutAt or 0) < 3 then
+						return pickEgg() ~= nil
+					end
+					hw.ScoutAt = os.clock()
+					hw.Status = "Looking for Halloween eggs"
+					if pickEgg() then
+						return true
+					end
+					local spots = {}
+					for _, name in ipairs({"Zone1", "Zone2", "Zone3", "SafeZone"}) do
+						local part = zonePart(name)
+						if part then
+							spots[#spots + 1] = part.Position
+						end
+					end
+					if #spots == 0 and dim() then
+						local center = posOf(dim())
+						if center then
+							spots[1] = center
+						end
+					end
+					for _, spot in ipairs(spots) do
+						if not alive() then
+							return false
+						end
+						pcall(function()
+							localPlayer:RequestStreamAroundAsync(spot, 1.5)
+						end)
+						eggState.list = nil
+						if pickEgg() then
+							return true
+						end
+					end
+					eggState.list = nil
+					return pickEgg() ~= nil
+				end
+
+				function stealOne(alive)
+					local egg, zone, rec = pickEgg()
+					if not egg and inDim() and scoutEggs(alive) then
+						egg, zone, rec = pickEgg()
+					end
+					if not egg then
+						if inDim() then
+							hw.EggDiag = eggDiag()
+							hw.EggEmpty = (hw.EggEmpty or 0) + 1
+							hw.EggRetryAt = os.clock() + math.min(30 * 2 ^ (hw.EggEmpty - 1), 600)
+						end
+						return false
+					end
+					hw.EggEmpty = 0
+					local uid = rec.Uid
+					-- Steal Webhook record: made when the egg is picked; the TIMER (hw.StealStart) only starts once the egg is carried
+					if not (hw.StealRecord and hw.StealRecord.Uid == uid and hw.StealPickAt and os.clock() - hw.StealPickAt < 120) then
+						pcall(function()
+							hw.StealRecord, hw.StealPickAt = webhookRecord(egg), os.clock()
+							hw.StealStart = nil
+						end)
+					end
+					hw.Stealing = true
+					local result = hwSteal(rec, alive)
+					hw.Stealing = false
+					return result
+				end
 			end
 
 			-- ---------------------------------------------------------------- monsters
@@ -38660,6 +38821,61 @@ local function fn66()
 				noclip = false
 				walkStop()
 				return true
+			end
+
+			-- ---------------- Take Halloween Eggs From Holders (Chilli S.hunt): chase the player carrying a Halloween egg and hit him with
+			-- a bat until the egg drops (max 12s), then wait up to 2.5s for it to become free. Returns true when the egg can be taken.
+			hw.HasBat = function()
+				return (readyBat()) ~= nil
+			end
+
+			hw.HuntHolder = function(rec, alive)
+				local victim, egg = rec.by, rec.e
+				if not victim or not egg then
+					return false
+				end
+				local function free()
+					return egg.Parent ~= nil and egg:GetAttribute("HalloweenEggCanPickUp") == true
+				end
+				if not readyBat() then
+					hw.Status = "Halloween: get a bat to take eggs from holders"
+					return false
+				end
+				local hum = humanoid()
+				if hum and hum.Health < hum.MaxHealth * 0.4 then
+					healSafe(alive)
+				end
+				hw.Status = "Halloween: chasing " .. tostring(victim.DisplayName) .. " for " .. tostring(rec.Name)
+				local snap = inDim()
+				local untilAt, lastSwing = os.clock() + 12, 0
+				noclip = true
+				while alive() and os.clock() < untilAt and egg.Parent and victim.Parent and victim:GetAttribute("HalloweenCarrying") == true and not free() do
+					local vroot = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
+					if not vroot or not rootPart() then
+						break
+					end
+					local pos = vroot.Position
+					local spot = pos - vroot.CFrame.LookVector * 3
+					if snap then
+						tp(CFrame.new(spot))
+					else
+						walkStep(spot, hw.MonsterSpeed)
+					end
+					face(pos)
+					local bat, ready = readyBat()
+					if bat then
+						equip(bat)
+						local now = rootPart()
+						if ready and bat.Parent == localPlayer.Character and now and (pos - now.Position).Magnitude <= 14 and os.clock() - lastSwing >= 0.08 then
+							lastSwing = os.clock()
+							batHit(victim)
+						end
+					end
+					step()
+				end
+				noclip = false
+				walkStop()
+				return waitFor(free, 2.5, alive)
 			end
 
 			local function pumpkinOnce(alive)
@@ -41010,9 +41226,12 @@ local function fn66()
 				eggOptions = {"Whiskers", "Jesterpop", "Candlefang", "Spirit Knight", "Graveyard Brute", "Ghost Reaper", "Hooded Gerbil", "Toadstool", "Patchwork Imp", "Haunted Scorpio", "BloodBloom", "Shelltide Voyager", "Mimic Chest", "Crowshade", "Hexed Pumpkin", "Werewolf", "Abomination Kong", "Voidseer Pumpkin"}
 			end
 
-			local function toggle(title, content, key, default)
+			local function toggle(title, content, key, default, onChange)
 				return hwSection:AddToggle({Flag = "Halloween_" .. key, Title = title, Content = content, Default = default == true, Callback = fn144(function(arg)
 					cfg[key] = arg == true
+					if onChange then
+						onChange(arg == true)
+					end
 				end)})
 			end
 
@@ -41031,11 +41250,14 @@ local function fn66()
 			toggle("Noclip In Halloween Dimension & Phantom Express", "Turns noclip on by itself while you are inside the Halloween Dimension or on the Phantom Express (not in the main world), and off again when you leave.", "HwDimNoclip", true)
 			hwSection:AddSubSection("Auto Steal Halloween Eggs")
 			toggle("Auto Steal Halloween Eggs", "Steals the Halloween eggs in the dimension and carries them to the safe zone. Needs 2.5M speed and the guard tutorial done.", "HwEggs", false)
-			toggle("Instant Steal Halloween Eggs", "Dashes straight to the egg and drops it at the safe zone edge. Turn off for a slower, safer route.", "HwInstant", true)
-			toggle("Teleport To Eggs", "Steal An Egg / Chilli logic: teleports straight onto the egg and to the safe zone edge (inside the Halloween Dimension) instead of dashing. Re-teleports if the server pulls you back. Off = the dash route with Steal Speed.", "HwEggTp", true)
-			hwSection:AddSlider({Flag = "Halloween_StealSpeed", Title = "Steal Speed", Content = "Studs per frame while dashing to the egg and the safe zone.", Min = 10, Max = 100, Default = 40, Increment = 5, Callback = fn144(function(arg)
-				hw.Step = tonumber(arg) or 40
-			end)})
+			toggle("Instant Steal Halloween Eggs", "Chilli Hub logic: teleports onto the egg, then to the safe zone edge (re-teleports if the server pulls you back), drops + regrabs the egg there and walks it into the zone. Off = fly to the egg and walk the egg to the safe zone.", "HwInstant", true)
+			toggle("Take Halloween Eggs From Holders", "Hits players who are carrying a Halloween egg with your bat until they drop it, then steals it. Needs a bat.", "HwThief", true)
+			toggle("Steal Missing Halloween Index", "Steals the Halloween eggs your Halloween Index is still missing first (these ignore the egg / rarity / value filters).", "HwIndex", false, function()
+				if hw.EggState then
+					hw.EggState.ixAt = 0
+					hw.EggState.list = nil
+				end
+			end)
 			hwSection:AddDropdown({Flag = "Halloween_EggNames", Title = "Halloween Eggs To Steal", Content = "Only steal these eggs. Leave empty for any egg.", Options = eggOptions, Multi = true, Default = {}, Callback = fn144(function(arg)
 				local names = {}
 				for _, label in ipairs(selected(arg)) do
