@@ -14,7 +14,7 @@ end
 
 local genv = getgenv and getgenv() or _G
 pcall(function() -- [clean] old autoexec stubs re-download the original script (with telemetry) on every join
-	for _, p in ipairs({"autoexec/Sena_StealAnEgg.lua", "autoexecute/Sena_StealAnEgg.lua"}) do
+	for _, p in ipairs({"autoexec/Pilat_StealAnEgg.lua", "autoexecute/Pilat_StealAnEgg.lua"}) do
 		if isfile and delfile and isfile(p) then
 			delfile(p)
 		end
@@ -34136,9 +34136,14 @@ local function fn66()
 			pilatV4Config.AdminAutoDetect = arg == true
 
 			if arg ~= true then
-				pilatApplyAdminBoost(false)
+				-- v2 (manual) owns the boost while it is on; v1 turning off must not kill it
+				if genv.__PilatV4AdminV2 ~= true then
+					pilatApplyAdminBoost(false)
+				end
 				return
 			end
+
+			genv.__PilatV4AdminV2 = false
 
 			task.spawn(function()
 				local active = false
@@ -34181,6 +34186,33 @@ local function fn66()
 				pilatApplyAdminBoost(false)
 			end)
 		end
+	end
+
+	-- Admin Abuse Boost v2 = senav7's applyAdminBoost, 1:1 and manual:
+	--   toggle on  -> boost on, always (no Admin Abuse detection, no per-egg fallback)
+	--   toggle off -> boost off
+	-- Same effects as senav7: instant admin steal (_adminSteal/_adminDeliver), 3000 stud/s move speed,
+	-- 4000 spoof speed cap, and WalkSpeed x10 loop (restored on off).
+	genv.__PilatV4SetAdminV2 = function(arg)
+		local on = arg == true
+
+		if not on and genv.__PilatV4AdminV2 ~= true then
+			return -- load-time replay with "off": nothing to undo, and don't touch v1
+		end
+
+		-- v2 takes over from v1 (auto mode): stop its detector loop and clear its fallback state
+		genv.__PilatV4AutoAdminGen = (genv.__PilatV4AutoAdminGen or 0) + 1
+		pilatV4Config.AdminAutoDetect = false
+
+		local autoState = genv.__PilatV4AdminAutoState
+		if autoState then
+			autoState.fails = {}
+			autoState.fallbackEggs = {}
+		end
+
+		genv.__PilatV4AdminV2 = on
+		pilatV4Config.AdminAbuseBoostV2 = on
+		pilatApplyAdminBoost(on)
 	end
 
 	local function fn138(arg)
@@ -34408,7 +34440,7 @@ local function fn66()
 
 	v27()
 	local flag13 = type(flag6.ApplyIcon) == "function"
-	local v28 = flag6:Window({Title = "Pilat 6.2 |", Footer = "Steal An Egg", Folder = "PilatSAEv4", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
+	local v28 = flag6:Window({Title = "Pilat Hun |", Footer = "Steal An Egg", Folder = "PilatSae", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
 	fn155(v28)
 	local tbl24 = {}
 	local tbl25 = {"Respawn Point"}
@@ -34541,6 +34573,7 @@ local function fn66()
 	tbl24.autoStealCapture = tbl24.section(v35, "Capture The Egg", tbl24.gameIcon("CaptureTheEgg", "BroadcastIconImage")):AddToggle({Title = "Auto Steal Capture", Content = "For the Capture The Egg event. Steals the event egg the Low Speed User way, then holds it high up so your time keeps going. Re-steals it if you lose it.", Default = false, Callback = fn144(fn138)})
 	local v39 = tbl24.section(v35, "Movement", tbl24.gameIcon("Gears", "Directory", "GravityDisruptor", "Icon"))
 	tbl24.adminBoost = v39:AddToggle({Title = "Admin Abuse Boost", Content = "Auto-detects Admin Abuse (admin 4x speed or any other admin boost, or the Admin Treadmill). While it is active, Auto Steal uses the instant admin method. When it is gone, Auto Steal goes back to the Steal Mode you picked in the Steal tab.", Default = false, Callback = fn144(fn137)})
+	tbl24.adminBoostV2 = v39:AddToggle({Title = "Admin Abuse Boost v2", Content = "Only works during Admin Abuse: Auto Steal goes straight to each egg and straight home, at full speed. Do not use it when there is no Admin Abuse. Manual on/off, no auto-detect. Turn off the other Admin Abuse Boost while using this.", Default = false, Callback = fn144(function(v) genv.__PilatV4SetAdminV2(v) end)})
 	tbl24.flyForCapture = v39:AddToggle({Title = "Fly For Capture", Content = "For the Capture The Egg event. After you pick up an egg, you fly up and stay still in the air so nobody can take it.", Default = false, Callback = fn144(fn135)})
 	tbl24.instantGrab = v39:AddToggle({Title = "Instant Grab", Content = "Picking up an egg only needs a quick tap instead of a long hold.", Default = false, Callback = fn144(fn136)})
 	tbl24.infiniteJump = v39:AddToggle({Title = "Infinite Jump", Content = "Jump again in mid-air, as often as you like.", Default = false, Callback = fn144(fn139)})
@@ -41664,6 +41697,7 @@ local function fn66()
 	fn157(tbl24.stealPlayers, fn145)
 	fn157(tbl24.boostFps, fn132)
 	fn157(tbl24.adminBoost, fn137)
+	fn157(tbl24.adminBoostV2, function(v) genv.__PilatV4SetAdminV2(v) end)
 
 	-- Halloween tab: replay the loaded config values through every control (same job as the fn157 calls above)
 	for _, entry in ipairs(tbl24.hwControls or {}) do
