@@ -7761,6 +7761,17 @@ local v8 = (function()
 	end
 
 	index._startHoverPad = function(arg)
+		-- Admin Abuse Boost + Instant Steal v2: inside the portal (fuse biome, Y > 5000) never hover/fly
+		do
+			local portalCharacter = localPlayer2.Character
+			local portalRoot = portalCharacter and portalCharacter:FindFirstChild("HumanoidRootPart")
+
+			if genv.__PilatV4AdminBoost == true and arg:_v2() and portalRoot and portalRoot.Position.Y > 5000 then
+				arg:_stopHoverPad()
+				return
+			end
+		end
+
 		local hoverPad = arg.hoverPad
 
 		if (if hoverPad then not hoverPad.Parent else not hoverPad) or hoverPad:GetAttribute(str6) ~= arg.hoverPadOwnerId then
