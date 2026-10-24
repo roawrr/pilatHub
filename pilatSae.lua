@@ -986,8 +986,8 @@ end
 local pilatV4TaskLadder = {}
 
 do
-	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "halloween", "fishing", "treadmill"}
-	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", halloween = "Halloween / Phantom Express", fishing = "Halloween Fishing", treadmill = "Treadmill"}
+	pilatV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "halloween", "fishing", "hollow", "treadmill"}
+	pilatV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", halloween = "Halloween / Phantom Express", fishing = "Halloween Fishing", hollow = "The Hollow", treadmill = "Treadmill"}
 	pilatV4TaskLadder.PINNED = {treadmill = true}
 
 	-- Halloween Dimension exit gate: a task that is NOT Halloween/fishing/treadmill must not start (tween/teleport) while the
@@ -19662,7 +19662,7 @@ do
 
 	pilatV4RaceRuntime.inRace = function()
 		local v21 = fn66()
-		return v21 ~= nil and type(fn67(v21, "RaceId", "RaceId")) == "string"
+		return v21 ~= nil and type(fn67(v21, "RaceId", "RaceId")) == "string" and fn67(v21, "RaceId", "RaceId") ~= "TheHollowTrack"
 	end
 
 	pilatV4RaceRuntime.joinLeft = function()
@@ -20765,7 +20765,7 @@ do
 				end
 
 				if pilatV4Config.RaceAuto then
-					if type((fn67(v21, "RaceId", "RaceId"))) == "string" then
+					if type((fn67(v21, "RaceId", "RaceId"))) == "string" and fn67(v21, "RaceId", "RaceId") ~= "TheHollowTrack" then
 						pilatV4RaceRuntime.racedRound = pilatV4RaceRuntime.roundId() or pilatV4RaceRuntime.racedRound
 						local finishPlace = fn67(v21, "FinishPlace", "RaceFinishPlace")
 
@@ -20821,6 +20821,356 @@ do
 		return pilatV4Config.RaceAuto == true
 	end, status = function()
 		return tostring(pilatV4RaceRuntime.status)
+	end})
+end
+
+do -- The Hollow race (ported from StealAnEggg: TheHollow AskEnter -> rail ride along the track path)
+	local H = {status = "Off", last = nil, drop = 0, n = 0, active = false, nextAt = 0, say = nil}
+	local RunServiceH = game:GetService("RunService")
+	local CollectionServiceH = game:GetService("CollectionService")
+	local ZERO = Vector3.new(0, 0, 0)
+
+	local function net(name)
+		local packages = ReplicatedStorage:FindFirstChild("Packages")
+		local networking = packages and packages:FindFirstChild("Networking")
+		return networking and networking:FindFirstChild(name)
+	end
+
+	local function invoke(name, ...)
+		local remote = net(name)
+		if not remote then
+			return false
+		end
+		return pcall(remote.InvokeServer, remote, ...)
+	end
+
+	local function fire(name, ...)
+		local remote = net(name)
+		if remote then
+			pcall(remote.FireServer, remote, ...)
+		end
+	end
+
+	local function getRoot()
+		local character = localPlayer.Character
+		return character and character:FindFirstChild("HumanoidRootPart")
+	end
+
+	local function track()
+		return Workspace:FindFirstChild("TheHollowTrack")
+	end
+
+	local function inRace()
+		return localPlayer:GetAttribute("RaceId") == "TheHollowTrack"
+	end
+
+	local function heat()
+		local t = track()
+		local heatId = localPlayer:GetAttribute("RaceHeat")
+		local heats = t and heatId and t:FindFirstChild("RaceHeats")
+		return heats and heats:FindFirstChild(heatId)
+	end
+
+	local function phase()
+		local h = heat()
+		return h and h:GetAttribute("RacePhase")
+	end
+
+	local function finished()
+		return localPlayer:GetAttribute("RaceFinishPlace") ~= nil
+	end
+
+	local function wins()
+		local ok, save = pcall(function()
+			return require(ReplicatedStorage.Shared.Save).Peek()
+		end)
+		return ok and type(save) == "table" and type(save.TheHollow) == "table" and tonumber(save.TheHollow.Wins) or 0
+	end
+
+	local function speed()
+		return math.max((tonumber(pilatV4Config.HollowSpeed) or 300) - H.drop, 140)
+	end
+
+	local function alive()
+		return fn2() and pilatV4Config.Hollow == true
+	end
+
+	-- a higher task in the Task Order wants the character (used while waiting at the start)
+	local function betterTask()
+		for _, id in ipairs(pilatV4TaskLadder.order()) do
+			if id == "hollow" then
+				return nil
+			end
+
+			if pilatV4TaskLadder.wants(id) then
+				return id
+			end
+		end
+
+		return nil
+	end
+
+	local function leave()
+		fire("RE/MountRace/AskLeave")
+		local untilAt = os.clock() + 8
+
+		while inRace() and os.clock() < untilAt do
+			task.wait(0.2)
+		end
+	end
+
+	local function drive()
+		local trackModel = track()
+		local ok, path = pcall(function()
+			return require(ReplicatedStorage.Shared.Modules.RaceTrackPath).new(trackModel.AttachmentTrack)
+		end)
+		local root = getRoot()
+
+		if not ok or not path or not root then
+			return false
+		end
+
+		local half = path.Length / 2
+		local prog = path:Project(root.Position, half, half, half)
+		local frame = path:FrameAt(prog)
+		local height = math.max((root.Position - frame.Position):Dot(frame.UpVector), 2)
+		local powerRemote = net("RE/MountRace/PowerUp")
+		local nextPower, nextCheck, lastPull = 0, 0, nil
+		local conns = {}
+
+		local function step()
+			local f = path:FrameAt(prog)
+			local r = getRoot()
+
+			if not r then
+				return
+			end
+
+			if os.clock() >= nextCheck then
+				nextCheck = os.clock() + 1
+
+				if (r.Position - (f.Position + f.UpVector * height)).Magnitude > 40 then
+					prog = path:Project(r.Position, prog, 300, 300)
+					f = path:FrameAt(prog)
+
+					if lastPull and os.clock() - lastPull < 6 and speed() > 140 then
+						H.drop = H.drop + 20
+						H.status = "Pulled back, racing at " .. speed()
+					end
+
+					lastPull = os.clock()
+				end
+			end
+
+			r.CFrame = f + f.UpVector * height
+			r.AssemblyLinearVelocity = f.LookVector * speed()
+			r.AssemblyAngularVelocity = ZERO
+		end
+
+		local function power()
+			local now = Workspace:GetServerTimeNow()
+			local r = getRoot()
+
+			if not powerRemote or not r then
+				return
+			end
+
+			local held = localPlayer:GetAttribute("RacePowerUp")
+
+			if type(held) == "string" and held ~= "" then
+				if (tonumber(localPlayer:GetAttribute("RacePowerUpRollEndsAt")) or 0) <= now
+					and (tonumber(localPlayer:GetAttribute("RacePowerUpEffectEndsAt")) or 0) <= now
+					and (tonumber(localPlayer:GetAttribute("RacePowerUpStunEndsAt")) or 0) <= now then
+					powerRemote:FireServer("Use", r.Position, path:FrameAt(prog).LookVector)
+				end
+
+				return
+			end
+
+			for _, box in ipairs(CollectionServiceH:GetTagged("RacePowerUpSpawn")) do
+				if box:IsDescendantOf(trackModel) then
+					local pad = box:FindFirstChild("Pad") or box.PrimaryPart or box:FindFirstChildWhichIsA("BasePart")
+					local readyAt = box:GetAttribute("RaceBoxReadyAt")
+
+					if pad and (type(readyAt) ~= "number" or readyAt <= now) and (pad.Position - r.Position).Magnitude <= 30 then
+						powerRemote:FireServer("Pickup", box)
+						break
+					end
+				end
+			end
+		end
+
+		conns[1] = RunServiceH.Heartbeat:Connect(function(dt)
+			if not inRace() or finished() then
+				return
+			end
+
+			prog = prog + speed() * dt
+			pcall(step)
+
+			if pilatV4Config.HollowPower ~= false and os.clock() >= nextPower then
+				nextPower = os.clock() + 0.2
+				pcall(power)
+			end
+		end)
+
+		conns[2] = RunServiceH.PreSimulation:Connect(function()
+			if inRace() and not finished() then
+				pcall(step)
+			end
+		end)
+
+		local lap, lapAt = localPlayer:GetAttribute("RaceLap"), os.clock()
+
+		while alive() and inRace() and not finished() do
+			local curLap = localPlayer:GetAttribute("RaceLap")
+
+			if curLap ~= lap then
+				lap, lapAt = curLap, os.clock()
+			elseif os.clock() - lapAt > path.Length / speed() * 1.4 + 6 then
+				lapAt = os.clock()
+
+				if speed() > 140 then
+					H.drop = H.drop + 20
+				end
+
+				local r = getRoot()
+
+				if r then
+					prog = path:Project(r.Position, prog, 600, 600)
+				end
+
+				H.status = "Lap did not count, racing at " .. speed()
+			end
+
+			H.say = ("Racing lap %s, %d studs/s"):format(tostring(localPlayer:GetAttribute("RaceLap") or 1), math.floor(speed()))
+			H.status = H.say
+			task.wait(0.25)
+		end
+
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+
+		return finished()
+	end
+
+	local function run()
+		local startedAt = os.clock()
+
+		if not inRace() then
+			H.status = "Joining The Hollow race"
+			local ok, res, err = invoke("RF/TheHollow/AskEnter")
+
+			if not ok or res == false then
+				H.status = "The Hollow: " .. tostring(err or "could not join")
+				H.nextAt = os.clock() + 15
+				return
+			end
+
+			local untilAt = os.clock() + 6
+
+			while not inRace() and os.clock() < untilAt do
+				task.wait(0.1)
+			end
+
+			if not inRace() then
+				H.nextAt = os.clock() + 10
+				return
+			end
+		end
+
+		while alive() and inRace() and phase() ~= "Racing" and not finished() do
+			if phase() == "Joining" then
+				local better = betterTask()
+
+				if better then
+					H.status = "A higher task goes first, leaving The Hollow"
+					leave()
+					return
+				end
+			end
+
+			local h = heat()
+			local goAt = h and (tonumber(h:GetAttribute("RaceGoAt")) or tonumber(h:GetAttribute("RaceJoinEndsAt")))
+			H.say = "Waiting at the start" .. (goAt and (", go in %ds"):format(math.max(math.ceil(goAt - Workspace:GetServerTimeNow()), 0)) or "")
+			H.status = H.say
+			task.wait(0.25)
+		end
+
+		if not alive() or not inRace() then
+			return
+		end
+
+		if not finished() then
+			drive()
+		end
+
+		if finished() then
+			local place = localPlayer:GetAttribute("RaceFinishPlace")
+			local finishTime = tonumber(localPlayer:GetAttribute("RaceFinishTime"))
+			H.n = H.n + 1
+			task.wait(1.5)
+			leave()
+			H.last = ("Finished #%s in %s, round trip %ds"):format(tostring(place), finishTime and ("%.1fs"):format(finishTime) or "?", math.floor(os.clock() - startedAt))
+			H.status = "The Hollow: " .. H.last .. ", wins " .. wins()
+		end
+	end
+
+	H.inRace = inRace
+	H.wins = wins
+
+	task.spawn(function()
+		while fn2() do
+			if pilatV4Config.Hollow == true and os.clock() >= H.nextAt then
+				local blocked = nil
+
+				if not inRace() then
+					if wins() >= 3 then
+						H.status = "Done, 3 wins"
+						blocked = true
+					else
+						local blocker = pilatV4TaskLadder.blocker("hollow")
+
+						if blocker then
+							H.status = "Yielding to " .. tostring(pilatV4TaskLadder.TITLES[blocker] or blocker)
+							blocked = true
+						end
+					end
+				end
+
+				if not blocked then
+					H.active = true
+					local ok, err = pcall(run)
+					H.active = false
+
+					if not ok then
+						warn("[Pilat Hollow] " .. tostring(err))
+						H.nextAt = os.clock() + 5
+					end
+				end
+			else
+				H.active = false
+
+				if pilatV4Config.Hollow ~= true then
+					H.status = "Off"
+				end
+			end
+
+			task.wait(1)
+		end
+	end)
+
+	genv.__PilatV4HollowRuntime = H
+
+	pilatV4TaskLadder.register("hollow", {wants = function()
+		return pilatV4Config.Hollow == true and (inRace() or wins() < 3)
+	end, active = function()
+		return H.active == true or inRace()
+	end, enabled = function()
+		return pilatV4Config.Hollow == true
+	end, status = function()
+		return tostring(H.status)
 	end})
 end
 
@@ -34451,7 +34801,7 @@ local function fn66()
 
 	v27()
 	local flag13 = type(flag6.ApplyIcon) == "function"
-	local v28 = flag6:Window({Title = "Pilat Hub |", Footer = "Steal An Egg", Folder = "PilatSae", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
+	local v28 = flag6:Window({Title = "Pilat Hun |", Footer = "Steal An Egg", Folder = "PilatSae", Version = 1, Color = Color3.fromRGB(232, 232, 238), ToggleImage = "https://raw.githubusercontent.com/roawrr/pilatHub/main/pilat.png", KeyGate = false})
 	fn155(v28)
 	local tbl24 = {}
 	local tbl25 = {"Respawn Point"}
@@ -34762,7 +35112,7 @@ local function fn66()
 	end)})
 
 	fn68 = v30:AddSection("Task Order")
-	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", halloween = "ghost", fishing = "fish", treadmill = "activity"}
+	local tbl27 = {auto_steal = "hand", race = "flag", star = "star", mech_boss = "swords", butterfly = "flower", auto_place = "egg", use_scrambled = "flask-conical", auto_sell = "coins", halloween = "ghost", fishing = "fish", hollow = "flag", treadmill = "activity"}
 	local tbl28 = {}
 
 	for i, v45 in ipairs(pilatV4TaskLadder.DEFAULT) do
@@ -36482,6 +36832,53 @@ local function fn66()
 			task.wait(1)
 		end
 	end)
+
+	do
+	local pilatHollowSection = tbl24.section(v35, "The Hollow", tbl24.gameIcon("FallenPowerUp", "Kinds", "x2Rings", "Icon"))
+	pilatHollowSection:AddParagraph({Title = "About This Event", Content = "Race The Hollow for the win prizes. Auto Race joins, rides the track, uses power-ups, and stops after 3 wins. Other tasks pause while you race."})
+
+	tbl24.hollowAuto = pilatHollowSection:AddToggle({Title = "Auto Race The Hollow", Content = "Joins The Hollow race and rides the track for you. Stops after 3 wins.", Default = false, Callback = fn144(function(arg)
+		pilatV4Config.Hollow = arg == true
+		local pilatHollow = genv.__PilatV4HollowRuntime
+
+		if arg ~= true and pilatHollow and pilatHollow.inRace() then
+			pcall(function()
+				local remote = ReplicatedStorage.Packages.Networking:FindFirstChild("RE/MountRace/AskLeave")
+				if remote then remote:FireServer() end
+			end)
+		end
+	end)})
+
+	tbl24.hollowSpeed = pilatHollowSection:AddSlider({Title = "Hollow Race Speed", Content = "Studs per second on the track. It lowers itself if the server pulls you back.", Min = 140, Max = 400, Default = 300, Increment = 1, Callback = fn144(function(arg)
+		pilatV4Config.HollowSpeed = math.clamp(tonumber(arg) or 300, 140, 400)
+		local pilatHollow = genv.__PilatV4HollowRuntime
+
+		if pilatHollow then
+			pilatHollow.drop = 0
+		end
+	end)})
+
+	tbl24.hollowPower = pilatHollowSection:AddToggle({Title = "Use Race Power-Ups", Content = "Picks up and uses power-ups during the race.", Default = true, Callback = fn144(function(arg)
+		pilatV4Config.HollowPower = arg == true
+	end)})
+
+	local pilatHollowStatus = pilatHollowSection:AddParagraph({Title = "Hollow Status", Content = "Off"})
+
+	task.spawn(function()
+		while fn2() do
+			local pilatHollow = genv.__PilatV4HollowRuntime
+
+			if pilatHollow then
+				pcall(function()
+					pilatHollowStatus:SetContent(tostring(pilatHollow.status) .. " | Wins: " .. tostring(pilatHollow.wins()) .. "/3" .. (pilatHollow.last and ("\nLast: " .. pilatHollow.last) or ""))
+				end)
+			end
+
+			task.wait(1)
+		end
+	end)
+
+	end
 
 	local v51 = tbl24.section(v35, "Shooting Star", "rbxassetid://92160802930122")
 	v51:AddParagraph({Title = "About This Event", Content = "Sometimes a little star falls near you and runs around for a few minutes. Hold next to it to catch it."})
@@ -41495,6 +41892,18 @@ local function fn66()
 		pilatV4Config.RaceAuto = arg == true
 	end)
 
+	fn157(tbl24.hollowAuto, function(arg)
+		pilatV4Config.Hollow = arg == true
+	end)
+
+	fn157(tbl24.hollowSpeed, function(arg)
+		pilatV4Config.HollowSpeed = math.clamp(tonumber(arg) or 300, 140, 400)
+	end)
+
+	fn157(tbl24.hollowPower, function(arg)
+		pilatV4Config.HollowPower = arg == true
+	end)
+
 	fn157(tbl24.starAlert, function(arg)
 		pilatV4Config.StarAlert = arg == true
 	end)
@@ -41740,7 +42149,7 @@ local function fn66()
 			pcall(pilatV4PlayerSteal.setEnabled, pilatV4PlayerSteal, false)
 		end
 
-		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwPumpTp", "HwDog", "HwFishing", "HwFishMon", "HwRot", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
+		for i, v70 in ipairs({"AutoSteal", "AutoPlace", "AutoHatch", "AutoMutation", "AutoRingEvent", "AutoSell", "AutoSellEgg", "StealPlayers", "ScrambleBossAuto", "RaceAuto", "RaceClaim", "RaceBuy", "Hollow", "StarAutoCatch", "HalloweenBuyEgg", "HwEggs", "HwMonsters", "HwPumpkin", "HwPumpTp", "HwDog", "HwFishing", "HwFishMon", "HwRot", "TrainRide", "TrainBoss", "TrainSouls", "ButterflyAutoCatch", "ButterflyAutoNet", "ButterflyAutoTrade", "ButterflyAutoCraft"}) do
 			pilatV4Config[v70] = false
 		end
 
