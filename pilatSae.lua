@@ -4354,7 +4354,7 @@ local v8 = (function()
 
 		fn63(EggState2.CarryChanged, function(arg)
 			if arg.IsCarrying then
-				if obj.running and (obj.activeTarget and arg.Uid == obj.activeTarget.Uid) and not obj._v2Fake then
+				if obj.running and (obj.activeTarget and arg.Uid == obj.activeTarget.Uid) then
 					if obj.carry.active and obj.carry.uid == arg.Uid then
 						return
 					end
@@ -5492,7 +5492,8 @@ local v8 = (function()
 
 	-- instant v2 (formerly beta) is only active for plain Instant mode, never during capture objectives
 	index._beta = function(arg)
-		return arg.config.instantBeta == true and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
+		-- Instant Steal Tes runs on the V2 timing too (self-tuning settle scale, turbo polling), only without flying and with the yslemEgg return
+		return (arg.config.instantBeta == true or arg.config.instantV2 == true) and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
 	end
 
 	-- turbo extras (tight polling, short relay settle) switch off once the self-tuner has backed
@@ -5520,7 +5521,7 @@ local v8 = (function()
 		return enabled
 	end
 
-	-- Instant Steal Tes (formerly V2, ported from chilli) is plain Instant plus the Tes flow for Titan Temple / Light Dark / Enchanted Forest
+	-- Instant Steal Tes = priming + hops to the egg, V2 settle standing, returning with the Instant TP logic of yslemEgg
 	index._v2 = function(arg)
 		return arg.config.instantV2 == true and arg.config.stealMode == "Instant" and not arg.captureObjectiveEnabled
 	end
@@ -5573,7 +5574,7 @@ local v8 = (function()
 	end
 
 	-- ===== BETA: FUSE-BIOME PORTAL TIMING (edit these) =====
-	-- Only used by Instant Steal V2 when "Boost For Instant Steal" sends you through the fuse biome.
+	-- Only used by the portal boost when "Boost For Instant Steal" sends you through the fuse biome.
 	-- Values below are the original timings, except BETA_EXIT_WAIT_RAGDOLL (now false: keep touching ExitPart instead of waiting).
 	index.BETA_EXIT_TIMEOUT = 8          -- max seconds spent trying to get out through ExitPart
 	index.BETA_EXIT_TOUCH_GAP = 0.04     -- seconds between ExitPart touch attempts
@@ -6185,10 +6186,18 @@ local v8 = (function()
 				return arg.destroyed or not arg.enabled or arg.instantPhase ~= "hunting" or not arg.activeTarget or arg.activeTarget.Uid ~= uid
 			end
 
-			local n58 = v9 + Vector3.new(0, n25, 0)
+			-- Instant Steal Tes: hop straight onto the egg, no hovering above it
+			local n58 = arg:_v2() and v9 or v9 + Vector3.new(0, n25, 0)
 			arg:_setStatus("Heading to target egg")
 
-			if not arg:_glideRoot(n58, fn88) then
+			local reached
+			if arg:_v2() then
+				reached = arg:_hopRoot(n58, fn88) -- Instant Steal Tes: hop hop hop to the egg
+			else
+				reached = arg:_glideRoot(n58, fn88)
+			end
+
+			if not reached then
 				if not fn88() then
 					arg:_finish("Could not reach the egg \226\128\148 retrying")
 				end
@@ -6210,7 +6219,12 @@ local v8 = (function()
 	end
 
 	index._hoverSettleCarry = function(arg, arg2, arg3, cFrame, arg4)
-		arg:_startHoverPad()
+		-- Instant Steal Tes: same settle as V2 but no hover pad, it is spent standing on the egg
+		if arg:_v2() then
+			arg:_stopHoverPad()
+		else
+			arg:_startHoverPad()
+		end
 		local v8 = arg:_resolveSettleSeconds(arg2, true)
 		local n58 = os.clock() + v8
 
@@ -6252,7 +6266,11 @@ local v8 = (function()
 		if arg4() then
 			return
 		end
-		arg:_glideRoot(arg3, arg4)
+		if arg:_v2() then
+			arg:_hopRoot(arg3, arg4)
+		else
+			arg:_glideRoot(arg3, arg4)
+		end
 		if arg4() then
 			return
 		end
@@ -7820,12 +7838,12 @@ local v8 = (function()
 	end
 
 	index._startHoverPad = function(arg)
-		-- Admin Abuse Boost + Instant Steal v2: inside the portal (fuse biome, Y > 5000) never hover/fly
+		-- Instant Steal Tes: inside the portal (fuse biome, Y > 5000) never hover/fly
 		do
 			local portalCharacter = localPlayer2.Character
 			local portalRoot = portalCharacter and portalCharacter:FindFirstChild("HumanoidRootPart")
 
-			if genv.__PilatV4AdminBoost == true and arg:_v2() and portalRoot and portalRoot.Position.Y > 5000 then
+			if arg:_v2() and portalRoot and portalRoot.Position.Y > 5000 then
 				arg:_stopHoverPad()
 				return
 			end
@@ -9017,7 +9035,14 @@ local v8 = (function()
 	local n69 = 5000
 
 	index._usesPortalBoost = function(arg, arg2)
-		return pilatV4Config.LowSpeedBoost == true and arg.config.stealMode == "Instant" and type(arg2) == "table" and tbl16[arg2.AreaId] ~= nil and not (arg.portalBoostFailed and (arg.portalBoostFailed[arg2.Uid] or 0) > os.clock())
+		return pilatV4Config.LowSpeedBoost == true and arg.config.stealMode == "Instant" and not arg:_v2() and type(arg2) == "table" and tbl16[arg2.AreaId] ~= nil and not (arg.portalBoostFailed and (arg.portalBoostFailed[arg2.Uid] or 0) > os.clock())
+	end
+
+	-- Instant Steal Tes: portal approach, switched off by TES_PORTAL (default): Tes primes like Instant V2 without boost
+	index.TES_PORTAL = false -- true = Tes goes through the lane portal (killed the character in testing), false = priming like Instant V2 without boost
+
+	index._usesTes = function(arg, arg2)
+		return index.TES_PORTAL == true and arg:_v2() and not pilatV4Config.HelpFriend and type(arg2) == "table" and tbl16[arg2.AreaId] ~= nil and not (arg.v2Failed and (arg.v2Failed[arg2.Uid] or 0) > os.clock())
 	end
 
 	local function fn91(arg, arg2)
@@ -9127,7 +9152,8 @@ local v8 = (function()
 	end
 
 	index._crossPortal = function(arg, arg2, arg3, arg4)
-		local betaExit = type(arg) == "table" and (arg:_beta() or arg:_v2()) and arg2 ~= nil and arg2.Name == "ExitPart"
+		-- Instant Steal Tes uses the plain exit (wait the knockdown out, then touch the ExitPart where the character stands): pinning it on the ExitPart or touching during the knockdown killed the character
+		local betaExit = type(arg) == "table" and arg:_beta() and arg2 ~= nil and arg2.Name == "ExitPart"
 		arg = localPlayer2.Character
 		local humanoidRootPart = arg and arg:FindFirstChild("HumanoidRootPart")
 
@@ -9908,182 +9934,985 @@ local v8 = (function()
 		arg:_requestCarry(v12, true)
 	end
 
-	-- ===== INSTANT STEAL V2 (ported from the chilli script) =====
-	-- Only for Titan Temple / Light Dark / Enchanted Forest, every other egg uses normal Instant.
-	-- Flow: safe zone -> lane portal -> ExitPart -> egg -> fake grab/drop x FakeGrabs -> real grab ->
-	-- step the egg to the line in speed-scaled hops -> drop -> treadmill reset -> regrab -> safe zone.
-	-- All the numbers below are the chilli defaults, edit them here.
-	index.V2 = {
-		Zones = {["Titan Temple"] = true, ["Light Dark"] = true, ["Enchanted Forest"] = true},
-		FakeGrabs = 3,        -- grab + drop this many times before the real grab
-		GrabWindow = 1.5,     -- seconds allowed for each fake grab
-		LineGap = 45,         -- studs on the egg side of the separation line where the egg is dropped
-		CarryHeight = 40,     -- height of the hop path above the line
-		HopRatio = 3.64,      -- hop length = WalkSpeed * this
-		HopGap = 0.12,        -- seconds pinned at every hop
-		MinStep = 60,         -- shortest hop in studs
-		DropWait = 0.45,      -- wait at the line before dropping
-		RegrabTime = 25,      -- max seconds to take the egg back after the treadmill reset
-		RegrabGap = 0.03,     -- seconds between carry requests while regrabbing
-		FallTries = 3,        -- retries if the egg falls out of your hands on the way to the line
-		SafeWait = 0.3,       -- settle time in the safe zone before the portal (+ ping, capped by SafeWaitMax)
-		SafeWaitMax = 0.5,
-		LineX = 552.2,        -- fallback line position if Areas.SeparationLine is missing
-		LineY = 67.67,
-		MissCooldown = 60     -- after 2 failed tries an egg is left to normal Instant for this long
+	-- ===== INSTANT STEAL TES =====
+	-- Going to the egg: priming + hop onto the egg + the V2 settle standing (same as Instant V2 without boost, minus the flying). The lane portal approach below only runs with index.TES_PORTAL = true.
+	-- Returning: the Instant TP logic of yslemEgg, copied as it is (verbatim block below, own state + remote hooks).
+	local tesReturn = (function()
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local localPlayer = Players.LocalPlayer
+
+	------------------------------------------------------------------ settings (same values as the hub)
+	local CFG = {
+		SpeedCap = 1.15, -- never above 115% of the walk speed
+		HopRatio = 1.515, -- hop distance = walk speed * ratio (a distance, not a speed)
+		HopMin = 40,
+		HopGap = 0.06, -- seconds between two hops (learned: grows after a pull-back, shrinks after a clean hop)
+		HopGapMin = 0.06,
+		HopGapMax = 0.2,
+		HopRetries = 6,
+		HopLift = 42, -- height of the hops above the start
+		LandOffset = 14, -- landing spot in front of the line
+		LandSettle = 0.08,
+		DropDelay = 0.05,
+		GrabInterval = 0.03,
+		RegrabFar = 40, -- egg further than this: teleport onto it, otherwise run to it
+		Height = 70, -- the safe-zone run starts above the base and comes down (same as the hub)
+		ClimbShare = 0.5,
+		CarryRatio = 0.9,
+		EasyRatio = 1.3,
+	}
+	local FPS = { 60, 30, 0.15 }
+
+	local function safeRequire(getter)
+		local ok, result = pcall(function()
+			return require(getter())
+		end)
+		return ok and result or nil
+	end
+
+	local networkingFolder = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Networking")
+	local EggState = safeRequire(function() return ReplicatedStorage.Client.EggState end)
+
+	local function remote(name)
+		return networkingFolder:FindFirstChild(name)
+	end
+
+	local function root()
+		local character = localPlayer.Character
+		return character and character:FindFirstChild("HumanoidRootPart")
+	end
+
+	-- "Humanoid Swap" (the hub's default shield, always on in the hub): the character runs on a copy of its humanoid,
+	-- the original is kept out of the character while we steal. Same code path as the hub.
+	local shield = { Original = nil, Clone = nil, Links = {}, Connection = nil, Added = nil }
+
+	local function walkSpeed()
+		local character = localPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local speed = humanoid and humanoid.WalkSpeed or 16
+		if shield.Original and shield.Original.Health > 0 then
+			speed = math.min(speed, shield.Original.WalkSpeed)
+		end
+		local ok, result = pcall(function()
+			local stat = localPlayer:FindFirstChild("leaderstats")
+			stat = stat and stat:FindFirstChild("Speed")
+			local util = require(ReplicatedStorage.Shared.Util.TreadmillUtil)
+			return stat and util.SpeedPowerToWalkSpeed(stat.Value) or nil
+		end)
+		if ok and type(result) == "number" and result > 0 then
+			speed = math.min(speed, result)
+		end
+		return speed
+	end
+
+	local function shieldControls(humanoid)
+		pcall(function()
+			local scripts = localPlayer:FindFirstChild("PlayerScripts")
+			local module = scripts and scripts:FindFirstChild("PlayerModule")
+			if module then
+				local controls = require(module):GetControls()
+				if type(controls) == "table" then
+					controls.humanoid = humanoid
+				end
+			end
+		end)
+	end
+
+	local function shieldAnimate(character)
+		local animate = character and character:FindFirstChild("Animate")
+		if animate and animate:IsA("LocalScript") then
+			task.spawn(function()
+				animate.Enabled = false
+				task.wait()
+				animate.Enabled = true
+			end)
+		end
+	end
+
+	local function shieldUnlink()
+		for _, link in ipairs(shield.Links) do
+			pcall(function()
+				link:Disconnect()
+			end)
+		end
+		table.clear(shield.Links)
+	end
+
+	local groundedStates = {
+		[Enum.HumanoidStateType.Running] = true,
+		[Enum.HumanoidStateType.RunningNoPhysics] = true,
+		[Enum.HumanoidStateType.Landed] = true,
 	}
 
-	index._usesV2 = function(arg, arg2)
-		return arg:_v2() and not pilatV4Config.HelpFriend and type(arg2) == "table" and index.V2.Zones[arg2.AreaId] == true and not (arg.v2Failed and (arg.v2Failed[arg2.Uid] or 0) > os.clock())
-	end
-
-	local function v2Root()
-		local character = localPlayer2.Character
-		return character and character:FindFirstChild("HumanoidRootPart"), character and character:FindFirstChildOfClass("Humanoid")
-	end
-
-	local function v2Carried(uid)
-		local rec = EggState2.ReadFieldEgg(uid)
-		return type(rec) == "table" and rec.State == AreaEggs.States.Carried and rec.CarrierUserId == localPlayer2.UserId
-	end
-
-	local function v2Set(root, cframe)
-		pcall(function()
-			root.CFrame = cframe
-			root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-			root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-		end)
-	end
-
-	local function v2Line()
-		local world = fn()
-		local areas = world and world:FindFirstChild("Areas")
-		local line = areas and areas:FindFirstChild("SeparationLine")
-		if line and line:IsA("BasePart") then
-			return line.Position.X, line.Position.Y
+	local function grounded(humanoid)
+		if not humanoid or humanoid.Health <= 0 or humanoid.FloorMaterial == Enum.Material.Air then
+			return false
 		end
-		return index.V2.LineX, index.V2.LineY
+		return groundedStates[humanoid:GetState()] == true
 	end
 
-	local function v2ZRange()
-		local zMin, zMax = -426, -308
-		pcall(function()
-			local world = fn()
-			local bounds = world and world:FindFirstChild("Areas") and world.Areas:FindFirstChild("EggCarryBounds")
-			local lane = bounds and bounds:FindFirstChild("Gameplay1")
-			if lane and lane:IsA("BasePart") then
-				local half = lane.Size.Z * 0.5 - 18
-				if half > 5 then
-					zMin, zMax = lane.Position.Z - half, lane.Position.Z + half
-				end
-			end
-		end)
-		return zMin, zMax
-	end
-
-	local function v2EggDest(arg, rec, root, humanoid)
-		if type(rec) ~= "table" then
-			return nil
-		end
-		local cframe = rec.BottomCFrame or rec.BoundsCFrame
-		if typeof(cframe) ~= "CFrame" then
-			return nil
-		end
-		return arg:_resolveEggDestination({BottomCFrame = cframe}, root, humanoid)
-	end
-
-	-- fire carry requests (3 in flight, one every opts.gap) until the egg is in hand
-	-- opts.stand: keep standing on the egg while grabbing, opts.nestFail: give up if the egg went back to its nest
-	-- returns true when carried, or false plus "nest" / "char"
-	index._v2Grab = function(arg, uid, seconds, abort, opts)
-		opts = opts or {}
-		local character = localPlayer2.Character
+	local function shieldSwap()
+		local character = localPlayer.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			pcall(humanoid.UnequipTools, humanoid)
+		if not humanoid or humanoid.Health <= 0 then
+			return
 		end
-
-		local untilAt = os.clock() + seconds
-		local nextFire, inflight = 0, 0
-
-		while os.clock() < untilAt and not abort() do
-			if v2Carried(uid) then
-				return true
-			end
-
-			local root, hum = v2Root()
-			if not root or not hum then
-				return false, "char"
-			end
-
-			local rec = EggState2.ReadFieldEgg(uid) or arg.records[uid]
-
-			if opts.nestFail and type(rec) == "table" and rec.State == AreaEggs.States.Slot then
-				return false, "nest"
-			end
-
-			if opts.stand then
-				local dest = v2EggDest(arg, rec, root, hum)
-				if dest and (root.Position - dest.Position).Magnitude > 4 then
-					v2Set(root, dest)
-				end
-			end
-
-			if inflight < 3 and os.clock() >= nextFire then
-				nextFire = os.clock() + (opts.gap or 0.05)
-				inflight = inflight + 1
-
-				task.spawn(function()
-					pcall(function()
-						eggWorld.AskFieldEggCarry:InvokeServer({Uid = uid})
-					end)
-
-					inflight = inflight - 1
-				end)
-			end
-
-			RunService2.Heartbeat:Wait()
+		if shield.Clone and shield.Clone.Parent == character then
+			return
 		end
-
-		return v2Carried(uid)
-	end
-
-	-- grab the egg and drop it again a few times so the server is used to it, then the caller takes it for real
-	index._v2FakeGrabs = function(arg, uid, abort)
-		local total = math.max(math.floor(tonumber(index.V2.FakeGrabs) or 0), 0)
-		if total == 0 then
+		if not grounded(humanoid) then
 			return
 		end
 
-		arg._v2Fake = true
+		local clone = humanoid:Clone()
+		humanoid.Parent = nil
+		clone.Parent = character
+		workspace.CurrentCamera.CameraSubject = clone
+		shieldControls(clone)
+		shieldAnimate(character)
+		shield.Original = humanoid
+		shield.Clone = clone
 
-		for i = 1, total do
-			if abort() then
-				break
+		table.insert(shield.Links, humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+			if clone.Parent ~= nil then
+				clone.WalkSpeed = humanoid.WalkSpeed
 			end
+		end))
 
-			arg:_setStatus(string.format("Instant Steal Tes: grab and drop %d/%d", i, total))
-			arg:_v2Grab(uid, index.V2.GrabWindow, abort, nil)
+		local animator = humanoid:FindFirstChildOfClass("Animator")
+		local animator2 = clone:FindFirstChildOfClass("Animator")
+		if animator and animator2 then
+			table.insert(shield.Links, animator.AnimationPlayed:Connect(function(played)
+				local animation = played.Animation
+				if not animation or clone.Parent == nil then
+					return
+				end
+				local ok, track = pcall(function()
+					return animator2:LoadAnimation(animation)
+				end)
+				if not ok or not track then
+					return
+				end
+				pcall(function()
+					track.Priority = played.Priority
+					track.Looped = played.Looped
+					track:Play(0.05, math.max(played.WeightTarget, 0.01), played.Speed)
+				end)
+				local stopped
+				stopped = played.Stopped:Connect(function()
+					stopped:Disconnect()
+					pcall(function()
+						track:Stop(0.1)
+					end)
+				end)
+			end))
+		end
 
-			if v2Carried(uid) then
-				pcall(EggState2.DropFieldEgg, "PlayerRequest")
-				local waited = 0
+		table.insert(shield.Links, clone.Died:Connect(function()
+			shieldUnlink()
+			shield.Original, shield.Clone = nil, nil
+			local current = localPlayer.Character
+			if current and humanoid.Parent == nil then
+				humanoid.Parent = current
+				workspace.CurrentCamera.CameraSubject = humanoid
+				shieldControls(humanoid)
+			end
+			pcall(function()
+				clone:Destroy()
+			end)
+			humanoid.Health = 0
+		end))
+	end
 
-				while v2Carried(uid) and waited < 1.5 and not abort() do
-					waited = waited + RunService2.Heartbeat:Wait()
+	local function shieldUndo()
+		shieldUnlink()
+		local character = localPlayer.Character
+		local original, clone = shield.Original, shield.Clone
+		shield.Original, shield.Clone = nil, nil
+		if original and clone and character and original.Parent == nil and clone.Parent == character then
+			original.Parent = character
+			workspace.CurrentCamera.CameraSubject = original
+			shieldControls(original)
+			pcall(function()
+				clone:Destroy()
+			end)
+			shieldAnimate(character)
+		end
+	end
+
+	local function shieldStart()
+		shieldSwap()
+		local n = 0
+		shield.Connection = RunService.Heartbeat:Connect(function(dt)
+			n += dt
+			local character = localPlayer.Character
+			local missing = not (shield.Clone and character and shield.Clone.Parent == character)
+			if (missing and 0.25 or 3) <= n then
+				n = 0
+				shieldSwap()
+			end
+		end)
+		shield.Added = localPlayer.CharacterAdded:Connect(function(character)
+			shieldUnlink()
+			shield.Original, shield.Clone = nil, nil
+			task.spawn(function()
+				character:WaitForChild("Humanoid", 10)
+				task.wait(1)
+				if shield.Connection and localPlayer.Character == character then
+					shieldSwap()
+				end
+			end)
+		end)
+	end
+
+	local function shieldStop()
+		if shield.Connection then
+			shield.Connection:Disconnect()
+			shield.Connection = nil
+		end
+		if shield.Added then
+			shield.Added:Disconnect()
+			shield.Added = nil
+		end
+		shieldUndo()
+	end
+
+	------------------------------------------------------------------ carry / delivery state
+	local state = { Carrying = false, Uid = nil, Delivered = 0, Busy = false, Cancel = false, Mult = 1, PulledAt = 0, HeldSeen = 0, GuessedDrop = false }
+
+	if type(EggState) == "table" and type(EggState.CarryChanged) == "table" and type(EggState.CarryChanged.Connect) == "function" then
+		EggState.CarryChanged:Connect(function(arg)
+			local carrying = type(arg) == "table" and arg.IsCarrying == true
+			if carrying and arg.GuardDisabled == true then
+				carrying = false
+			end
+			state.GuessedDrop = false
+			if carrying then
+				state.HeldSeen = os.clock()
+			end
+			if carrying and type(arg.Uid) == "string" then
+				state.Uid = arg.Uid
+				local mult = tonumber(arg.SpeedMultiplier)
+				if mult and mult > 0 then
+					state.Mult = mult
+				end
+			end
+			state.Carrying = carrying
+		end)
+	end
+
+	pcall(function()
+		remote("RE/EggWorld/FieldEggRedeemVerdict").OnClientEvent:Connect(function()
+			state.Delivered = os.clock()
+		end)
+	end)
+
+	-- the server pulling us back ("Relocate") is noted so the hop is simply repeated
+	pcall(function()
+		remote("RE/RigSync/Refresh").OnClientEvent:Connect(function(arg)
+			if type(arg) == "table" and arg.Action == "Relocate" then
+				state.PulledAt = os.clock()
+			end
+		end)
+	end)
+
+	local function takeEgg(uid)
+		if type(uid) == "string" and type(EggState) == "table" and type(EggState.CarryFieldEgg) == "function" then
+			pcall(EggState.CarryFieldEgg, uid)
+		end
+	end
+
+	local function dropEgg()
+		if type(EggState) == "table" and type(EggState.DropFieldEgg) == "function" then
+			pcall(EggState.DropFieldEgg, "PlayerRequest")
+		end
+	end
+
+	-- the prompt of the egg itself (nearest egg prompt to the egg's position), never one of another egg
+	local function promptNear(position, radius)
+		local best, bestDistance = nil, radius
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child.Name == "SmartPromptPart" and child:IsA("BasePart") then
+				local prompt = child:FindFirstChild("CarryAreaEgg")
+				if prompt and prompt:IsA("ProximityPrompt") then
+					local distance = (child.Position - position).Magnitude
+					if distance < bestDistance then
+						best, bestDistance = prompt, distance
+					end
 				end
 			end
 		end
-
-		arg._v2Fake = nil
+		return best
 	end
 
-	index._v2Steal = function(arg, target)
+	-- the carried egg is welded to the character: used to catch a missed carry signal (same check as the hub)
+	local function heldByMe(uid)
+		local character = localPlayer.Character
+		if type(uid) ~= "string" or not character then
+			return false
+		end
+		local egg = workspace:FindFirstChild(uid)
+		if not egg then
+			return false
+		end
+		for _, d in ipairs(egg:GetDescendants()) do
+			if d:IsA("WeldConstraint") or d:IsA("JointInstance") then
+				local ok, a, b = pcall(function()
+					return d.Part0, d.Part1
+				end)
+				if ok and ((a and a:IsDescendantOf(character)) or (b and b:IsDescendantOf(character))) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	task.spawn(function()
+		while true do
+			task.wait(0.2)
+			if not state.Carrying then
+				if state.GuessedDrop and heldByMe(state.Uid) then
+					state.GuessedDrop, state.Carrying, state.HeldSeen = false, true, os.clock()
+				end
+			elseif heldByMe(state.Uid) then
+				state.HeldSeen = os.clock()
+			elseif os.clock() - state.HeldSeen > 0.8 then
+				state.Carrying, state.GuessedDrop = false, true
+			end
+		end
+	end)
+
+	local function snapshot()
+		local list = {}
+		local ok, result = pcall(function()
+			return remote("RF/EggWorld/AskFieldEggSnapshot"):InvokeServer()
+		end)
+		local records = ok and type(result) == "table" and result.Records or nil
+		if type(records) ~= "table" then
+			return list
+		end
+		for _, record in pairs(records) do
+			if type(record) == "table" and type(record.Uid) == "string" and (record.State == "Slot" or record.State == "Dropped") and typeof(record.BottomCFrame) == "CFrame" then
+				list[#list + 1] = record
+			end
+		end
+		return list
+	end
+
+	local function eggPosition(uid)
+		for _, record in ipairs(snapshot()) do
+			if record.Uid == uid then
+				return record.BottomCFrame.Position
+			end
+		end
+		return nil
+	end
+
+	------------------------------------------------------------------ Instant TP logic
+	local status = function(text) end
+
+	local function frozenCamera()
+		local camera = workspace.CurrentCamera
+		if not camera then
+			return function() end
+		end
+		local oldType = camera.CameraType
+		local frame = camera.CFrame
+		pcall(function()
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.CFrame = frame
+		end)
+		return function()
+			pcall(function()
+				camera.CameraType = oldType
+			end)
+		end
+	end
+
+	local fpsGen = 0
+	local function fpsOn()
+		if typeof(setfpscap) ~= "function" then
+			return
+		end
+		fpsGen += 1
+		local mine = fpsGen
+		task.spawn(function()
+			local high = true
+			local started = os.clock()
+			while fpsGen == mine and os.clock() - started < 60 do
+				pcall(setfpscap, high and FPS[1] or FPS[2])
+				high = not high
+				task.wait(FPS[3])
+			end
+		end)
+	end
+
+	local function fpsOff()
+		fpsGen += 1
+		if typeof(setfpscap) == "function" then
+			pcall(setfpscap, 240)
+		end
+	end
+
+	-- a still copy of the player stays where the egg was taken during the flight; removed on arrival
+	local stealClone = nil
+	local function dropClone()
+		local copy = stealClone
+		stealClone = nil
+		if copy then
+			pcall(function()
+				copy:Destroy()
+			end)
+		end
+	end
+
+	local function postClone()
+		dropClone()
+		local character = localPlayer.Character
+		if not character then
+			return
+		end
+		local was = character.Archivable
+		character.Archivable = true
+		local copy = character:Clone()
+		character.Archivable = was
+		if copy then
+			for _, d in ipairs(copy:GetDescendants()) do
+				if d:IsA("LuaSourceContainer") or d:IsA("Humanoid") then
+					pcall(function()
+						d:Destroy()
+					end)
+				elseif d:IsA("BasePart") then
+					d.Anchored = true
+					d.CanCollide = false
+					d.CanTouch = false
+					d.CanQuery = false
+				end
+			end
+			copy.Name = "Clone"
+			copy.Parent = workspace
+			stealClone = copy
+		end
+	end
+
+	local function lineInfo()
+		local world = workspace:FindFirstChild("World") or workspace:FindFirstChild("__OBJECTS")
+		world = world and world:FindFirstChild("Areas")
+		world = world and world:FindFirstChild("SeparationLine")
+		local ok = world and world:IsA("BasePart")
+		return ok and world.Position.X or 552.2, ok and world.Position.Y or 67.67
+	end
+
+	local function homePoint()
+		for _, def in ipairs({
+			{ { "GearGiver_Slap", "Podium" }, Vector3.new(-16.415, 21.072, -6.106) },
+			{ { "World", "Machines", "RiftMachine", "Rift", "Meshes/VoidPortal_Cube.003" }, Vector3.new(-26.776, 1.75, 18.665) },
+			{ { "__OBJECTS", "Machines", "RiftMachine", "Rift", "Meshes/VoidPortal_Cube.003" }, Vector3.new(-26.776, 1.75, 18.665) },
+		}) do
+			local node = workspace
+			for _, name in ipairs(def[1]) do
+				node = node and node:FindFirstChild(name) or nil
+			end
+			if node and node:IsA("BasePart") then
+				return node.CFrame:PointToWorldSpace(def[2])
+			end
+		end
+		return Vector3.new(528.7, 70.57, -364.11)
+	end
+
+	local function place(position)
+		local r = root()
+		if not r then
+			return
+		end
+		pcall(function()
+			r.CFrame = CFrame.new(position) * CFrame.Angles(0, math.rad(90), 0)
+			r.AssemblyLinearVelocity = Vector3.zero
+			r.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
+
+	-- portals / arenas / teleporters are walked around (same list as the hub)
+	local dangerCache, dangerAt = {}, 0
+	local function dangers()
+		if os.clock() - dangerAt < 1 then
+			return dangerCache
+		end
+		dangerAt = os.clock()
+		local list = {}
+		local function add(inst)
+			local ok, cf, size = pcall(function()
+				if inst:IsA("Model") then
+					return inst:GetBoundingBox()
+				elseif inst:IsA("BasePart") then
+					return inst.CFrame, inst.Size
+				end
+			end)
+			if ok and cf and size then
+				local half = Vector3.new(math.abs(size.X), 0, math.abs(size.Z)) * 0.5
+				local rot = (cf - cf.Position):VectorToWorldSpace(half)
+				local rx = math.max(math.abs(rot.X), half.X, half.Z)
+				local rz = math.max(math.abs(rot.Z), half.X, half.Z)
+				list[#list + 1] = { MinX = cf.Position.X - rx, MaxX = cf.Position.X + rx, MinZ = cf.Position.Z - rz, MaxZ = cf.Position.Z + rz }
+			end
+		end
+		local function bad(name)
+			if name == "ScrambleLocalVisuals" or name == "DrScrambleEvent" then
+				return false
+			end
+			name = string.lower(name)
+			return string.find(name, "portal", 1, true) or string.find(name, "teleport", 1, true) or string.find(name, "mech", 1, true) or string.find(name, "arena", 1, true) or string.find(name, "scramble", 1, true)
+		end
+		for _, child in ipairs(workspace:GetChildren()) do
+			if (child:IsA("Model") or child:IsA("BasePart") or child:IsA("Folder")) and bad(child.Name) then
+				if child:IsA("Folder") then
+					for _, inner in ipairs(child:GetChildren()) do
+						add(inner)
+					end
+				else
+					add(child)
+				end
+			end
+		end
+		local build = workspace:FindFirstChild("World")
+		build = build and build:FindFirstChild("Build")
+		if build then
+			for _, child in ipairs(build:GetChildren()) do
+				if bad(child.Name) then
+					for _, inner in ipairs(child:GetChildren()) do
+						add(inner)
+					end
+				end
+			end
+		end
+		dangerCache = list
+		return list
+	end
+
+	-- if the straight line crosses a danger zone, aim at the corner of it instead
+	local function avoid(from, to)
+		for _, d in ipairs(dangers()) do
+			local x0, x1, z0, z1 = d.MinX - 12, d.MaxX + 12, d.MinZ - 12, d.MaxZ + 12
+			local inside = from.X >= x0 and from.X <= x1 and from.Z >= z0 and from.Z <= z1
+			if not inside then
+				local t0, t1, hit = 0, 1, true
+				for _, axis in ipairs({ { from.X, to.X - from.X, x0, x1 }, { from.Z, to.Z - from.Z, z0, z1 } }) do
+					local pos, delta, lo, hi = axis[1], axis[2], axis[3], axis[4]
+					if math.abs(delta) < 1e-6 then
+						if pos < lo or pos > hi then
+							hit = false
+						end
+					else
+						local ta, tb = (lo - pos) / delta, (hi - pos) / delta
+						if ta > tb then
+							ta, tb = tb, ta
+						end
+						t0, t1 = math.max(t0, ta), math.min(t1, tb)
+						if t0 > t1 then
+							hit = false
+						end
+					end
+				end
+				if hit then
+					local zLow, zHigh = z0 - 2, z1 + 2
+					local z = math.abs(from.Z - zLow) <= math.abs(from.Z - zHigh) and zLow or zHigh
+					if z < -440 or z > -290 then
+						z = z == zLow and zHigh or zLow
+					end
+					local x = math.abs(from.X - x0) <= math.abs(from.X - x1) and x0 or x1
+					if math.abs(from.Z - z) < 3 then
+						x = math.abs(to.X - x0) <= math.abs(to.X - x1) and x0 or x1
+					end
+					return Vector3.new(x, to.Y, z)
+				end
+			end
+		end
+		return to
+	end
+
+	-- current position of an egg lying in the world (cheap), with the snapshot as fallback
+	local function eggNow(uid, cache)
+		local node = workspace:FindFirstChild(uid)
+		local slots = workspace:FindFirstChild("AreaEggSlotsClient")
+		node = node or (slots and slots:FindFirstChild(uid))
+		if node then
+			local ok, pos = pcall(function()
+				return node:GetPivot().Position
+			end)
+			if ok and pos then
+				cache.Pos, cache.At = pos, os.clock()
+				return pos
+			end
+		end
+		if os.clock() - cache.At >= 0.5 then
+			cache.At = os.clock()
+			cache.Pos = eggPosition(uid) or cache.Pos
+		end
+		return cache.Pos
+	end
+
+	-- take the egg that lies next to us (also used to take it back after the drop): follow it, fire its prompt and send the request
+	local function grab(uid, timeout)
+		local cache = { At = 0 }
+		local waited, since = 0, 1
+		while not state.Carrying and waited < timeout and not state.Cancel do
+			local r = root()
+			local egg = eggNow(uid, cache)
+			local dt = math.max(RunService.Heartbeat:Wait(), 1 / 240)
+			waited += dt
+			since += dt
+			if r and egg then
+				local delta = egg - r.Position
+				if delta.Magnitude > 2 then
+					local pace = math.max(walkSpeed() * CFG.SpeedCap, 16)
+					local v = delta / math.max(0.08, dt)
+					if v.Magnitude > pace then
+						v = v.Unit * pace
+					end
+					pcall(function()
+						r.AssemblyLinearVelocity = v + Vector3.new(0, workspace.Gravity * dt * 0.5, 0)
+						r.AssemblyAngularVelocity = Vector3.zero
+					end)
+				end
+				if since >= CFG.GrabInterval then
+					since = 0
+					local prompt = promptNear(egg - Vector3.new(0, 3, 0), 10)
+					if prompt and typeof(fireproximityprompt) == "function" then
+						pcall(function()
+							prompt.HoldDuration = 0
+						end)
+						pcall(fireproximityprompt, prompt)
+					end
+					task.spawn(takeEgg, uid)
+				end
+			elseif since >= CFG.GrabInterval then
+				since = 0
+				task.spawn(takeEgg, uid)
+			end
+		end
+		local r = root()
+		if r then
+			pcall(function()
+				r.AssemblyLinearVelocity = Vector3.zero
+			end)
+		end
+		return state.Carrying and state.Uid == uid
+	end
+
+	local function regrab(uid)
+		if state.Carrying then
+			return true
+		end
+		local r = root()
+		local egg = eggPosition(uid)
+		if r and egg and Vector3.new(r.Position.X - egg.X, 0, r.Position.Z - egg.Z).Magnitude > CFG.RegrabFar then
+			status("The egg fell far behind, teleporting onto it")
+			place(egg + Vector3.new(0, 3, 0))
+		else
+			status("The egg fell close, taking it back")
+		end
+		return grab(uid, 3)
+	end
+
+	local function groundY(position, fallback)
+		local y = fallback
+		pcall(function()
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = { localPlayer.Character }
+			params.IgnoreWater = true
+			local hit = workspace:Raycast(position + Vector3.new(0, 60, 0), Vector3.new(0, -140, 0), params)
+			if hit and hit.Material ~= Enum.Material.Water and math.abs(hit.Position.Y - fallback) < 40 then
+				y = hit.Position.Y + 3.5
+			end
+		end)
+		return y
+	end
+
+	-- safe zone: same route as the Normal mode: checkpoint 7 studs past the line, then the base.
+	-- Speed = the hub's carry plan (never above 115% of the walk speed), the run starts above the base and comes down.
+	local function carrySpeed(distance)
+		local ws = walkSpeed()
+		local base = ws * math.min(CFG.CarryRatio, CFG.SpeedCap) * state.Mult
+		local fast = base * 1.5 -- SpeedRatio
+		local excess = 5.5 * base -- ExcessSeconds
+		local limit = fast
+		if distance and distance > excess then
+			limit = math.min(fast, base * distance / (distance - excess))
+		end
+		return math.min(math.max(math.min(base * CFG.EasyRatio, limit), base), math.max(ws * CFG.SpeedCap, base))
+	end
+
+	local function runHome(lineX, laneZ)
+		local started = os.clock()
+		local home = homePoint()
+		local checkpoint = lineX - 7
+		local height = CFG.Height
+		local share = math.clamp(CFG.ClimbShare, 0.1, 0.9)
+		local descent = height * math.sqrt(1 - share * share) / share
+		local character = localPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.PlatformStand = false
+		end
+
+		-- rise above the base first (no horizontal move), like the hub
+		local r = root()
+		if r and character and height > 0.5 and home.Y + height - 2 > r.Position.Y then
+			pcall(function()
+				character:PivotTo(CFrame.new(Vector3.new(r.Position.X, home.Y + height, r.Position.Z)) * r.CFrame.Rotation)
+				r.AssemblyLinearVelocity = Vector3.zero
+				r.AssemblyAngularVelocity = Vector3.zero
+			end)
+		end
+
+		-- the speed is planned once, at the start, from the distance still to go (the hub does the same)
+		local start = root()
+		local speed = carrySpeed(start and (Vector3.new(start.Position.X - home.X, 0, start.Position.Z - home.Z).Magnitude + math.max(0, height) * 2) or nil)
+
+		local last = os.clock()
+		local timeout = 0
+		status("Safe zone")
+		while state.Carrying and state.Delivered < started and not state.Cancel and timeout < 25 do
+			r = root()
+			if not r then
+				return false
+			end
+			local now = os.clock()
+			local dt = math.max(now - last, 1 / 240)
+			last = now
+			timeout += dt
+
+			local toHome = r.Position.X <= checkpoint + 2
+			local target = toHome and home or Vector3.new(checkpoint, home.Y, laneZ)
+			if toHome and Vector3.new(home.X - r.Position.X, 0, home.Z - r.Position.Z).Magnitude < 2 then
+				break
+			end
+			local aim = avoid(r.Position, target)
+			local flat = Vector3.new(aim.X - r.Position.X, 0, aim.Z - r.Position.Z)
+			local remaining = toHome and 0 or math.max(0, r.Position.X - checkpoint)
+			local wantY = home.Y + height
+			if toHome or remaining <= descent then
+				wantY = home.Y + height * math.clamp(remaining / math.max(descent, 1), 0, 1)
+			end
+			local vy = math.clamp((wantY - r.Position.Y) / 0.12, -speed * share, speed * share)
+			local horizontal = math.sqrt(math.max(speed * speed - vy * vy, 0))
+			local v = flat.Magnitude > 0.01 and flat.Unit * math.min(horizontal, flat.Magnitude / 0.05) or Vector3.zero
+			pcall(function()
+				r.AssemblyLinearVelocity = Vector3.new(v.X, vy, v.Z)
+			end)
+			RunService.Heartbeat:Wait()
+		end
+
+		if humanoid then
+			pcall(function()
+				humanoid:Move(Vector3.zero, false)
+			end)
+		end
+
+		local settle = 0
+		while settle < 2 and state.Delivered < started and state.Carrying and not state.Cancel do
+			settle += RunService.Heartbeat:Wait()
+		end
+		-- still in the hands at home: put it down so the base takes it
+		if state.Carrying and state.Delivered < started and not state.Cancel then
+			task.wait(0.2)
+			dropEgg()
+			local waited = 0
+			while state.Delivered < started and waited < 1 do
+				waited += RunService.Heartbeat:Wait()
+			end
+		end
+		return state.Delivered >= started
+	end
+
+	local function instantTP(uid)
+		local started = os.clock()
+		local lineX, lineY = lineInfo()
+		local r = root()
+		if not r then
+			return false
+		end
+		local laneZ = math.clamp(r.Position.Z, -425, -300)
+		local landing = Vector3.new(lineX + CFG.LandOffset, lineY + 3.35, laneZ)
+
+		-- hops towards the line; a pull-back repeats the same hop with a longer pause (the pause is learned)
+		local hopStep = math.max(walkSpeed() * CFG.HopRatio, CFG.HopMin)
+		local hopY = r.Position.Y + CFG.HopLift
+		local x = r.Position.X
+		local retries = 0
+		local releaseCamera = frozenCamera()
+		state.ReleaseCamera = releaseCamera
+		pcall(postClone)
+		fpsOn()
+
+		while x - hopStep > landing.X and not state.Cancel do
+			if not state.Carrying then
+				-- the server let go of the egg on the way: take it back right away
+				if not regrab(uid) then
+					break
+				end
+				local current = root()
+				if current then
+					x = math.min(x, current.Position.X)
+				end
+				continue
+			end
+
+			local nextX = x - hopStep
+			status(string.format("Instant TP: hopping home, X %d", math.floor(nextX)))
+			local pulledBefore = state.PulledAt
+			local held = 0
+			while held < CFG.HopGap do
+				place(Vector3.new(nextX, hopY, laneZ))
+				held += RunService.Heartbeat:Wait()
+			end
+
+			local check = root()
+			local pulled = state.PulledAt > pulledBefore or (check ~= nil and (check.Position.X - nextX > 10 or check.AssemblyLinearVelocity.Magnitude > 150))
+			if pulled and state.Carrying and not state.Cancel then
+				retries += 1
+				CFG.HopGap = math.min(CFG.HopGapMax, CFG.HopGap + 0.02)
+				if retries > CFG.HopRetries then
+					break
+				end
+				status(string.format("Instant TP: pulled back, retry %d/%d", retries, CFG.HopRetries))
+				local settle = 0
+				while settle < 0.12 and not state.Cancel do
+					place(Vector3.new(x, hopY, laneZ))
+					settle += RunService.Heartbeat:Wait()
+				end
+			else
+				x = nextX
+				CFG.HopGap = math.max(CFG.HopGapMin, CFG.HopGap - 0.01)
+			end
+		end
+
+		-- landing in front of the line
+		status("Instant TP: landing next to the line")
+		landing = Vector3.new(landing.X, groundY(landing, landing.Y), landing.Z)
+		local function land()
+			local current = root()
+			-- never jump backwards: if we are already closer to the line than the landing spot, stay
+			if current and current.Position.X <= landing.X + 1 and current.Position.Y > landing.Y - 25 then
+				pcall(function()
+					current.AssemblyLinearVelocity = Vector3.zero
+				end)
+				return
+			end
+			place(landing)
+		end
+		land()
+		for attempt = 1, 3 do
+			local settle = 0
+			while settle < CFG.LandSettle and not state.Cancel do
+				settle += RunService.Heartbeat:Wait()
+			end
+			local landed = root()
+			if state.Carrying and landed and (landed.Position.X - landing.X > 12 or landed.Position.Y < landing.Y - 25) then
+				status("Instant TP: landing retry " .. attempt)
+				land()
+			else
+				break
+			end
+		end
+		dropClone()
+
+		-- drop at the line, take it back
+		if state.Carrying and not state.Cancel then
+			local delay = 0
+			while delay < CFG.DropDelay do
+				delay += RunService.Heartbeat:Wait()
+			end
+			status("Instant TP: dropping the egg")
+			dropEgg()
+			local waited = 0
+			while state.Carrying and waited < 1 and not state.Cancel do
+				waited += RunService.Heartbeat:Wait()
+			end
+			local current = root()
+			if current then
+				pcall(function()
+					current.AssemblyLinearVelocity = Vector3.zero
+					current.AssemblyAngularVelocity = Vector3.zero
+				end)
+			end
+			-- egg is down: let go of the camera and the copy, then take it back
+			releaseCamera()
+			dropClone()
+			status("Instant TP: taking the egg back")
+			if not grab(uid, 3) and not regrab(uid) then
+				fpsOff()
+				status("Could not take the egg back")
+				return false
+			end
+			dropClone()
+		end
+		releaseCamera()
+
+		-- straight to the safe zone
+		local ok = false
+		if state.Carrying then
+			ok = runHome(lineX, laneZ)
+		end
+		fpsOff()
+		return ok or state.Delivered >= started
+	end
+
+		-- hand-off from Pilat: the egg is already in the hands, the Instant TP return takes it from here
+		local copyOn, cameraOn = postClone, frozenCamera
+		return function(uid, setStatus, alive, decoy)
+			-- Instant Decoy toggle: ON = the copy of the player + frozen camera of the return, OFF = neither
+			postClone = decoy and copyOn or function() end
+			frozenCamera = decoy and cameraOn or function()
+				return function() end
+			end
+			status = setStatus
+			state.Cancel = false
+			state.Uid = uid
+			state.Carrying = true
+			state.GuessedDrop = false
+			state.HeldSeen = os.clock()
+			local watching = true
+			task.spawn(function()
+				while watching do
+					if not alive() then
+						state.Cancel = true
+					end
+					task.wait(0.05)
+				end
+			end)
+			-- Humanoid Swap of yslemEgg (verbatim above): only held during the return, priming and the hop to the egg stay untouched
+			pcall(shieldStart)
+			local swapWait = 0
+			while not (shield.Clone and shield.Clone.Parent) and swapWait < 0.6 do
+				swapWait += RunService.Heartbeat:Wait()
+			end
+			print(string.format("[Pilat Steal] Tes return: swapped=%s ws=%.1f mult=%.2f carrying=%s", tostring(shield.Clone ~= nil and shield.Clone.Parent ~= nil), walkSpeed(), state.Mult, tostring(state.Carrying)))
+			local ok, result = pcall(instantTP, uid)
+			watching = false
+			print(string.format("[Pilat Steal] Tes return end: ok=%s result=%s carrying=%s delivered=%s", tostring(ok), tostring(result), tostring(state.Carrying), tostring(state.Delivered > 0)))
+			pcall(shieldStop)
+			fpsOff()
+			dropClone()
+			if state.ReleaseCamera then
+				pcall(state.ReleaseCamera)
+				state.ReleaseCamera = nil
+			end
+			if not ok then
+				return false, result
+			end
+			return result == true, nil
+		end
+	end)()
+
+	index._tesSteal = function(arg, target)
 		arg:_mutePortalFx(true)
 		arg._boostHopUid = target.Uid
-		arg._v2Uid = target.Uid
-		local ok, result = pcall(arg._v2Hop, arg, target)
-		arg._v2Fake = nil
+		local ok, result = pcall(arg._tesHop, arg, target)
 		arg:_guardLagback(false)
 
 		if arg._boostHopUid == target.Uid then
@@ -10094,7 +10923,7 @@ local v8 = (function()
 		arg:_muteTreeFx(false)
 
 		if not ok then
-			warn("[Pilat Steal] Instant V2 error: " .. tostring(result))
+			warn("[Pilat Steal] Instant Tes error: " .. tostring(result))
 
 			if not arg.destroyed and arg.enabled then
 				arg:_finish("Steal error - retrying")
@@ -10102,19 +10931,23 @@ local v8 = (function()
 		end
 	end
 
-	index._v2Hop = function(arg, target)
-		local V2 = index.V2
+	index._tesHop = function(arg, target)
 		local uid = target.Uid
 		local lanePortals = fn91("FuseBiomeLanePortals")
 		local exitPart = fn91("FuseBiomeZone", "ExitPart")
+
+		local function tesRoot()
+			local character = localPlayer2.Character
+			return character and character:FindFirstChild("HumanoidRootPart"), character and character:FindFirstChildOfClass("Humanoid")
+		end
 
 		local function aborted()
 			return arg.destroyed or not arg.enabled or arg.instantPhase ~= "hunting" or not arg.activeTarget or arg.activeTarget.Uid ~= uid
 		end
 
-		-- leave the fuse biome if we got stuck inside, count the miss, give the egg back to normal Instant after 2
+		-- leave the fuse biome if we got stuck inside, count the miss, give the egg to the priming path after 2
 		local function fail(message)
-			local stuck = v2Root()
+			local stuck = tesRoot()
 
 			if stuck and stuck.Position.Y > n69 then
 				arg:_crossPortal(exitPart, nil, 8)
@@ -10131,13 +10964,13 @@ local v8 = (function()
 			if misses >= 2 then
 				arg.v2Misses[uid] = nil
 				arg.v2Failed = arg.v2Failed or {}
-				arg.v2Failed[uid] = os.clock() + V2.MissCooldown
+				arg.v2Failed[uid] = os.clock() + 60
 			end
 
 			arg:_finish(message)
 		end
 
-		local root, humanoid = v2Root()
+		local root, humanoid = tesRoot()
 
 		if not lanePortals or not exitPart or not root or not humanoid then
 			fail("Steal unavailable - retrying")
@@ -10155,7 +10988,7 @@ local v8 = (function()
 		local safeCF = arg:_resolveSafeCFrame(root)
 
 		if safeCF and not arg:_isInSafeArea(root) then
-			arg:_setStatus("Instant Steal Tes: flying to the safe zone")
+			arg:_setStatus("Heading to target egg")
 			arg:_glideRoot(safeCF, aborted)
 
 			if aborted() then
@@ -10170,14 +11003,17 @@ local v8 = (function()
 		end)
 
 		if safeCF then
-			arg:_setStatus("Instant Steal Tes: in the safe zone, letting the server catch up")
-			local untilAt = os.clock() + math.clamp(V2.SafeWait + ping, V2.SafeWait, V2.SafeWaitMax)
+			local untilAt = os.clock() + math.clamp(0.3 + ping, 0.3, 0.5)
 
 			while os.clock() < untilAt and not aborted() do
-				local holdRoot = v2Root()
+				local holdRoot = tesRoot()
 
 				if holdRoot then
-					v2Set(holdRoot, safeCF)
+					pcall(function()
+						holdRoot.CFrame = safeCF
+						holdRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						holdRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+					end)
 				end
 
 				RunService2.Heartbeat:Wait()
@@ -10188,15 +11024,15 @@ local v8 = (function()
 			end
 		end
 
-		root, humanoid = v2Root()
+		root, humanoid = tesRoot()
 
 		if not root or not humanoid then
 			fail("Character unavailable")
 			return
 		end
 
-		-- 2) lane portal -> fuse biome -> ExitPart
-		arg:_setStatus("Instant Steal Tes: heading to the lane portal")
+		-- 2) teleport onto the egg (lane portal), straight in, straight out through ExitPart
+		arg:_setStatus("Heading to target egg")
 		arg:_guardLagback(true)
 		RunService2.PreSimulation:Wait()
 		humanoid.PlatformStand = true
@@ -10210,7 +11046,6 @@ local v8 = (function()
 		end
 
 		arg:_stopHoverPad()
-		arg:_setStatus("Instant Steal Tes: touching the lane portal")
 		local entered = arg:_crossPortal(lanePortals, aborted, 6)
 		arg:_guardLagback(false)
 
@@ -10218,8 +11053,6 @@ local v8 = (function()
 			fail("Could not reach the egg - retrying")
 			return
 		end
-
-		arg:_setStatus("Instant Steal Tes: inside the Fuse Biome, touching its exit")
 
 		if not arg:_crossPortal(exitPart, aborted, 8) then
 			fail("Could not reach the egg - retrying")
@@ -10230,7 +11063,7 @@ local v8 = (function()
 			return
 		end
 
-		root, humanoid = v2Root()
+		root, humanoid = tesRoot()
 
 		if not root or not humanoid then
 			fail("Character unavailable")
@@ -10253,14 +11086,21 @@ local v8 = (function()
 		arg:_teleportRoot(root, humanoid, dest2)
 		arg:_setArrivalHold(dest2, uid)
 		arg.boostedUid = uid
+		arg:_setStatus("Securing target egg")
 		task.wait(0.35)
 
-		if aborted() then
-			return
-		end
+		-- 3) the exit knocks you down and the carry is refused until it is over: grab the moment it ends
+		local limit = os.clock() + 10
 
-		-- 3) grab and drop a few times, then take it for real
-		arg:_v2FakeGrabs(uid, aborted)
+		while os.clock() < limit and not aborted() do
+			local ragdollEnd = localPlayer2:GetAttribute("RagdollEndTime")
+
+			if type(ragdollEnd) ~= "number" or ragdollEnd + 0.15 <= workspace:GetServerTimeNow() then
+				break
+			end
+
+			RunService2.Heartbeat:Wait()
+		end
 
 		if aborted() then
 			return
@@ -10268,17 +11108,10 @@ local v8 = (function()
 
 		rec = EggState2.ReadFieldEgg(uid) or arg.records[uid]
 
-		if not rec then
+		if not rec or rec.State ~= AreaEggs.States.Slot and rec.State ~= AreaEggs.States.Dropped then
 			arg:_finish("Target egg no longer available")
 			return
 		end
-
-		if rec.State ~= AreaEggs.States.Slot and rec.State ~= AreaEggs.States.Dropped and not v2Carried(uid) then
-			arg:_finish("Target changed")
-			return
-		end
-
-		arg:_setStatus("Instant Steal Tes: taking the egg for real")
 
 		task.spawn(function()
 			pcall(function()
@@ -10289,150 +11122,19 @@ local v8 = (function()
 		arg:_requestCarry(rec, true)
 	end
 
-	-- delivery for Instant V2, called from _instantReturn instead of the relay rounds.
-	-- true = the egg is in hand again and has been put in the safe zone, false = something failed
-	index._v2Home = function(arg, uid, alive)
-		local V2 = index.V2
+	index._tesHome = function(arg, uid, alive)
+		print("[Pilat Steal] Instant Tes: yslemEgg return started")
+		local delivered, err = tesReturn(uid, function(message)
+			print("[Pilat Steal] Tes:", message)
+			arg:_setStatus(tostring(message))
+		end, alive, arg:_betaDecoyOn())
+		print("[Pilat Steal] Instant Tes: yslemEgg return finished, delivered =", delivered, err)
 
-		local function stop()
-			return not alive()
+		if err ~= nil then
+			warn("[Pilat Steal] Instant Tes delivery error: " .. tostring(err))
 		end
 
-		local root, humanoid = v2Root()
-
-		if not root or not humanoid then
-			return false
-		end
-
-		local lineX, lineY = v2Line()
-		local zMin, zMax = v2ZRange()
-		local z = math.clamp(root.Position.Z, zMin, zMax)
-		local face = CFrame.Angles(0, math.pi / 2, 0)
-		local lineCF = CFrame.new(lineX + V2.LineGap, lineY + 3.35, z) * face
-		local hopY = lineCF.Position.Y + V2.CarryHeight
-		local falls = 0
-
-		-- step the egg to the line in WalkSpeed-scaled hops, pinned at the hop height
-		while true do
-			arg:_setStatus("Instant Steal Tes: stepping the egg to the line")
-			root, humanoid = v2Root()
-
-			if not root or not humanoid or not alive() then
-				return false
-			end
-
-			local curX = root.Position.X
-			local step = math.max(arg:_legitWalkSpeed() * V2.HopRatio, V2.MinStep)
-			v2Set(root, CFrame.new(curX, hopY, z) * face)
-
-			while v2Carried(uid) and alive() and curX - step > lineCF.Position.X do
-				curX = curX - step
-				arg:_setStatus(string.format("Instant Steal Tes: stepping home, X %d", math.floor(curX)))
-				local held = 0
-
-				while held < V2.HopGap and v2Carried(uid) and alive() do
-					local pin = v2Root()
-
-					if pin then
-						v2Set(pin, CFrame.new(curX, hopY, z) * face)
-					end
-
-					held = held + RunService2.Heartbeat:Wait()
-				end
-			end
-
-			if v2Carried(uid) and alive() then
-				local pin = v2Root()
-
-				if pin then
-					v2Set(pin, lineCF)
-				end
-			end
-
-			if not alive() then
-				return false
-			end
-
-			local now = v2Root()
-
-			if v2Carried(uid) or not now or (now.Position - lineCF.Position).Magnitude < 60 then
-				break
-			end
-
-			-- the egg fell on the way, go straight back for it
-			falls = falls + 1
-
-			if falls > V2.FallTries then
-				arg:_setStatus("Instant Steal Tes: the egg kept falling, giving up on it")
-				return false
-			end
-
-			arg:_setStatus("Instant Steal Tes: the egg fell, going straight back for it")
-
-			if not arg:_v2Grab(uid, 10, stop, {stand = true}) then
-				return false
-			end
-		end
-
-		-- drop it on the line
-		local waited = 0
-
-		while waited < V2.DropWait and v2Carried(uid) and alive() do
-			waited = waited + RunService2.Heartbeat:Wait()
-		end
-
-		if not alive() then
-			return false
-		end
-
-		if v2Carried(uid) then
-			arg:_setStatus("Instant Steal Tes: dropping the egg at the line")
-			pcall(EggState2.DropFieldEgg, "PlayerRequest")
-			local dropWait = 0
-
-			while v2Carried(uid) and dropWait < 1.5 and alive() do
-				dropWait = dropWait + RunService2.Heartbeat:Wait()
-			end
-		end
-
-		if not alive() then
-			return false
-		end
-
-		-- reset on the treadmill (wear still, then doff)
-		arg:_setStatus("Instant Steal Tes: resetting on the treadmill")
-		arg:_treadmillReset(stop)
-
-		if not alive() then
-			return false
-		end
-
-		-- take the egg back from where it lies
-		arg:_setStatus("Instant Steal Tes: grabbing the egg back")
-		local got, reason = arg:_v2Grab(uid, V2.RegrabTime, stop, {stand = true, nestFail = true, gap = V2.RegrabGap})
-
-		if not alive() then
-			return false
-		end
-
-		if not got then
-			arg:_setStatus(reason == "nest" and "Instant Steal Tes: the egg went back to its nest" or "Instant Steal Tes: could not grab the egg back")
-			return false
-		end
-
-		-- straight into the safe zone
-		arg:_setStatus("Instant Steal Tes: stepping into the safe zone")
-		root, humanoid = v2Root()
-
-		if root and humanoid then
-			local safeCF = arg:_resolveSafeCFrame(root)
-
-			if safeCF then
-				arg:_teleportRoot(root, humanoid, safeCF)
-			end
-		end
-
-		return true
+		return delivered
 	end
 
 	index._needsHiddenRecall = function(arg)
@@ -10967,13 +11669,17 @@ local v8 = (function()
 				end
 			end
 
-			if v8 and arg._v2Uid == forestDropInProgress and arg:_v2() and not pilatV4Config.HelpFriend then
-				-- Instant Steal V2 delivery (line hops, drop, treadmill reset, regrab)
+			if v8 and arg:_v2() and not pilatV4Config.HelpFriend then
+				-- Instant Steal Tes delivery: the Instant TP return of yslemEgg (line hops, drop, take back, run home)
 				arg._forestDropInProgress = forestDropInProgress
-				local okHome, homed = pcall(arg._v2Home, arg, forestDropInProgress, fn94)
+				arg:_stopHoverPad()
+				if not arg:_betaDecoyOn() then
+					arg:_hideTreadmillDecoy(true)
+				end
+				local okHome, homed = pcall(arg._tesHome, arg, forestDropInProgress, fn94)
 
 				if not okHome then
-					warn("[Pilat Steal] Instant V2 delivery error: " .. tostring(homed))
+					warn("[Pilat Steal] Instant Tes delivery error: " .. tostring(homed))
 				end
 
 				arg._forestDropInProgress = nil
@@ -11982,8 +12688,6 @@ local v8 = (function()
 	index._finish = function(arg, arg2)
 		arg:_noteLowSpeedOutcome(arg2)
 		arg:_hideTreadmillDecoy()
-		arg._v2Uid = nil
-		arg._v2Fake = nil
 		arg._forestDropInProgress = nil
 		arg._instantReturnToken = nil
 		arg.boostedUid = nil
@@ -12384,7 +13088,8 @@ local v8 = (function()
 			return
 		end
 
-		if arg:_usesV2(v10) then
+
+		if arg:_usesTes(v10) then
 			arg.instantPhase = "hunting"
 			arg.primerUid = nil
 			arg.targetUid = nil
@@ -12394,7 +13099,7 @@ local v8 = (function()
 			arg:_startMovementProtection()
 			arg:_showTreadmillDecoy()
 			arg.stats.lastResult = "Instant Steal Tes"
-			task.spawn(arg._v2Steal, arg, v10)
+			task.spawn(arg._tesSteal, arg, v10)
 			return
 		end
 
@@ -35025,7 +35730,7 @@ local function fn66()
 
 	tbl24.godMode = v40:AddToggle({Title = "Aura Bat", Content = "", Default = false, Callback = fn144(fn80)})
 
-	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes only applies to Titan Temple, Light Dark and Enchanted Forest (grab and drop, line hops, treadmill reset, regrab), other eggs use normal Instant; needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
+	tbl24.stealMode = v40:AddDropdown({Title = "Steal Mode", Content = "If you have good speed better use High Speed User, but if you are newbie, use Instant Steal V1. Instant Steal V2 is recommended: shorter settle that tunes itself. Instant Steal Tes primes like Instant V2 without boost and waits on the egg with the V2 timing but standing (no flying), then returns with the yslemEgg Instant TP logic (line hops, drop at the line, take it back, run home); needs enough Speed.", Options = {"Instant Steal V1", "Instant Steal Tes", "Instant Steal V2", "High Speed User Normal", "High Speed User (Fly)", "Zig-Zag High Speed User"}, MaxVisible = 6, Default = "Instant Steal V2", Multi = false, Callback = fn144(function(arg)
 		fn89(arg)
 
 		if type(pilatPanels.syncStealMode) == "function" then
@@ -37375,6 +38080,9 @@ local function fn66()
 			-- Phantom Express in progress (town stay, boarded, ride, return): nothing that moves the character (fishing) may run
 			local TRAIN_BUSY_PHASES = {Town = true, Boarded = true, Departing = true, Returning = true, Respawning = true}
 			local function trainBusy()
+				if hw.KeyBusy and hw.KeyBusy() then
+					return false
+				end
 				local phase = attr("TrainEventPhase")
 				if phase == nil and tr.State and os.clock() - tr.At < 10 then
 					phase = tr.State.Phase
@@ -37442,7 +38150,7 @@ local function fn66()
 			local noclip, touched = false, {}
 			local noclipConn = RunService.Stepped:Connect(function()
 				local char = localPlayer.Character
-				if (noclip or (on("HwDimNoclip", true) and (localPlayer:GetAttribute("InHalloweenDimension") == true or onTrainNoclip()))) and char then
+				if (noclip or (on("HwDimNoclip", true) and (localPlayer:GetAttribute("InHalloweenDimension") == true or onTrainNoclip()) and localPlayer:GetAttribute("InSewerCave") ~= true and localPlayer:GetAttribute("InManorInterior") ~= true and localPlayer:GetAttribute("InPumpkinArena") ~= true)) and char then
 					for _, part in ipairs(char:GetDescendants()) do
 						if part:IsA("BasePart") and part.CanCollide then
 							touched[part] = true
@@ -40041,12 +40749,766 @@ local function fn66()
 				return res
 			end
 
+			-- own function scope: the Halloween closure is close to Lua's 200 locals limit
+			local pbx = (function()
+				-- ---------------------------------------------------------------- Halloween Part 2: Pumpkin Boss + Manor Key
+				-- Ported from StealAnEggg ("38_pumpkin#1": Pumpkin King arena fight, stub drops, boss mastery, Manor Key).
+				local pb = {drops = {}, hz = {}, shot = 0, at = 0, hitAt = 0, kills = 0, nc = false}
+				hw.PB = pb
+				if cfg.HwPbDodge == nil then cfg.HwPbDodge = true end
+				if cfg.HwPbClaim == nil then cfg.HwPbClaim = true end
+				hw.PbSpeed = tonumber(hw.PbSpeed) or 300
+
+				local function notify(title, text)
+					pcall(function()
+						flag6:Notify({Title = title, Content = text, Duration = 3})
+					end)
+				end
+
+				local function pbWindow()
+					return math.floor(Workspace:GetServerTimeNow() / 1800)
+				end
+
+				-- ---------------- server events: drops / hazards / defeated
+				local pbHooked = {}
+				local function pbHook(name, handler)
+					if pbHooked[name] then
+						return true
+					end
+					local remote = rt.network(name)
+					if remote and remote:IsA("RemoteEvent") then
+						pbHooked[name] = true
+						remote.OnClientEvent:Connect(function(...)
+							pcall(handler, ...)
+						end)
+						return true
+					end
+					return false
+				end
+
+				local function pbHookAll()
+					local all = true
+					all = pbHook("RE/PumpkinBoss/Drops", function(list)
+						for _, drop in ipairs(type(list) == "table" and list or {}) do
+							if type(drop) == "table" and drop.OwnerUserId == localPlayer.UserId and type(drop.Id) == "string" then
+								pb.drops[drop.Id] = drop
+							end
+						end
+					end) and all
+					all = pbHook("RE/PumpkinBoss/Hazard", function(hz)
+						if type(hz) == "table" and type(hz.Id) == "number" and typeof(hz.Origin) == "Vector3" then
+							pb.hz[hz.Id] = hz
+						end
+					end) and all
+					all = pbHook("RE/PumpkinBoss/RemoveDrops", function(ids)
+						for _, id in ipairs(type(ids) == "table" and ids or {}) do
+							pb.drops[id] = nil
+						end
+					end) and all
+					all = pbHook("RE/PumpkinBoss/Fx", function(kind, data)
+						if kind == "Currency" and type(data) == "table" then
+							pb.stubs = (pb.stubs or 0) + (tonumber(data.Amount) or 0)
+						elseif kind == "Defeated" and type(data) == "table" and data.Stage == nil then
+							pb.done, pb.doneAt = pbWindow(), os.clock()
+							pb.kills += 1
+							notify("Pumpkin Boss", "The Pumpkin King is defeated")
+						end
+					end) and all
+					return all
+				end
+
+				task.spawn(function()
+					while fn2() do
+						if pbHookAll() then
+							break
+						end
+						task.wait(3)
+					end
+				end)
+
+				-- ---------------- schedule / gate
+				local pbSched
+				local function pbSchedule()
+					if pbSched == nil then
+						local ok2, mod = pcall(function()
+							return require(ReplicatedStorage.Shared.Util.PumpkinBossSchedule)
+						end)
+						pbSched = ok2 and mod or false
+					end
+					return pbSched or nil
+				end
+
+				local function gateOpen()
+					return flagValue("HalloweenDimensionFlags", "ManorGateOpen") == true
+				end
+
+				local function pbOpen()
+					local sched = pbSchedule()
+					if not sched or not gateOpen() then
+						return false
+					end
+					local ok2, open = pcall(sched.IsOpen, Workspace:GetServerTimeNow())
+					return ok2 and open == true
+				end
+
+				-- seconds until the portal opens, false = disabled on this server, nil = unknown
+				function pb.left()
+					local sched = pbSchedule()
+					if not sched then
+						return nil
+					end
+					local okEnabled, enabled = pcall(sched.Enabled)
+					if okEnabled and enabled == false then
+						return false
+					end
+					local ok2, secs = pcall(sched.SecondsUntilOpen, Workspace:GetServerTimeNow())
+					return ok2 and secs or nil
+				end
+
+				local function pbArena()
+					local arena = Workspace:FindFirstChild("PumpkinArena")
+					return arena and arena:IsA("Model") and arena or nil
+				end
+
+				local function inArena()
+					return attr("InPumpkinArena") == true
+				end
+				pb.inArena = inArena
+
+				-- ---------------- stub drops: collected as soon as they are collectable (magnet / in range)
+				task.spawn(function()
+					while fn2() do
+						task.wait(0.2)
+						if on("HwPumpBoss") and next(pb.drops) ~= nil then
+							pcall(function()
+								local root, now, ids = rootPart(), Workspace:GetServerTimeNow(), {}
+								for id, drop in next, pb.drops do
+									if (tonumber(drop.ExpiresAt) or math.huge) < now then
+										pb.drops[id] = nil
+									elseif now >= (tonumber(drop.CollectAfter) or 0) and ((drop.MagnetAt and now >= drop.MagnetAt) or (root and typeof(drop.Position) == "Vector3" and (root.Position - drop.Position).Magnitude <= (tonumber(drop.Radius) or 10) + 2)) then
+										ids[#ids + 1] = id
+										if #ids >= 8 then
+											break
+										end
+									end
+								end
+								if #ids > 0 then
+									fire("RE/PumpkinBoss/Collect", ids)
+								end
+							end)
+						end
+					end
+				end)
+
+				-- ---------------- boss mastery rewards
+				local pbMasteryAt = 0
+				task.spawn(function()
+					while fn2() do
+						task.wait(3)
+						if on("HwPbClaim", true) and inDim() and os.clock() >= pbMasteryAt then
+							pcall(function()
+								local data = saveData()
+								local state = data and data.HalloweenDimension
+								local mastery = type(state) == "table" and state.BossMastery
+								local mod = dataModule("HalloweenBossMastery")
+								if type(mastery) ~= "table" or not mod or type(mod.Milestones) ~= "table" then
+									return
+								end
+								local claimed = type(mastery.ClaimedMilestoneIds) == "table" and mastery.ClaimedMilestoneIds or {}
+								for _, milestone in ipairs(mod.Milestones) do
+									if milestone.Kills <= (tonumber(mastery.Mastery) or 0) and not claimed[milestone.Id] then
+										local _, res, reason = invoke("RF/HalloweenDimension/AskClaimMastery", milestone.Id)
+										if res == true then
+											notify("Pumpkin King Mastery", "Claimed reward " .. tostring(milestone.Kills))
+										else
+											pbMasteryAt = os.clock() + 60
+											hw.Status = "Mastery: " .. tostring(reason or "refused")
+										end
+										return
+									end
+								end
+							end)
+						end
+					end
+				end)
+
+				-- ---------------- hazards (boss attack zones)
+				local hazardMod
+				local function hazardLib()
+					if hazardMod == nil then
+						local ok2, mod = pcall(function()
+							return require(ReplicatedStorage.Shared.Util.ScrambleBossHazards)
+						end)
+						hazardMod = ok2 and mod or false
+					end
+					return hazardMod or nil
+				end
+
+				local function inHazard(pos, flag)
+					local lib = hazardLib()
+					if not lib or not on("HwPbDodge", true) then
+						return false
+					end
+					local now = Workspace:GetServerTimeNow()
+					for id, hz in next, pb.hz do
+						local ok2, active = pcall(lib.ActiveSeconds, hz)
+						local elapsed = now - (tonumber(hz.At) or 0)
+						if not ok2 or type(active) ~= "number" or elapsed > active + 0.15 then
+							pb.hz[id] = nil
+						elseif elapsed > -0.7 then
+							local from = math.max(elapsed, 0)
+							for _, t in ipairs({from, math.min(from + 0.15, active)}) do
+								local ok3, hit = pcall(lib.Contains, hz, t, pos, flag, 3)
+								if ok3 and hit then
+									return true
+								end
+							end
+						end
+					end
+					return false
+				end
+
+				-- returns a safe spot (nearest point outside every hazard on rings around the centre) and whether we had to dodge
+				local function dodgePoint(pos, center, radius, flag)
+					if not inHazard(pos, flag) then
+						return pos, false
+					end
+					local best, bestDist
+					for _, ring in ipairs({radius * 0.6, radius, radius + 15}) do
+						for i = 0, 11 do
+							local angle = math.rad(i * 30)
+							local cand = Vector3.new(center.X + math.cos(angle) * ring, pos.Y, center.Z + math.sin(angle) * ring)
+							local dist = (cand - pos).Magnitude
+							if (not bestDist or dist < bestDist) and not inHazard(cand, flag) then
+								best, bestDist = cand, dist
+							end
+						end
+					end
+					return best or pos, true
+				end
+
+				-- ---------------- movement inside the arena (velocity based, no teleport spam)
+				local function pbMove(goal, look, vertical, maxSpeed, extra)
+					local root = rootPart()
+					if not root then
+						return math.huge
+					end
+					local arena, hum = pbArena(), humanoid()
+					local delta = flat(goal - root.Position)
+					local run = Vector3.zero
+					if delta.Magnitude > 2 then
+						run = delta.Unit * math.min(maxSpeed or ((hum and hum.WalkSpeed or 16) * 0.95), delta.Magnitude / 0.1)
+					end
+					local total = run + (extra or Vector3.zero)
+					local floorY = arena and tonumber(arena:GetAttribute("FloorY"))
+					local vy = root.AssemblyLinearVelocity.Y
+					if vertical and floorY then
+						local base = floorY + (hum and hum.HipHeight or 2) + root.Size.Y / 2
+						vy = math.clamp((math.max(base + (delta.Magnitude > 30 and 25 or 0), vertical > 0 and base + vertical or 0) - root.Position.Y) * 6, -80, 80)
+					end
+					root.AssemblyLinearVelocity = Vector3.new(total.X, vy, total.Z)
+					if look then
+						local dir = flat(look - root.Position)
+						if dir.Magnitude > 0.1 then
+							root.CFrame = CFrame.new(root.Position, root.Position + dir.Unit)
+						end
+					end
+					return delta.Magnitude
+				end
+
+				local function pbApproach(pos, dist, vertical)
+					local root = rootPart()
+					if not root then
+						return
+					end
+					local away = flat(root.Position - pos)
+					local dir = away.Magnitude > 0.1 and away.Unit or Vector3.new(0, 0, 1)
+					return pbMove(pos + dir * dist, pos, vertical)
+				end
+
+				local function nearestOf(list, pos)
+					local best, bestDist
+					for _, inst in ipairs(list) do
+						local p = posOf(inst)
+						local dist = p and (p - pos).Magnitude
+						if dist and (not bestDist or dist < bestDist) then
+							best, bestDist = inst, dist
+						end
+					end
+					return best, bestDist
+				end
+
+				local function pbHit()
+					local weapon = pickWeapon()
+					if not weapon then
+						pb.say = "Get a bat to fight the boss"
+						return
+					end
+					swing(weapon)
+				end
+
+				local function bossModel(arena)
+					local name = arena:GetAttribute("Boss")
+					local model = type(name) == "string" and arena:FindFirstChild(name) or arena:FindFirstChild("King") or arena:FindFirstChild("Brute")
+					return model and model:IsA("Model") and model or nil
+				end
+
+				local function bossHitbox(model)
+					local part = model and (model:FindFirstChild("Hitbox") or model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)
+					return part and part:IsA("BasePart") and part or nil
+				end
+
+				local function pickCannon(arena, root)
+					local folder = arena:FindFirstChild("Cannons")
+					local best, bestDist
+					for _, cannon in ipairs(folder and folder:GetChildren() or {}) do
+						local owner, zone = cannon:GetAttribute("OwnerUserId"), cannon:FindFirstChild("OperatorZone")
+						if zone and zone:IsA("BasePart") and (owner == localPlayer.UserId or owner == 0 or owner == nil) then
+							local dist = (zone.Position - root.Position).Magnitude - (owner == localPlayer.UserId and 10000 or 0)
+							if not bestDist or dist < bestDist then
+								best, bestDist = cannon, dist
+							end
+						end
+					end
+					return best
+				end
+
+				-- hover behind / above the boss so melee hits land, dodging attack zones
+				local function pbStand(hitbox, model)
+					local root = rootPart()
+					if not root then
+						return
+					end
+					local now = os.clock()
+					local bossPos = hitbox.Position
+					local vel = Vector3.zero
+					if pb.lp and now > pb.lt then
+						vel = flat(bossPos - pb.lp) / (now - pb.lt)
+					end
+					pb.lp, pb.lt = bossPos, now
+					local look = flat(model:GetPivot().LookVector)
+					look = look.Magnitude > 0.1 and look.Unit or Vector3.new(0, 0, 1)
+					local cf, half = hitbox.CFrame, hitbox.Size / 2
+					local reach = math.abs(look:Dot(cf.RightVector)) * half.X + math.abs(look:Dot(cf.LookVector)) * half.Z
+					local arena = pbArena()
+					local floorY = arena and tonumber(arena:GetAttribute("FloorY")) or bossPos.Y - half.Y
+					local spot, dodged = dodgePoint(bossPos - look * reach * 0.6, bossPos, math.max(half.X, half.Z) + 3, true)
+					if dodged then
+						pb.say = "Dodging the boss attack"
+					end
+					pb.nc = true
+					pbMove(spot, bossPos, flat(spot - root.Position).Magnitude > 25 and bossPos.Y + half.Y - floorY + 10 or math.max(bossPos.Y + half.Y / 2 - floorY, bossPos.Y - half.Y - floorY + 12, 12), nil, vel.Magnitude < 400 and vel or nil)
+				end
+
+				-- one frame of the fight: stubs > vines > shield/cannon > boss
+				local function pbTick(alive)
+					local arena, root = pbArena(), rootPart()
+					if not (arena and root) then
+						return sleep(0.3, alive)
+					end
+					local center = arena:GetAttribute("Center")
+					if typeof(center) ~= "Vector3" or (root.Position - center).Magnitude > (tonumber(arena:GetAttribute("Radius")) or 220) + 100 then
+						pb.say = "Waiting to be let into the arena"
+						return sleep(0.2, alive)
+					end
+					local phase, now = tostring(arena:GetAttribute("Phase") or ""), Workspace:GetServerTimeNow()
+					pb.nc = false
+
+					-- 1) Pumpkin Stubs
+					local bestDrop, bestDist
+					for _, drop in next, pb.drops do
+						if typeof(drop.Position) == "Vector3" and now >= (tonumber(drop.CollectAfter) or 0) then
+							local dist = (drop.Position - root.Position).Magnitude - (os.clock() - (drop.req or -9) < 0.6 and 10000 or 0)
+							if not bestDist or dist < bestDist then
+								bestDrop, bestDist = drop, dist
+							end
+						end
+					end
+					if bestDrop then
+						pb.say = "Collecting Pumpkin Stubs"
+						local spot = dodgePoint(bestDrop.Position, bestDrop.Position, 12, false)
+						local dist = pbMove(spot, nil, 0, hw.PbSpeed)
+						if dist <= (tonumber(bestDrop.Radius) or 7) - 1 and os.clock() - (bestDrop.req or -9) >= 0.6 then
+							local ids, here = {}, root.Position
+							for id, drop in next, pb.drops do
+								if typeof(drop.Position) == "Vector3" and now >= (tonumber(drop.CollectAfter) or 0) and (drop.Position - here).Magnitude <= (tonumber(drop.Radius) or 7) then
+									drop.req = os.clock()
+									ids[#ids + 1] = id
+								end
+							end
+							fire("RE/PumpkinBoss/Collect", ids)
+						end
+						return
+					end
+
+					-- 2) trapped in vines: break them
+					local char = localPlayer.Character
+					if char and char:GetAttribute("IsTrapped") == true then
+						local vines = arena:FindFirstChild("Vines")
+						local vine = vines and nearestOf(vines:GetChildren(), root.Position)
+						pb.say = "Breaking the vines"
+						if vine then
+							pbApproach(posOf(vine), 4)
+						end
+						return pbHit()
+					end
+
+					-- 3) shield phase: break the cannon roots, then fire the cannon
+					if phase == "Shield" then
+						local cannon = pickCannon(arena, root)
+						local zone = cannon and cannon:FindFirstChild("OperatorZone")
+						local roots = cannon and cannon:FindFirstChild("RootHitbox")
+						if cannon and cannon:GetAttribute("Ready") ~= true and roots and roots:IsA("BasePart") then
+							pb.say = "Breaking the roots on the cannon"
+							pbApproach(roots.Position, math.max(roots.Size.X, roots.Size.Z) / 2 + 3)
+							return pbHit()
+						end
+						pb.say = "Shield up, firing the cannon"
+						if zone then
+							local spot = dodgePoint(zone.Position, zone.Position, 14, false)
+							if pbMove(spot) <= 2.5 and cannon:GetAttribute("Ready") == true and os.clock() - pb.at >= 1.05 then
+								pb.at, pb.shot = os.clock(), pb.shot + 1
+								fire("RE/PumpkinBoss/CannonFire", pb.shot)
+							end
+						end
+						return
+					end
+
+					-- 4) the boss itself
+					local model = bossModel(arena)
+					local hitbox = bossHitbox(model)
+					if hitbox and (phase == "Brute" or phase == "King" or phase == "Stunned") then
+						pb.say = phase == "Stunned" and "King stunned, hitting hard" or ("Fighting the Pumpkin " .. (model.Name == "King" and "King" or "Brute"))
+						pbStand(hitbox, model)
+						return pbHit()
+					end
+					pb.say = phase == "Defeated" and "Boss defeated, collecting drops" or ("Waiting for the fight (" .. phase .. ")")
+					return sleep(0.2, alive)
+				end
+
+				local function leaveArena(alive)
+					local exit = CollectionService:GetTagged("PumpkinBossExit")[1]
+					local part = exit and (exit:IsA("BasePart") and exit or exit:FindFirstChildWhichIsA("BasePart", true))
+					if not part then
+						return
+					end
+					hw.Status = "Leaving the Pumpkin arena"
+					for _ = 1, 40 do
+						if not inArena() or not alive() then
+							break
+						end
+						pbMove(part.Position)
+						touch(part)
+						step()
+					end
+				end
+
+				local function enterArena(alive)
+					local d = dim()
+					local portal = (d and d:FindFirstChild("BossPortal", true)) or Workspace:FindFirstChild("BossPortal", true)
+					local hit = portal and (portal:IsA("BasePart") and portal or portal:FindFirstChild("Hitbox", true))
+					if not hit then
+						hw.Status = "Pumpkin portal not found"
+						return false
+					end
+					hw.Status = "Going into the Pumpkin King portal"
+					for _ = 1, 8 do
+						if inArena() or not alive() then
+							break
+						end
+						tp(CFrame.new(hit.Position))
+						step()
+					end
+					if alive() and not inArena() then
+						pcall(function()
+							hit.CanTouch = true
+						end)
+						sweepThroughPortal(hit, function()
+							return alive() and not inArena()
+						end)
+					end
+					return waitFor(inArena, 3, alive)
+				end
+
+				local function pbActive()
+					if not on("HwPumpBoss") then
+						return false
+					end
+					if inArena() then
+						return true
+					end
+					return pbOpen() and pb.done ~= pbWindow() and dimOk() and os.clock() >= (pb.retryAt or 0)
+				end
+
+				local function pbRun(alive)
+					if not inArena() then
+						if not inDim() and not enterDim(alive) then
+							pb.retryAt = os.clock() + 10
+							return false
+						end
+						if not enterArena(alive) then
+							pb.retryAt = os.clock() + 15
+							hw.Status = "Pumpkin portal did not take you"
+							return false
+						end
+					end
+					local started = os.clock()
+					while alive() and inArena() do
+						noclip = pb.nc == true
+						pbTick(alive)
+						hw.Status = pb.say or "Pumpkin Boss"
+						if pb.done == pbWindow() and os.clock() - (pb.doneAt or 0) > 8 and next(pb.drops) == nil then
+							break
+						end
+						step()
+					end
+					noclip = false
+					walkStop()
+					if alive() and inArena() and pb.done == pbWindow() then
+						leaveArena(alive)
+					end
+					if not inArena() then
+						table.clear(pb.drops)
+						table.clear(pb.hz)
+					end
+					return os.clock() - started > 1
+				end
+
+				-- ---------------- Manor Key: whirlpool (in the Phantom Express town) -> sewer cave -> fish the key -> pipe -> manor door
+				local function manorState()
+					local data = saveData()
+					local state = data and data.HalloweenDimension
+					return type(state) == "table" and type(state.Manor) == "table" and state.Manor or {}
+				end
+
+				local function inSewer()
+					return attr("InSewerCave") == true
+				end
+
+				local function inManor()
+					return attr("InManorInterior") == true
+				end
+
+				local function keySay(text)
+					pb.keyStatus = text
+					hw.Status = text
+				end
+
+				local function manorModule()
+					local ok2, mod = pcall(function()
+						return require(ReplicatedStorage.Shared.Util.ManorInterior)
+					end)
+					return ok2 and type(mod) == "table" and mod or nil
+				end
+
+				local function sewerMarker(name)
+					local assets = Workspace:FindFirstChild("TrainEventAssets")
+					local cave = assets and assets:FindFirstChild("SewerCave")
+					local markers = cave and cave:FindFirstChild("Markers")
+					local part = markers and markers:FindFirstChild(name)
+					return part and part:IsA("BasePart") and part or nil
+				end
+
+				-- the Phantom Express worker also needs to know when the key job owns the character
+				hw.KeyBusy = function()
+					return on("HwKey") and (inSewer() or inManor())
+				end
+
+				hw.KeyRide = function()
+					if not on("HwKey") or os.clock() < (pb.keyFailAt or 0) then
+						return false
+					end
+					local manor = manorState()
+					return manor.KeyClaimed ~= true and manor.GateUnlocked ~= true
+				end
+
+				local function trainRideOn()
+					return on("TrainRide") or hw.KeyRide()
+				end
+
+				-- called by the Phantom Express town loop: jump into the whirlpool. true = we jumped (or are already in the cave)
+				hw.KeyTown = function(inTown)
+					if not hw.KeyRide() then
+						return false
+					end
+					local assets = Workspace:FindFirstChild("TrainEventAssets")
+					local whirl = assets and assets:FindFirstChild("Steal an Egg Whirlpool", true)
+					if not whirl then
+						pb.keyFailAt = os.clock() + 60
+						keySay("Manor Key: whirlpool not found")
+						return false
+					end
+					keySay("Jumping into the whirlpool for the Manor Key")
+					local pos, root = whirl:GetPivot().Position, rootPart()
+					if root and flat(pos - root.Position).Magnitude > 10 then
+						flyTo(Vector3.new(pos.X, root.Position.Y, pos.Z), inTown, 300)
+					end
+					for i = 1, 80 do
+						if inSewer() or not inTown() then
+							break
+						end
+						tp(CFrame.new(pos + Vector3.new(0, i % 2 == 0 and 2 or 6, 0)))
+						task.wait(0.1)
+					end
+					noclip = false
+					if waitFor(inSewer, 5, function() return true end) then
+						return true
+					end
+					pb.keyFailAt = os.clock() + 60
+					keySay("Manor Key: the whirlpool did not take you")
+					return false
+				end
+
+				-- cast inside the sewer cave (water is found towards the surface marker)
+				local function sewerFish(alive)
+					local rod = rodTool()
+					if not rod then
+						keySay("Manor Key needs the fishing rod from the Ghost Dog quest")
+						sleep(1, alive)
+						return false
+					end
+					if os.clock() < hw.FishAt then
+						sleep(math.min(hw.FishAt - os.clock(), 1), alive)
+						return true
+					end
+					local root = rootPart()
+					if not root then
+						return false
+					end
+					local surface = sewerMarker("Surface")
+					local toward = surface and flat(surface.Position - root.Position)
+					local look = toward and toward.Magnitude > 1 and toward.Unit or Vector3.new(0, 0, -1)
+					local water = findWater(root.Position, math.atan2(look.Z, look.X), 35, nil)
+					if not water then
+						keySay("Manor Key: looking for water to fish")
+						sleep(1, alive)
+						return true
+					end
+					local pin = pinTo(root, water)
+					if (root.Position - pin.Position).Magnitude > 1.5 then
+						tp(pin)
+					end
+					keySay("Manor Key: fishing for the key")
+					hw.CastBusy = true
+					local ok2, res = pcall(hw.CastAndReel, alive, rod, water)
+					hw.CastBusy = false
+					if not ok2 then
+						error(res, 0)
+					end
+					return res
+				end
+
+				local function keyActive()
+					if not on("HwKey") then
+						return false
+					end
+					if inManor() then
+						return true
+					end
+					if pb.keyDone or os.clock() < (pb.keyAt or 0) then
+						return false
+					end
+					local manor = manorState()
+					return manor.GateUnlocked ~= true and (inSewer() or (manor.KeyClaimed == true and dimOk()))
+				end
+
+				local function keyRun(alive)
+					local manor = manorState()
+					-- inside the manor: walk straight back out
+					if inManor() then
+						local mod = manorModule()
+						local exit = mod and mod.Marker(mod.Markers.Exit)
+						if not exit then
+							return false
+						end
+						keySay("Leaving the manor")
+						for _ = 1, 50 do
+							if not inManor() or not alive() then
+								break
+							end
+							tp(exit.CFrame)
+							task.wait(0.1)
+						end
+						return waitFor(function() return not inManor() end, 8, alive)
+					end
+					-- in the sewer cave: fish until the key is claimed, then take the pipe
+					if inSewer() then
+						if manor.KeyClaimed ~= true then
+							if not pb.met then
+								pb.met = true
+								fire("RE/SewerCave/MetWorker")
+							end
+							return sewerFish(alive)
+						end
+						local pipe = sewerMarker("Pipe")
+						if not pipe then
+							return false
+						end
+						keySay("Taking the pipe to the manor door")
+						for _ = 1, 60 do
+							if not inSewer() or not alive() then
+								break
+							end
+							tp(pipe.CFrame)
+							task.wait(0.1)
+						end
+						return waitFor(function() return not inSewer() end, 10, alive)
+					end
+					-- key in the pocket: unlock the door from outside
+					if not inDim() and not enterDim(alive) then
+						pb.keyAt = os.clock() + 10
+						return false
+					end
+					local mod = manorModule()
+					local doors = mod and mod.Doors()
+					if not doors then
+						pb.keyAt = os.clock() + 15
+						return false
+					end
+					local goal = mod.DoorOutside(doors).Position + Vector3.new(0, 3, 0)
+					keySay("Unlocking the manor door")
+					if not flyTo(goal, alive, 300) then
+						return false
+					end
+					local _, res, reason = invoke("RF/ManorInterior/Request")
+					if res == "Unlocked" or res == "Enter" then
+						pb.keyDone = true
+						keySay("The manor door is unlocked")
+						notify("Manor Key", "The manor door is unlocked")
+					else
+						keySay("Manor door: " .. tostring(reason or res))
+						pb.keyAt = os.clock() + 30
+					end
+					return true
+				end
+
+
+				return {
+					pb = pb,
+					pbActive = pbActive,
+					pbRun = pbRun,
+					keyActive = keyActive,
+					keyRun = keyRun,
+					trainRideOn = trainRideOn,
+					manorState = manorState,
+					inManor = inManor,
+					inSewer = inSewer,
+				}
+
+			end)()
+
 			-- ---------------------------------------------------------------- field scheduler
 			-- FIX in/out portal loop: with this on, Halloween walked into the portal only to look for eggs, found none, left (the ladder
 			-- sent it back out) and came back 30s later. Off by default: eggs are only scouted once we are already inside the dimension.
 			-- Turn it back on with  getgenv().__PilatV4HwScoutOutside = true  (it then backs off 30s -> 60s -> ... -> 10min after empty scouts)
 			local HW_SCOUT_OUTSIDE = false
 			local function nextTask()
+				if pbx.pbActive() then
+					return "pboss"
+				end
+				if pbx.keyActive() then
+					return "hwkey"
+				end
 				if monsterWaiting() and not carried() and attr("HalloweenPumpkinCarrying") ~= true then
 					return nil
 				end
@@ -40093,6 +41555,9 @@ local function fn66()
 					end
 				end
 				local base = nextTask()
+				if base == "pboss" or base == "hwkey" then
+					return base
+				end
 				if hw.Pend then
 					if base == "monsters" and not monsterAvailable() then
 						return "reel"
@@ -40112,6 +41577,8 @@ local function fn66()
 				monsters = {key = function() return on("HwMonsters") and not monsterWaiting() end, run = fightMonster},
 				fishing = {key = function() return on("HwFishing") and hw.RotTurn() ~= "tread" and (not monsterWaiting() or hw.FishInField()) end, run = fishOnce},
 				reel = {key = function() return on("HwFishing") end, run = reelPending},
+				pboss = {key = pbx.pbActive, run = pbx.pbRun},
+				hwkey = {key = pbx.keyActive, run = pbx.keyRun},
 			}
 
 			task.spawn(function()
@@ -40123,7 +41590,7 @@ local function fn66()
 					else
 						task.wait(0.35)
 					end
-					local anyOn = on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwFishing") or on("HwPumpkin", true)
+					local anyOn = on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwFishing") or on("HwPumpkin", true) or on("HwPumpBoss") or on("HwKey")
 					if not anyOn then
 						hw.Status = "Off"
 						idleSince = nil
@@ -40167,7 +41634,7 @@ local function fn66()
 									if inDim() and not carried() then
 										pcall(leaveDim, alive)
 									end
-								elseif not enterDim(alive) then
+								elseif job ~= "pboss" and job ~= "hwkey" and not enterDim(alive) then
 									sleep(2, alive)
 									return
 								end
@@ -40915,6 +42382,9 @@ local function fn66()
 				tr.Left, tr.Ghost = nil, nil
 				tr.SoulsTries = 0
 				tr.BossSmooth, tr.BossStepAt = nil, nil
+				if hw.KeyTown and hw.KeyTown(inTown) then
+					return
+				end
 				while inTown() do
 					-- died / boss showed up while the character is outside the Phantom Express: portal -> station -> board again
 					if needsRejoin() then
@@ -41068,7 +42538,7 @@ local function fn66()
 			task.spawn(function()
 				while fn2() do
 					task.wait(0.5)
-					local rideOn, bossOn = on("TrainRide"), on("TrainBoss", true)
+					local rideOn, bossOn = pbx.trainRideOn(), on("TrainBoss", true)
 					if rideOn or bossOn or on("TrainSouls") then
 						hookTrainRemotes()
 						if os.clock() - (tr.PollAt or 0) >= 3 then
@@ -41142,15 +42612,16 @@ local function fn66()
 					elseif rideOn and (phase == "Town" or (boardingOpen() and os.clock() >= (tr.FailAt or 0) and hasTrainAccess() and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) and higherTask() == nil)) then
 						local mode = phase == "Town" and "town" or "board"
 						local eggsFirst = mode == "board" and (carried() or (on("HwEggs") and pickEgg() ~= nil))
-						if eggsFirst then
-							tr.Status = "Phantom Express is boarding, stealing the egg first"
+						local keyBusy = mode == "town" and hw.KeyBusy ~= nil and hw.KeyBusy()
+						if eggsFirst or keyBusy then
+							tr.Status = keyBusy and "Manor Key in progress" or "Phantom Express is boarding, stealing the egg first"
 						else
 							if mode == "town" then
 								hw.Owner = "train"
 							end
 							if claim("train") then
 								local alive = makeAlive(function()
-									return on("TrainRide") and hw.Owner == "train"
+									return pbx.trainRideOn() and hw.Owner == "train"
 								end)
 								local ok2, err = pcall(function()
 									leaveTreadmill(alive)
@@ -41227,9 +42698,9 @@ local function fn66()
 							local phase = trPhase()
 							if hw.Owner ~= nil and (hw.Job ~= "fishing" and hw.Job ~= "reel") then
 								value = true
-							elseif on("TrainRide") and (phase == "Town" or trainRiding[phase] == true) then
+							elseif pbx.trainRideOn() and (phase == "Town" or trainRiding[phase] == true) then
 								value = true
-							elseif on("TrainRide") and boardingOpen() and hasTrainAccess() and os.clock() >= (tr.FailAt or 0) and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) then
+							elseif pbx.trainRideOn() and boardingOpen() and hasTrainAccess() and os.clock() >= (tr.FailAt or 0) and (not tr.State or tr.DoneDeparture ~= tr.State.DepartureAt) then
 								value = true
 							elseif on("TrainBoss", true) and phase ~= "Town" and not trainRiding[phase] and not inDim() and bossState("World") ~= nil and vacuumTool(true) ~= nil then
 								value = true
@@ -41242,7 +42713,7 @@ local function fn66()
 					end, active = function()
 						return hw.Owner ~= nil and (hw.Job ~= "fishing" and hw.Job ~= "reel")
 					end, enabled = function()
-						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwPumpkin", true) or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
+						return on("HwEggs") or on("HwMonsters") or on("HwDog") or on("HwPumpkin", true) or on("HwPumpBoss") or on("HwKey") or on("TrainRide") or on("TrainBoss", true) or on("TrainSouls")
 					end, status = function()
 						if hw.Owner == "train" or hw.Owner == "ghouler" then
 							return tr.Status
@@ -41460,6 +42931,104 @@ local function fn66()
 				tr.FlyHeight = tonumber(arg) or 9
 			end)})
 			toggle("Auto Trade Souls", "Trades your Souls at the soul shop before the train leaves town.", "TrainSouls", false)
+			xpcall(function()
+
+				-- ---------------------------------------------------------------- Halloween Part 2 (Events tab)
+				local pb, manorState, inManor, inSewer = pbx.pb, pbx.manorState, pbx.inManor, pbx.inSewer
+				local part2Raw = tbl24.section(v35, "Halloween Part 2", "ghost")
+				local function part2(method, props)
+					local control = part2Raw[method](part2Raw, props)
+					if type(props) == "table" and type(props.Callback) == "function" then
+						table.insert(tbl24.hwControls, {control = control, callback = props.Callback})
+					end
+					return control
+				end
+
+				local function toggle2(title, content, key, default, onChange)
+					return part2("AddToggle", {Flag = "Halloween_" .. key, Title = title, Content = content, Default = default == true, Callback = fn144(function(arg)
+						cfg[key] = arg == true
+						if onChange then
+							onChange(arg == true)
+						end
+					end)})
+				end
+
+				local function fmtTime(seconds)
+					seconds = math.max(math.floor(tonumber(seconds) or 0), 0)
+					if seconds >= 3600 then
+						return string.format("%dh %02dm", seconds // 3600, seconds % 3600 // 60)
+					end
+					return string.format("%dm %02ds", seconds // 60, seconds % 60)
+				end
+
+				part2Raw:AddParagraph({Title = "About This Event", Content = "Halloween Part 2: the Pumpkin King boss (opens from the Halloween Dimension portal on a schedule) and the Manor Key (whirlpool in the Phantom Express town -> sewer cave -> fish the key -> unlock the manor door). Both use the Use Weapons list from the Halloween section above."})
+
+				part2Raw:AddSubSection("Pumpkin Boss")
+				local pbPara = part2Raw:AddParagraph({Title = "Pumpkin Boss Status", Content = "Off"})
+				toggle2("Auto Pumpkin Boss", "Goes into the Pumpkin King portal when it opens, fights the Brute and the King (breaks vines, roots and fires the cannon in the shield phase) and picks up the Pumpkin Stubs. Needs 2.5M speed and the guard tutorial done.", "HwPumpBoss", false, function(arg)
+					if not arg and pb.inArena() then
+						pb.retryAt = os.clock() + 5
+					end
+				end)
+				toggle2("Auto Dodge Attacks", "Steps out of the boss attack zones while fighting and collecting stubs.", "HwPbDodge", true)
+				toggle2("Auto Claim Boss Mastery", "Claims every Pumpkin King mastery reward as soon as you reach it.", "HwPbClaim", true)
+				part2("AddSlider", {Flag = "Halloween_PbSpeed", Title = "Stubs Pickup Speed", Content = "How fast you run to the Pumpkin Stubs dropped by the boss (studs/sec).", Min = 100, Max = 500, Default = 300, Increment = 10, Callback = fn144(function(arg)
+					hw.PbSpeed = tonumber(arg) or 300
+				end)})
+
+				part2Raw:AddSubSection("Manor Key")
+				local keyPara = part2Raw:AddParagraph({Title = "Manor Key Status", Content = "Off"})
+				toggle2("Auto Manor Key", "Rides the Phantom Express to the town, jumps into the whirlpool, fishes the Manor Key in the sewer cave, takes the pipe and unlocks the manor door. Needs the fishing rod (Ghost Dog quest) and the Conductor's Ticket. It turns itself off for the ride once the door is unlocked.", "HwKey", false, function(arg)
+					if arg then
+						pb.keyAt, pb.keyFailAt, pb.keyDone = 0, 0, nil
+					end
+				end)
+
+				task.spawn(function()
+					while fn2() do
+						pcall(function()
+							local text
+							local left = pb.left()
+							if not on("HwPumpBoss") then
+								text = "Off"
+							elseif pb.inArena() then
+								text = pb.say or "In the arena"
+							elseif left == false then
+								text = "No Pumpkin Boss on this server"
+							elseif left == 0 then
+								text = "Portal open, going in"
+							elseif left then
+								text = "Portal opens in " .. fmtTime(left)
+							else
+								text = "Waiting for the portal"
+							end
+							if on("HwPumpBoss") and pb.kills > 0 then
+								text = text .. "  \194\183  Kills " .. pb.kills .. "  \194\183  Stubs +" .. tostring(math.floor(pb.stubs or 0))
+							end
+							pbPara:SetContent(text)
+
+							local manor = manorState()
+							local keyText
+							if not on("HwKey") then
+								keyText = "Off"
+							elseif manor.GateUnlocked == true then
+								keyText = "The manor door is unlocked"
+							elseif inManor() or inSewer() or pb.keyStatus and hw.Job == "hwkey" then
+								keyText = pb.keyStatus or "Working on the Manor Key"
+							elseif manor.KeyClaimed == true then
+								keyText = "Key claimed, going to the manor door"
+							else
+								keyText = "Waiting for the Phantom Express to reach the town (whirlpool)"
+							end
+							keyPara:SetContent(keyText)
+						end)
+						task.wait(1)
+					end
+				end)
+
+			end, function(err)
+				warn("[Pilat Halloween Part 2] " .. tostring(err))
+			end)
 		end, function(err)
 			warn("[Pilat Halloween] " .. tostring(err))
 		end)
